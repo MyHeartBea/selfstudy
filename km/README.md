@@ -5,8 +5,17 @@
 ## 技术栈
 
 - 后端：FastAPI + SQLite（内置 `sqlite3`），Python 3.10+
-- 前端：Vue 3 + Element Plus + Vue Router + axios，Vite 构建
+- 前端：Vue 3 + Element Plus + Vue Router + axios + GSAP + @element-plus/icons-vue，Vite 构建
 - 数据库：SQLite 单文件，首次启动自动建表并写入演示数据
+
+## Git 与 GitHub 自动同步
+
+- 远端：https://github.com/MyHeartBea/selfstudy.git
+- 默认分支：`main`，Git Credential Manager 已登录
+- 工作区 `AGENTS.md` 约定：每次完成代码/数据/文档修改并验证后，
+  自动执行 `git add -A`、`git commit -m "简短说明"`、`git push`，
+  除非用户明确要求先不要提交/推送
+- `.gitignore` 已排除 `.env`、数据库、`node_modules`、`dist`、浏览器缓存等
 
 ## 目录结构
 
@@ -110,6 +119,8 @@ python main.py
 - 统计：总错题数、今日新增、题型分布、复习趋势、今日/累计正确率、连续复习天数、
   掌握度分布、薄弱知识点、各科目统计与复习情况
 - 导入导出：JSON 备份与批量导入
+- 前端设计：gpt-taste 风格设计系统、GSAP 页面动效、图标侧边栏与顶栏、
+  统计页 4×2 两行卡片、错题卡片 4 位倒排编号、桌面/移动端自适应
 
 ## AI 配置（可选）
 
@@ -196,6 +207,19 @@ pip install winsdk
   `~/.codex/sessions` 的 rollout JSONL，把用户提问、工具调用/输出、
   助手回复写入 agentmemory；进度状态在 `D:\agentmemory\watcher-state.json`
 - 新窗口用法：直接说“召回记忆”，或调用 `memory_recall` / `memory_smart_search`
+
+## 已安装 Skills（全局 + 工作区）
+
+- `gpt-taste`：高级网页设计技能（Elite UX/UI + GSAP Motion），
+  来源 [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill)；
+  全局位置 `D:\Codex\home\skills\gpt-taste`，
+  工作区位置 `.agents\skills\gpt-taste`
+- `caveman`：token 压缩技能（回答更短但技术信息不减），
+  来源 [JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman)；
+  全局位置 `D:\Codex\home\skills\caveman`，
+  工作区位置 `.agents\skills\caveman`
+
+新窗口做前端时优先按 `gpt-taste` 规则设计；希望省 token 时使用 `caveman`。
 
 ## 数据安全
 
