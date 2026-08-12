@@ -94,9 +94,6 @@ onMounted(loadStats)
           <div class="stat-label">今日新增</div>
         </div>
       </div>
-    </div>
-
-    <div class="stats-cards" data-reveal>
       <div class="stat-card due">
         <el-icon class="stat-icon"><RefreshLeft /></el-icon>
         <div>

@@ -533,7 +533,7 @@ onMounted(loadMistakes)
     <div v-loading="loading">
       <el-empty v-if="!items.length" description="暂无错题，去录入一道吧" />
       <div v-else class="mistake-grid">
-        <div v-for="item in items" :key="item.id" class="mistake-card-wrap">
+        <div v-for="(item, i) in items" :key="item.id" class="mistake-card-wrap">
           <div class="mistake-select-row">
             <el-checkbox
               :model-value="selectedIds.includes(item.id)"
@@ -542,7 +542,11 @@ onMounted(loadMistakes)
               选择
             </el-checkbox>
           </div>
-          <MistakeCard :mistake="item" @open="openDetail" />
+          <MistakeCard
+            :mistake="item"
+            :index="(page - 1) * pageSize + i + 1"
+            @open="openDetail"
+          />
         </div>
       </div>
     </div>

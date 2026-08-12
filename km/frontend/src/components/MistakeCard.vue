@@ -13,6 +13,7 @@ import MathText from './MathText.vue'
 
 defineProps({
   mistake: { type: Object, required: true },
+  index: { type: Number, default: 0 },
 })
 
 defineEmits(['open'])
@@ -20,7 +21,7 @@ defineEmits(['open'])
 
 <template>
   <el-card shadow="hover" class="mistake-card" @click="$emit('open', mistake.id)">
-    <div class="card-index">{{ String(mistake.id).padStart(3, '0') }}</div>
+    <div class="card-index">{{ String(index).padStart(4, '0') }}</div>
     <div class="card-top">
       <el-tag
         :color="questionTypeColor(mistake.question_type)"
