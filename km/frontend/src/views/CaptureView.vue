@@ -10,6 +10,7 @@ const router = useRouter()
 const activeTab = ref('text')
 const text = ref('')
 const analyzing = ref(false)
+const analyzingText = ref('')
 const parsed = ref(null)
 const formKey = ref(0)
 const previewImage = ref('')
@@ -22,16 +23,18 @@ async function analyze() {
     return
   }
   analyzing.value = true
+  analyzingText.value = '正在解析题干并生成答案与解析，约需 30-60 秒，请稍候…'
   try {
     const res = await request.post('/ai/analyze', { text: text.value })
     parsed.value = res.data.data
     ocrRawText.value = ''
     formKey.value += 1
-    ElMessage.success('AI 解析完成，请核对后保存')
+    ElMessage.success('AI 解析完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
     // 未配置 AI 时提示后，用户可手动整理
   } finally {
     analyzing.value = false
+    analyzingText.value = ''
   }
 }
 
@@ -91,17 +94,19 @@ async function onPaste(event) {
 async function runOcr() {
   if (!imageBase64.value) return
   analyzing.value = true
+  analyzingText.value = '正在识别图片并生成解析，约需 30-60 秒，请稍候…'
   try {
     const res = await request.post('/ai/ocr', { image_base64: imageBase64.value })
     parsed.value = res.data.data
     ocrRawText.value =
       parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
     formKey.value += 1
-    ElMessage.success('图片识别完成，请核对后保存')
+    ElMessage.success('图片识别完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
     // 错误提示由请求拦截器统一处理
   } finally {
     analyzing.value = false
+    analyzingText.value = ''
   }
 }
 
@@ -176,6 +181,15 @@ onUnmounted(() => {
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <el-alert
+      v-if="analyzing"
+      type="info"
+      :closable="false"
+      show-icon
+      class="capture-alert"
+      :title="analyzingText"
+    />
 
     <el-alert
       v-if="ocrRawText"
