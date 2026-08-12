@@ -42,6 +42,11 @@ class Settings:
     AI_VISION_MODEL_FALLBACK = os.environ.get("AI_VISION_MODEL_FALLBACK", "")
     AI_VISION_BASE_URL = os.environ.get("AI_VISION_BASE_URL", "")
     AI_VISION_API_KEY = os.environ.get("AI_VISION_API_KEY", "")
+    # 第二视觉模型（可选，OpenAI 兼容），智谱失败后自动尝试。
+    AI_VISION_2_MODEL = os.environ.get("AI_VISION_2_MODEL", "")
+    AI_VISION_2_MODEL_FALLBACK = os.environ.get("AI_VISION_2_MODEL_FALLBACK", "")
+    AI_VISION_2_BASE_URL = os.environ.get("AI_VISION_2_BASE_URL", "")
+    AI_VISION_2_API_KEY = os.environ.get("AI_VISION_2_API_KEY", "")
     AI_TIMEOUT = int(os.environ.get("AI_TIMEOUT", "90"))
 
 

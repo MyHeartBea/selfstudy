@@ -56,20 +56,31 @@ def ocr_image(body: AiOcrRequest):
     """
     last_vision_error = ""
     last_local_error = ""
-    vision_models = [
-        model
-        for model in (
-            settings.AI_VISION_MODEL,
-            settings.AI_VISION_MODEL_FALLBACK,
-        )
-        if model
-    ]
-    for vision_model in vision_models:
+    vision_providers = []
+    for model in (
+        settings.AI_VISION_MODEL,
+        settings.AI_VISION_MODEL_FALLBACK,
+    ):
+        if model:
+            vision_providers.append(
+                (model, settings.AI_VISION_BASE_URL or None, settings.AI_VISION_API_KEY or None)
+            )
+    for model in (
+        settings.AI_VISION_2_MODEL,
+        settings.AI_VISION_2_MODEL_FALLBACK,
+    ):
+        if model:
+            vision_providers.append(
+                (model, settings.AI_VISION_2_BASE_URL or None, settings.AI_VISION_2_API_KEY or None)
+            )
+    for vision_model, vision_base_url, vision_api_key in vision_providers:
         try:
             parsed = ai_service.ocr_image(
                 body.image_base64,
                 standard_tags=_standard_tags(),
                 model=vision_model,
+                base_url=vision_base_url,
+                api_key=vision_api_key,
             )
             parsed["method"] = "vision"
             parsed["raw_text"] = ""
@@ -82,12 +93,14 @@ def ocr_image(body: AiOcrRequest):
             last_vision_error = str(exc)
     if last_vision_error and ("429" in last_vision_error or "访问量过大" in last_vision_error):
         time.sleep(5)
-        for vision_model in vision_models:
+        for vision_model, vision_base_url, vision_api_key in vision_providers:
             try:
                 parsed = ai_service.ocr_image(
                     body.image_base64,
                     standard_tags=_standard_tags(),
                     model=vision_model,
+                    base_url=vision_base_url,
+                    api_key=vision_api_key,
                 )
                 parsed["method"] = "vision"
                 parsed["raw_text"] = ""

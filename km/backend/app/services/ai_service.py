@@ -210,6 +210,8 @@ def ocr_image(
     image_base64: str,
     standard_tags: List[str] | None = None,
     model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
 ) -> dict:
     """识别图片中的题目并生成结构化错题数据。"""
     image_base64 = image_base64.strip()
@@ -233,8 +235,8 @@ def ocr_image(
                 _chat(
                     messages,
                     model=model,
-                    base_url=settings.AI_VISION_BASE_URL or None,
-                    api_key=settings.AI_VISION_API_KEY or None,
+                    base_url=base_url or settings.AI_VISION_BASE_URL or None,
+                    api_key=api_key or settings.AI_VISION_API_KEY or None,
                 )
             )
         )
