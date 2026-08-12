@@ -170,6 +170,17 @@ pip install winsdk
    AI_VISION_BASE_URL=https://open.bigmodel.cn/api/paas/v4
    AI_VISION_MODEL=glm-4.6v-flash
    AI_VISION_API_KEY=你的智谱APIKey
+
+   # 视觉模型 2：Agnes（可独立配置备用模型）
+   AI_VISION_2_MODEL=agnes-2.0-flash
+   AI_VISION_2_MODEL_FALLBACK=agnes-2.5-flash
+   AI_VISION_2_BASE_URL=https://apihub.agnes-ai.com/v1
+   AI_VISION_2_API_KEY=你的Agnes Key 1
+
+   # 视觉模型 3：Agnes（独立通道）
+   AI_VISION_3_MODEL=agnes-2.5-flash
+   AI_VISION_3_BASE_URL=https://apihub.agnes-ai.com/v1
+   AI_VISION_3_API_KEY=你的Agnes Key 2
    ```
 
    目前有直接可用的免费视觉模型：智谱 GLM-4.6V-Flash（免费、支持中文和数学截图）；
@@ -178,6 +189,8 @@ pip install winsdk
    火山方舟申请，都是 OpenAI 兼容接口，填进 `backend/.env` 即可。
    也可以自己用 Ollama 部署开源视觉模型（如 Qwen2.5-VL、MiniCPM-V），
    把 `AI_BASE_URL` 指向本地 Ollama 服务，完全免费离线。
+   系统会按 智谱 GLM-4.6V-Flash → Agnes-2.0-Flash → Agnes-2.5-Flash 三通道轮询，
+   全部失败才退回本地 OCR + DeepSeek 文本解析，并在前端显示降级原因。
 
 2. 不配置视觉模型时，系统会对截图做多档预处理（灰度、对比度、2-3 倍放大）
    再本地 OCR，并自动选最优结果，适合文字清晰的截图。
@@ -194,6 +207,8 @@ pip install winsdk
 
 - 服务与数据：`D:\agentmemory`，数据目录 `D:\agentmemory\data`
 - REST 端口：`3111`；实时查看器：`http://localhost:3113`
+- 启动检查：`curl http://localhost:3111/agentmemory/health`
+- 未启动时运行 `D:\agentmemory\start-agentmemory.cmd`
 - 一键启动：`D:\agentmemory\start-agentmemory.cmd`
   （会自动拉起记忆服务 + 转录监听器）
 - MCP：Codex 已注册 `agentmemory`
