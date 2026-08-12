@@ -544,7 +544,7 @@ onMounted(loadMistakes)
           </div>
           <MistakeCard
             :mistake="item"
-            :index="(page - 1) * pageSize + i + 1"
+            :index="total - (page - 1) * pageSize - i"
             @open="openDetail"
           />
         </div>
