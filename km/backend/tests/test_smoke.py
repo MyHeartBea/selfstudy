@@ -32,6 +32,27 @@ class TestSmoke(unittest.TestCase):
         parsed = normalize_parsed({"question_type": "choice", "correct_answer": "X"})
         self.assertEqual(parsed["correct_answer"], "")
 
+    def test_ai_normalize_cleans_options_and_answers(self):
+        parsed = normalize_parsed(
+            {
+                "question_type": "choice fill solution",
+                "correct_answer": "答案是C",
+                "option_a": "A. 1",
+                "option_b": "B. 1",
+                "option_c": "C. 1",
+                "option_d": "D. 1",
+            }
+        )
+        self.assertEqual(parsed["question_type"], "choice")
+        self.assertEqual(parsed["correct_answer"], "C")
+        self.assertEqual(parsed["option_a"], "")
+        self.assertEqual(parsed["option_b"], "")
+
+        multi = normalize_parsed(
+            {"question_type": "choice", "correct_answer": "ABCD"}
+        )
+        self.assertEqual(multi["correct_answer"], "")
+
     def test_extract_json_tolerates_surrounding_text(self):
         self.assertEqual(_extract_json('前缀 {"a": 1} 后缀'), {"a": 1})
 

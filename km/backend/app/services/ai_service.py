@@ -87,8 +87,12 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
         '"approach": "解题思路", "source": "来源备注", '
         '"source_type": "real_exam/mock/other", '
         '"source_year": "如 2025", "source_name": "如 李林六套卷(一)"}\n'
-        "question_type 根据题目形式判断：有 A/B/C/D 选项选 choice，"
-        "只要求填数值或结果的选 fill，需要写完整过程或证明的选 solution。"
+        "question_type 只能输出三个值之一：choice/fill/solution，根据题目形式判断："
+        "有 A/B/C/D 选项选 choice，只要求填数值或结果的选 fill，"
+        "需要写完整过程或证明的选 solution。"
+        "选择题的 correct_answer 只能填单个字母 A/B/C/D，不要填多个字母，"
+        "也不要写“ABCD”或“A、B”；四个选项各自只填该选项自己的内容，"
+        "不要把题干或全部选项重复填进每个选项。"
         "如果某个选项缺失，填空字符串即可；如果无法确定正确答案，"
         "给出最可能的答案并在解析中说明。source_type：真题填 real_exam 并填写年份，"
         "模拟题填 mock 并填写年份和卷名，其他填 other。\n"
@@ -174,21 +178,35 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
         return str(value or "").strip()
 
     def as_option(value) -> str:
-        return as_text(value)
+        text = as_text(value)
+        text = re.sub(r"^\s*[A-Da-d]\s*[\.、．:：)]\s*", "", text)
+        return text.strip()
 
     question_type = as_text(parsed.get("question_type")).lower()
-    if question_type not in ("choice", "fill", "solution"):
+    if "choice" in question_type:
+        question_type = "choice"
+    elif "fill" in question_type:
+        question_type = "fill"
+    elif "solution" in question_type:
+        question_type = "solution"
+    else:
         has_options = any(
             as_option(parsed.get(key))
             for key in ("option_a", "option_b", "option_c", "option_d")
         )
         question_type = "choice" if has_options else "fill"
 
+    option_keys = ("option_a", "option_b", "option_c", "option_d")
+    option_values = [as_option(parsed.get(key)) for key in option_keys]
+    non_empty_options = [value for value in option_values if value]
+    if len(non_empty_options) >= 2 and len(set(non_empty_options)) == 1:
+        option_values = ["", "", "", ""]
+
     correct = as_text(parsed.get("correct_answer"))
     if question_type == "choice":
-        correct = correct.upper()
-        if correct not in ("A", "B", "C", "D"):
-            correct = ""
+        letters = re.findall(r"[ABCD]", correct.upper())
+        unique_letters = list(dict.fromkeys(letters))
+        correct = unique_letters[0] if len(unique_letters) == 1 else ""
 
     try:
         difficulty = int(parsed.get("difficulty") or 3)
@@ -227,10 +245,10 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
     return {
         "question_type": question_type,
         "question": _wrap_math(question),
-        "option_a": _wrap_math(as_option(parsed.get("option_a"))),
-        "option_b": _wrap_math(as_option(parsed.get("option_b"))),
-        "option_c": _wrap_math(as_option(parsed.get("option_c"))),
-        "option_d": _wrap_math(as_option(parsed.get("option_d"))),
+        "option_a": _wrap_math(option_values[0]),
+        "option_b": _wrap_math(option_values[1]),
+        "option_c": _wrap_math(option_values[2]),
+        "option_d": _wrap_math(option_values[3]),
         "correct_answer": _wrap_math(correct),
         "analysis": _wrap_math(as_text(parsed.get("analysis"))),
         "difficulty": difficulty,
