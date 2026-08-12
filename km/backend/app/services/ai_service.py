@@ -47,11 +47,13 @@ def _chat(
         },
         method="POST",
     )
+    # 直连 AI 服务，绕开环境变量注入的占位代理（例如 http://127.0.0.1:9）。
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         last_message = ""
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(
+                with opener.open(
                     request,
                     timeout=timeout or settings.AI_TIMEOUT,
                 ) as response:
