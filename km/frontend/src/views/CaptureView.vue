@@ -17,43 +17,72 @@ const formKey = ref(0)
 const previewImage = ref('')
 const imageBase64 = ref('')
 const ocrRawText = ref('')
-let ocrRequestId = 0
+let analysisRequestId = 0
+
+function buildManualDraft(question = '') {
+  return {
+    question,
+    option_a: '',
+    option_b: '',
+    option_c: '',
+    option_d: '',
+    correct_answer: 'A',
+    answer_aliases: [],
+    analysis: '',
+    difficulty: 3,
+    difficulty_points: '',
+    knowledge_tags: [],
+    approach: '',
+    source: '',
+    source_type: 'other',
+    source_year: '',
+    source_name: '',
+  }
+}
 
 async function analyze() {
   if (!text.value.trim()) {
     ElMessage.warning('请先粘贴题干内容')
     return
   }
+  const requestId = ++analysisRequestId
   analyzing.value = true
   analyzingText.value = '正在解析题干并生成答案与解析，约需 30-60 秒，请稍候…'
   try {
     const res = await request.post('/ai/analyze', { text: text.value })
+    if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
     ocrRawText.value = ''
     formKey.value += 1
     ElMessage.success('AI 解析完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
     // 未配置 AI 时提示后，用户可手动整理
+    if (requestId !== analysisRequestId) return
+    parsed.value = buildManualDraft(text.value)
+    ocrRawText.value = ''
+    formKey.value += 1
   } finally {
-    analyzing.value = false
-    analyzingText.value = ''
+    if (requestId === analysisRequestId) {
+      analyzing.value = false
+      analyzingText.value = ''
+    }
   }
 }
 
 function useManual() {
-  parsed.value = {
-    question: text.value,
-    option_a: '',
-    option_b: '',
-    option_c: '',
-    option_d: '',
-    correct_answer: 'A',
-    analysis: '',
-    difficulty: 3,
-    knowledge_tags: [],
-    approach: '',
-    source: '',
-  }
+  analysisRequestId += 1
+  analyzing.value = false
+  analyzingText.value = ''
+  parsed.value = buildManualDraft(text.value)
+  ocrRawText.value = ''
+  formKey.value += 1
+}
+
+function useManualImage() {
+  analysisRequestId += 1
+  analyzing.value = false
+  analyzingText.value = ''
+  parsed.value = buildManualDraft('')
   ocrRawText.value = ''
   formKey.value += 1
 }
@@ -70,20 +99,20 @@ function handleImageFile(file) {
     ElMessage.warning('剪贴板内容不是图片，请重新截图后粘贴')
     return
   }
-  const requestId = ++ocrRequestId
+  const requestId = ++analysisRequestId
   analyzing.value = true
   analyzingText.value = '已读取到图片，正在调用视觉模型识别并解题，约需 30-60 秒，请稍候…'
   parsed.value = null
   ocrRawText.value = ''
   const reader = new FileReader()
   reader.onload = async () => {
-    if (requestId !== ocrRequestId) return
+    if (requestId !== analysisRequestId) return
     previewImage.value = String(reader.result)
     imageBase64.value = String(reader.result).split(',')[1] || String(reader.result)
     await runOcr(requestId)
   }
   reader.onerror = () => {
-    if (requestId !== ocrRequestId) return
+    if (requestId !== analysisRequestId) return
     analyzing.value = false
     analyzingText.value = ''
     ElMessage.error('图片读取失败，请重新截图后粘贴')
@@ -105,7 +134,7 @@ async function runOcr(requestId) {
   analyzingText.value = '正在调用视觉模型识别图片并生成解析，约需 30-60 秒，请稍候…'
   try {
     const res = await request.post('/ai/ocr', { image_base64: imageBase64.value })
-    if (requestId !== ocrRequestId) return
+    if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
     ocrRawText.value =
       parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
@@ -113,8 +142,12 @@ async function runOcr(requestId) {
     ElMessage.success('图片识别完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
     // 错误提示由请求拦截器统一处理
+    if (requestId !== analysisRequestId) return
+    parsed.value = buildManualDraft('')
+    ocrRawText.value = ''
+    formKey.value += 1
   } finally {
-    if (requestId === ocrRequestId) {
+    if (requestId === analysisRequestId) {
       analyzing.value = false
       analyzingText.value = ''
     }
@@ -181,6 +214,9 @@ function onSubmitted() {
             @click="$refs.imageInput.click()"
           >
             选择题目图片
+          </el-button>
+          <el-button @click="useManualImage">
+            手动整理
           </el-button>
           <span class="paste-hint">或直接 Ctrl+V 粘贴截图，粘贴后自动分析</span>
           <div v-if="previewImage" class="image-preview">
