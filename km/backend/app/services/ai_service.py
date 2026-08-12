@@ -121,6 +121,37 @@ def _extract_json(content: str) -> dict:
     return json.loads(content)
 
 
+_MATH_RUN_RE = re.compile(
+    r"[A-Za-z\u0370-\u03ff\\(][A-Za-z0-9\u0370-\u03ff\\^_{}+\-*/=<>()\[\].,·]*"
+)
+
+
+def _wrap_math(text: str) -> str:
+    """把裸露的公式片段包成 $...$，已存在的 $...$ / $$...$$ 保持不变。"""
+    if not text:
+        return text
+    protected: List[str] = []
+
+    def stash(match):
+        protected.append(match.group(0))
+        return f"\x00{len(protected) - 1}\x00"
+
+    text = re.sub(r"\$\$[\s\S]+?\$\$|\$[^$\n]+?\$", stash, text)
+
+    def repl(match):
+        token = match.group(0)
+        if re.search(r"[\^_\\\u0370-\u03ff]", token):
+            return "$" + token + "$"
+        return token
+
+    text = _MATH_RUN_RE.sub(repl, text)
+
+    def restore(match):
+        return protected[int(match.group(1))]
+
+    return re.sub(r"\x00(\d+)\x00", restore, text)
+
+
 def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
     """把 AI 返回的 JSON 规整为前端表单可直接使用的结构。"""
     if not isinstance(parsed, dict):
@@ -182,17 +213,17 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
     source_name = as_text(parsed.get("source_name"))
     return {
         "question_type": question_type,
-        "question": question,
-        "option_a": as_option(parsed.get("option_a")),
-        "option_b": as_option(parsed.get("option_b")),
-        "option_c": as_option(parsed.get("option_c")),
-        "option_d": as_option(parsed.get("option_d")),
-        "correct_answer": correct,
-        "analysis": as_text(parsed.get("analysis")),
+        "question": _wrap_math(question),
+        "option_a": _wrap_math(as_option(parsed.get("option_a"))),
+        "option_b": _wrap_math(as_option(parsed.get("option_b"))),
+        "option_c": _wrap_math(as_option(parsed.get("option_c"))),
+        "option_d": _wrap_math(as_option(parsed.get("option_d"))),
+        "correct_answer": _wrap_math(correct),
+        "analysis": _wrap_math(as_text(parsed.get("analysis"))),
         "difficulty": difficulty,
-        "difficulty_points": difficulty_points,
+        "difficulty_points": _wrap_math(difficulty_points),
         "knowledge_tags": tags,
-        "approach": as_text(parsed.get("approach")),
+        "approach": _wrap_math(as_text(parsed.get("approach"))),
         "source": source,
         "source_type": source_type,
         "source_year": source_year,
