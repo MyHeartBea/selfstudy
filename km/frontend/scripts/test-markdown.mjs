@@ -11,6 +11,12 @@ const table = renderMarkdown('| a | b |\n| --- | --- |\n| 1 | 2 |')
 assert.match(table, /<table>/)
 assert.match(table, /<th>a<\/th>/)
 
+const escapedPipeTable = renderMarkdown(
+  '| a | b |\n| --- | --- |\n| $\\|x\\|$ | 2 |',
+)
+assert.equal((escapedPipeTable.match(/<td>/g) || []).length, 2)
+assert.match(escapedPipeTable, /katex/)
+
 const heading = renderMarkdown('## 标题')
 assert.match(heading, /<h4>标题<\/h4>/)
 

@@ -57,8 +57,9 @@ function parseTable(rows) {
       if (!line.startsWith('|')) return null
       return line
         .slice(1, -1)
+        .replace(/\\\|/g, '\u0000')
         .split('|')
-        .map((cell) => cell.trim())
+        .map((cell) => cell.replace(/\u0000/g, '\\|').trim())
     })
     .filter(Boolean)
   if (!body.length) return ''
