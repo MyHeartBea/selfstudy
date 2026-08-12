@@ -59,6 +59,18 @@ def list_mistakes(
         conn.close()
 
 
+@router.get("/approaches")
+def list_approaches(limit: int = Query(200, ge=1, le=1000)):
+    """返回已有解题思路，供录入表单联想。"""
+    conn = get_connection()
+    try:
+        return ok(mistake_service.list_approaches(conn, limit))
+    except Exception as exc:
+        return error(500, f"查询解题思路失败：{exc}")
+    finally:
+        conn.close()
+
+
 @router.get("/{mistake_id}")
 def get_mistake(mistake_id: int):
     """返回错题详情，附带知识点补充与同知识点错题。"""

@@ -88,8 +88,9 @@ def get_practice_mistakes(
         conditions.append("m.difficulty = ?")
         params.append(difficulty)
     if tag:
-        conditions.append("m.knowledge_tags LIKE ?")
-        params.append(f"%{tag}%")
+        tag = tag.strip()
+        conditions.append("instr(',' || m.knowledge_tags || ',', ?) > 0")
+        params.append(f",{tag},")
     if search:
         conditions.append("m.question LIKE ?")
         params.append(f"%{search}%")
@@ -108,14 +109,29 @@ def get_practice_mistakes(
         " WHERE mistake_id = m.id) AS last_reviewed_at "
         "FROM mistakes m WHERE " + " AND ".join(conditions)
     )
+    limit = max(1, count)
     if mode == "random":
-        sql += " ORDER BY RANDOM()"
+        sql += " ORDER BY RANDOM() LIMIT ?"
+        params.append(limit)
+    elif mode == "wrong_time":
+        sql += (
+            " ORDER BY COALESCE(last_wrong_at, m.created_at) ASC, m.id LIMIT ?"
+        )
+        params.append(limit)
     else:
-        sql += " ORDER BY m.id"
+        sql += (
+            " ORDER BY "
+            "CASE WHEN COALESCE(next_review_at, '0000-01-01 00:00:00') "
+            "<= datetime('now') THEN 0 ELSE 1 END, "
+            "COALESCE(next_review_at, '0000-01-01 00:00:00') ASC, "
+            "COALESCE(last_wrong_at, '9999-12-31 23:59:59') ASC, "
+            "m.id LIMIT ?"
+        )
+        params.append(limit)
 
     rows = conn.execute(sql, params).fetchall()
     data = [mistake_to_dict(row) for row in rows]
-    now_text = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     for item in data:
         wrong_at = item.get("last_wrong_at") or item.get("created_at")
         item["last_wrong_at"] = wrong_at
@@ -125,21 +141,7 @@ def get_practice_mistakes(
             now_text,
         )
 
-    if mode == "wrong_time":
-        data.sort(key=lambda item: (item.get("last_wrong_at") or "9999-12-31 23:59:59", item["id"]))
-    elif mode == "curve":
-        data.sort(
-            key=lambda item: (
-                0
-                if not item.get("next_review_at")
-                or item.get("next_review_at") <= now_text
-                else 1,
-                item.get("next_review_at") or "0000-01-01 00:00:00",
-                item.get("last_wrong_at") or "9999-12-31 23:59:59",
-                item["id"],
-            )
-        )
-    return data[: max(1, count)]
+    return data
 
 
 def review_mistake(
@@ -177,8 +179,10 @@ def review_mistake(
         interval = 1
     review_count += 1
 
-    now_text = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    next_at = (datetime.utcnow() + timedelta(days=interval)).strftime("%Y-%m-%d %H:%M:%S")
+    now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    next_at = (datetime.now(timezone.utc) + timedelta(days=interval)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
     conn.execute(
         "UPDATE mistakes SET mastery_level = ?, review_count = ?, wrong_count = ?, "

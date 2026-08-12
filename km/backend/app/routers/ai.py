@@ -81,24 +81,34 @@ def ocr_image(body: AiOcrRequest):
                 settings.AI_VISION_3_API_KEY or None,
             )
         )
-    for round_index in range(3):
-        for vision_model, vision_base_url, vision_api_key in vision_providers:
-            try:
-                parsed = ai_service.ocr_image(
-                    body.image_base64,
-                    standard_tags=_standard_tags(),
-                    model=vision_model,
-                    base_url=vision_base_url,
-                    api_key=vision_api_key,
-                )
-                parsed["method"] = "vision"
-                parsed["raw_text"] = ""
-                parsed["vision_model"] = vision_model
-                return ok(parsed, "视觉模型识别完成")
-            except Exception as exc:
-                last_vision_error = str(exc)
-        if round_index < 2:
-            time.sleep(3)
+    started = time.monotonic()
+
+    def remaining() -> float:
+        return max(0.0, settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started))
+
+    for vision_model, vision_base_url, vision_api_key in vision_providers:
+        budget = remaining()
+        if budget <= 2:
+            if not last_vision_error:
+                last_vision_error = "整体识别预算耗尽"
+            break
+        try:
+            parsed = ai_service.ocr_image(
+                body.image_base64,
+                standard_tags=_standard_tags(),
+                model=vision_model,
+                base_url=vision_base_url,
+                api_key=vision_api_key,
+                timeout=min(settings.AI_TIMEOUT, int(budget)),
+            )
+            parsed["method"] = "vision"
+            parsed["raw_text"] = ""
+            parsed["vision_model"] = vision_model
+            return ok(parsed, "视觉模型识别完成")
+        except Exception as exc:
+            last_vision_error = str(exc)
+        if remaining() > 1:
+            time.sleep(0.5)
     try:
         if local_ocr.is_available():
             try:
@@ -107,6 +117,10 @@ def ocr_image(body: AiOcrRequest):
                     parsed = ai_service.analyze_text(
                         text,
                         standard_tags=_standard_tags(),
+                        timeout=min(
+                            settings.AI_TIMEOUT,
+                            max(5, int(remaining())),
+                        ),
                     )
                     parsed["method"] = "local"
                     parsed["raw_text"] = text
@@ -119,9 +133,15 @@ def ocr_image(body: AiOcrRequest):
             except Exception as exc:
                 # 本地识别失败时退回多模态图片接口
                 last_local_error = str(exc)
+        budget = remaining()
+        if budget <= 2:
+            raise RuntimeError(
+                f"图片识别超时，视觉模型失败：{last_vision_error or '未配置可用模型'}"
+            )
         parsed = ai_service.ocr_image(
             body.image_base64,
             standard_tags=_standard_tags(),
+            timeout=min(settings.AI_TIMEOUT, int(budget)),
         )
         parsed["method"] = "vision"
         parsed["raw_text"] = ""

@@ -54,8 +54,8 @@ async function loadStats() {
   }
 }
 
-function percentOf(count) {
-  const max = Math.max(1, ...(stats.value.by_subject || []).map((item) => item.count))
+function percentOf(count, items) {
+  const max = Math.max(1, ...(items || []).map((item) => item.count))
   return Math.round((count / max) * 100)
 }
 
@@ -175,7 +175,7 @@ onMounted(loadStats)
       >
         <div class="subject-name">{{ s.name }}</div>
         <el-progress
-          :percentage="percentOf(s.count)"
+          :percentage="percentOf(s.count, stats.by_source_type)"
           :stroke-width="14"
           :show-text="false"
           :color="sourceTypeColor(s.source_type)"
@@ -239,7 +239,7 @@ onMounted(loadStats)
       >
         <div class="subject-name">{{ s.name }}</div>
         <el-progress
-          :percentage="percentOf(s.count)"
+          :percentage="percentOf(s.count, stats.by_subject)"
           :stroke-width="14"
           :show-text="false"
           :color="subjectColor(s.subject_id)"
@@ -264,7 +264,7 @@ onMounted(loadStats)
           {{ s.subject_name }} · {{ s.name }}
         </div>
         <el-progress
-          :percentage="percentOf(s.count)"
+          :percentage="percentOf(s.count, stats.by_sub_subject)"
           :stroke-width="14"
           :show-text="false"
           :color="subjectColor(s.subject_id)"

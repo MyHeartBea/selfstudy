@@ -45,7 +45,7 @@ class KnowledgeUpdate(BaseModel):
 
 
 class ImportPayload(BaseModel):
-    mistakes: List[MistakeCreate]
+    mistakes: List[MistakeCreate] = Field(min_length=1, max_length=5000)
 
 
 class ReviewCreate(BaseModel):
@@ -55,11 +55,11 @@ class ReviewCreate(BaseModel):
 
 
 class AiAnalyzeRequest(BaseModel):
-    text: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=50000)
 
 
 class AiOcrRequest(BaseModel):
-    image_base64: str = Field(min_length=1)
+    image_base64: str = Field(min_length=1, max_length=20000000)
 
 
 class AiSummarizeRequest(BaseModel):

@@ -119,7 +119,14 @@ def _extract_json(content: str) -> dict:
     if content.startswith("```"):
         content = re.sub(r"^```(?:json)?\s*", "", content)
         content = re.sub(r"\s*```$", "", content)
-    return json.loads(content)
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        start = content.find("{")
+        end = content.rfind("}")
+        if start != -1 and end > start:
+            return json.loads(content[start : end + 1])
+        raise
 
 
 _MATH_RUN_RE = re.compile(
@@ -181,7 +188,7 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
     if question_type == "choice":
         correct = correct.upper()
         if correct not in ("A", "B", "C", "D"):
-            correct = "A"
+            correct = ""
 
     try:
         difficulty = int(parsed.get("difficulty") or 3)
@@ -237,13 +244,20 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
     }
 
 
-def analyze_text(text: str, standard_tags: List[str] | None = None) -> dict:
+def analyze_text(
+    text: str,
+    standard_tags: List[str] | None = None,
+    timeout: int | None = None,
+) -> dict:
     """根据粘贴的题干文本生成结构化错题数据。"""
     messages = [
         {"role": "system", "content": _parse_prompt(standard_tags)},
         {"role": "user", "content": text},
     ]
-    return normalize_parsed(_extract_json(_chat(messages)), fallback_text=text.strip())
+    return normalize_parsed(
+        _extract_json(_chat(messages, timeout=timeout)),
+        fallback_text=text.strip(),
+    )
 
 
 def ocr_image(
@@ -252,6 +266,7 @@ def ocr_image(
     model: str | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
+    timeout: int | None = None,
 ) -> dict:
     """识别图片中的题目并生成结构化错题数据。"""
     image_base64 = image_base64.strip()
@@ -277,10 +292,11 @@ def ocr_image(
                     model=model,
                     base_url=base_url or settings.AI_VISION_BASE_URL or None,
                     api_key=api_key or settings.AI_VISION_API_KEY or None,
+                    timeout=timeout,
                 )
             )
         )
-    return normalize_parsed(_extract_json(_chat(messages)))
+    return normalize_parsed(_extract_json(_chat(messages, timeout=timeout)))
 
 
 def summarize_knowledge(tag_name: str, mistakes: List[dict]) -> str:

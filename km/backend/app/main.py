@@ -1,5 +1,6 @@
 """FastAPI 应用入口：路由注册、中间件、异常处理与前端静态资源挂载。"""
 
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -11,6 +12,12 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import init_database
 from app.routers import ai, formulas, knowledge, mistakes, reviews, stats, subjects, transfer
+
+logger = logging.getLogger("kaoyan")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 
 @asynccontextmanager
@@ -26,9 +33,31 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+@app.middleware("http")
+async def log_http_errors(request: Request, call_next):
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("未处理异常：%s %s", request.method, request.url.path)
+        raise
+    if response.status_code >= 500:
+        logger.error(
+            "HTTP 错误：%s %s -> %s",
+            request.method,
+            request.url.path,
+            response.status_code,
+        )
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,7 +100,25 @@ if settings.FRONTEND_DIST.is_dir():
                 {"code": 404, "data": None, "message": "接口不存在"},
                 status_code=404,
             )
-        requested = settings.FRONTEND_DIST / full_path
+        if not full_path:
+            return FileResponse(
+                settings.FRONTEND_DIST / "index.html",
+                headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+            )
+        if ".." in full_path.replace("\\", "/").split("/"):
+            return JSONResponse(
+                {"code": 404, "data": None, "message": "静态资源不存在"},
+                status_code=404,
+            )
+        dist_root = settings.FRONTEND_DIST.resolve()
+        requested = (settings.FRONTEND_DIST / full_path).resolve()
+        try:
+            requested.relative_to(dist_root)
+        except ValueError:
+            return JSONResponse(
+                {"code": 404, "data": None, "message": "静态资源不存在"},
+                status_code=404,
+            )
         if full_path.startswith("assets/") and not requested.is_file():
             return JSONResponse(
                 {"code": 404, "data": None, "message": "静态资源不存在"},
@@ -80,7 +127,7 @@ if settings.FRONTEND_DIST.is_dir():
         if full_path and requested.is_file():
             return FileResponse(requested)
         return FileResponse(
-            settings.FRONTEND_DIST / "index.html",
+            dist_root / "index.html",
             headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
         )
 else:

@@ -68,7 +68,7 @@ function fillForm(initial) {
   form.option_b = initial.option_b || ''
   form.option_c = initial.option_c || ''
   form.option_d = initial.option_d || ''
-  form.correct_answer = initial.correct_answer || 'A'
+  form.correct_answer = initial.correct_answer || ''
   form.answer_aliases = (initial.answer_aliases || []).slice()
   form.analysis = initial.analysis || ''
   form.difficulty = initial.difficulty || 3
@@ -151,6 +151,14 @@ async function submitForm() {
     ElMessage.warning('模拟题请填写年份和试卷名称')
     return
   }
+  if (!form.difficulty_points.trim()) {
+    ElMessage.warning('请填写主要难点简析')
+    return
+  }
+  if (!form.analysis.trim()) {
+    ElMessage.warning('请填写解析内容')
+    return
+  }
   try {
     await formRef.value.validate()
   } catch (err) {
@@ -196,12 +204,8 @@ async function submitForm() {
 
 async function loadApproachOptions() {
   try {
-    const res = await request.get('/mistakes')
-    const set = new Set()
-    ;(res.data.data || []).forEach((item) => {
-      if (item.approach) set.add(item.approach)
-    })
-    approachOptions.value = Array.from(set)
+    const res = await request.get('/mistakes/approaches')
+    approachOptions.value = res.data.data || []
   } catch (err) {
     approachOptions.value = []
   }

@@ -25,7 +25,7 @@ _load_env_file(BACKEND_DIR / ".env")
 class Settings:
     APP_NAME = "考研错题本 API"
     VERSION = "2.1.0"
-    HOST = "0.0.0.0"
+    HOST = "127.0.0.1"
     PORT = 8000
     DB_PATH = PROJECT_ROOT / "data" / "kaoyan_mistakes.db"
     BACKUP_DIR = PROJECT_ROOT / "data" / "backups"
@@ -52,6 +52,8 @@ class Settings:
     AI_VISION_3_BASE_URL = os.environ.get("AI_VISION_3_BASE_URL", "")
     AI_VISION_3_API_KEY = os.environ.get("AI_VISION_3_API_KEY", "")
     AI_TIMEOUT = int(os.environ.get("AI_TIMEOUT", "90"))
+    # 图片识别整体预算：所有视觉通道 + 本地 OCR 前的总耗时上限，默认低于前端 120s 超时。
+    AI_OCR_TOTAL_TIMEOUT = int(os.environ.get("AI_OCR_TOTAL_TIMEOUT", "100"))
 
 
 settings = Settings()

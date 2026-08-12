@@ -4,7 +4,8 @@ from datetime import datetime
 
 from fastapi import APIRouter
 
-from app.database import get_connection, mistake_to_dict
+from app.database import get_connection, mistake_field, mistake_to_dict
+from app.models.tables import MISTAKE_COLUMNS
 from app.responses import error, ok
 from app.schemas import ImportPayload
 from app.services import mistake_service
@@ -45,11 +46,27 @@ def import_mistakes(body: ImportPayload):
     try:
         created = 0
         failed = []
-        for index, item in enumerate(body.mistakes):
-            _, errors = mistake_service.create_mistake(conn, item.model_dump())
-            if errors:
-                failed.append({"index": index, "error": "；".join(errors)})
-            else:
+        with conn:
+            for index, item in enumerate(body.mistakes):
+                payload = item.model_dump()
+                fields, errors = mistake_service.build_mistake_fields(payload, conn)
+                if errors:
+                    failed.append({"index": index, "error": "；".join(errors)})
+                    continue
+                mistake_service.ensure_knowledge_tags(
+                    conn,
+                    fields["knowledge_tags"],
+                    fields["subject_id"],
+                    fields["sub_subject_id"],
+                )
+                conn.execute(
+                    f"INSERT INTO mistakes ({', '.join(MISTAKE_COLUMNS)}) "
+                    f"VALUES ({', '.join('?' for _ in MISTAKE_COLUMNS)})",
+                    tuple(
+                        mistake_field(fields, column)
+                        for column in MISTAKE_COLUMNS
+                    ),
+                )
                 created += 1
         return ok(
             {"created": created, "failed": failed},

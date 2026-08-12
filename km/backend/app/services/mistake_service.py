@@ -103,8 +103,12 @@ def build_mistake_fields(
                 difficulty = None
 
     difficulty_points = str(body.get("difficulty_points") or "").strip()
+    if not difficulty_points:
+        errors.append("主要难点简析不能为空")
     tags = canonical_tags(normalize_tags(body.get("knowledge_tags")))
     analysis = str(body.get("analysis") or "").strip()
+    if not analysis:
+        errors.append("解析不能为空")
     approach = str(body.get("approach") or "").strip()
     source = str(body.get("source") or "").strip()
     source_type = str(body.get("source_type") or "other").strip().lower()
@@ -147,6 +151,17 @@ def build_mistake_fields(
     }, []
 
 
+def list_approaches(conn: sqlite3.Connection, limit: int = 200) -> List[str]:
+    """返回已有错题中出现过的解题思路，用于表单联想。"""
+    rows = conn.execute(
+        "SELECT DISTINCT approach FROM mistakes "
+        "WHERE approach IS NOT NULL AND TRIM(approach) != '' "
+        "ORDER BY approach LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [row["approach"] for row in rows]
+
+
 def list_mistakes(
     conn: sqlite3.Connection,
     filters: Dict[str, Any],
@@ -172,8 +187,10 @@ def list_mistakes(
         conditions.append("difficulty = ?")
         params.append(difficulty)
     if filters.get("tag"):
-        conditions.append("knowledge_tags LIKE ?")
-        params.append(f"%{filters['tag']}%")
+        tag = str(filters["tag"]).strip()
+        if tag:
+            conditions.append("instr(',' || knowledge_tags || ',', ?) > 0")
+            params.append(f",{tag},")
     if filters.get("approach"):
         conditions.append("approach LIKE ?")
         params.append(f"%{filters['approach']}%")
