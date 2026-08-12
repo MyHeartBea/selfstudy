@@ -1,0 +1,35 @@
+# Node
+node_modules/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime data
+*.db
+*.sqlite
+*.sqlite3
+km/data/
+
+# Logs
+*.log
+
+# Local browser and automation artifacts
+clipboard/
+edge-profile/
+edge-profile-review/
+effective-html/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
