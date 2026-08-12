@@ -73,26 +73,15 @@ def ocr_image(body: AiOcrRequest):
             vision_providers.append(
                 (model, settings.AI_VISION_2_BASE_URL or None, settings.AI_VISION_2_API_KEY or None)
             )
-    for vision_model, vision_base_url, vision_api_key in vision_providers:
-        try:
-            parsed = ai_service.ocr_image(
-                body.image_base64,
-                standard_tags=_standard_tags(),
-                model=vision_model,
-                base_url=vision_base_url,
-                api_key=vision_api_key,
+    if settings.AI_VISION_3_MODEL:
+        vision_providers.append(
+            (
+                settings.AI_VISION_3_MODEL,
+                settings.AI_VISION_3_BASE_URL or None,
+                settings.AI_VISION_3_API_KEY or None,
             )
-            parsed["method"] = "vision"
-            parsed["raw_text"] = ""
-            parsed["vision_model"] = vision_model
-            return ok(
-                parsed,
-                "视觉模型识别完成",
-            )
-        except Exception as exc:
-            last_vision_error = str(exc)
-    if last_vision_error and ("429" in last_vision_error or "访问量过大" in last_vision_error):
-        time.sleep(5)
+        )
+    for round_index in range(3):
         for vision_model, vision_base_url, vision_api_key in vision_providers:
             try:
                 parsed = ai_service.ocr_image(
@@ -108,6 +97,8 @@ def ocr_image(body: AiOcrRequest):
                 return ok(parsed, "视觉模型识别完成")
             except Exception as exc:
                 last_vision_error = str(exc)
+        if round_index < 2:
+            time.sleep(3)
     try:
         if local_ocr.is_available():
             try:
