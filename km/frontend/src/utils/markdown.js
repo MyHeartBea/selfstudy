@@ -45,7 +45,7 @@ export function renderInline(text) {
           linkMatch[1],
         )}</a>`
       }
-      return escapeHtml(part)
+      return escapeHtml(part.replace(/\$/g, ''))
     })
     .join('')
 }

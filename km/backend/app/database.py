@@ -9,6 +9,7 @@ from typing import List, Optional
 from app.config import settings
 from app.models.tables import TABLES_DDL
 from app.seed_data import seed_database, seed_formula_data, seed_subject_profiles
+from app.services.ai_service import _wrap_math
 from app.services.knowledge_service import canonical_tags
 
 
@@ -135,6 +136,39 @@ def migrate_database(conn: sqlite3.Connection) -> None:
                 "UPDATE knowledge_base SET tag_name = ? WHERE id = ?",
                 (canonical, row["id"]),
             )
+    _normalize_existing_math(conn)
+
+
+MATH_FIELDS = (
+    ("mistakes", "question"),
+    ("mistakes", "option_a"),
+    ("mistakes", "option_b"),
+    ("mistakes", "option_c"),
+    ("mistakes", "option_d"),
+    ("mistakes", "correct_answer"),
+    ("mistakes", "analysis"),
+    ("mistakes", "difficulty_points"),
+    ("mistakes", "approach"),
+    ("knowledge_base", "summary"),
+    ("formula_items", "title"),
+    ("formula_items", "content"),
+)
+
+
+def _normalize_existing_math(conn: sqlite3.Connection) -> None:
+    """清理历史数据中残留/错位的 $，统一公式表述。"""
+    for table, column in MATH_FIELDS:
+        rows = conn.execute(
+            f"SELECT id, {column} AS value FROM {table}"
+        ).fetchall()
+        for row in rows:
+            value = row["value"] or ""
+            cleaned = _wrap_math(value)
+            if cleaned != value:
+                conn.execute(
+                    f"UPDATE {table} SET {column} = ? WHERE id = ?",
+                    (cleaned, row["id"]),
+                )
 
 
 def _ensure_math_categories(conn: sqlite3.Connection) -> None:

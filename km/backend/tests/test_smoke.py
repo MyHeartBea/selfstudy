@@ -5,7 +5,7 @@ import unittest
 
 from app.models.tables import TABLES_DDL
 from app.services import answer_service, knowledge_service, mistake_service, review_service
-from app.services.ai_service import _extract_json, normalize_parsed
+from app.services.ai_service import _extract_json, _wrap_math, normalize_parsed
 
 
 def make_conn() -> sqlite3.Connection:
@@ -55,6 +55,18 @@ class TestSmoke(unittest.TestCase):
 
     def test_extract_json_tolerates_surrounding_text(self):
         self.assertEqual(_extract_json('前缀 {"a": 1} 后缀'), {"a": 1})
+
+    def test_wrap_math_cleans_bad_dollars(self):
+        self.assertEqual(
+            _wrap_math("B$ and $$A^*$$ similar"),
+            "B and $A^*$ similar",
+        )
+        self.assertEqual(
+            _wrap_math("取 k_1$'=-$k_1,k_2$'=-$k_2 可改写"),
+            "取 $k_1'=-k_1,k_2'=-k_2$ 可改写",
+        )
+        cleaned = _wrap_math("bad $（二重根）。\nB$ end")
+        self.assertNotIn("$", cleaned)
 
     def test_mistake_validation_requires_points_and_analysis(self):
         conn = make_conn()

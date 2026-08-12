@@ -39,7 +39,7 @@ const html = computed(() => {
       if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
         return renderMath(part.slice(1, -1), false)
       }
-      return escapeHtml(part)
+      return escapeHtml(part.replace(/\$/g, ''))
     })
     .join('')
 })
