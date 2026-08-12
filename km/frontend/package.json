@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:markdown": "node scripts/test-markdown.mjs"
+    "test:markdown": "node scripts/test-markdown.mjs",
+    "test:clipboard": "node scripts/test-clipboard.mjs"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

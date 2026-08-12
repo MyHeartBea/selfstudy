@@ -1,10 +1,11 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import request from '../api/request'
 import MistakeForm from '../components/MistakeForm.vue'
+import { getClipboardImage } from '../utils/clipboard'
 
 const router = useRouter()
 const activeTab = ref('text')
@@ -16,6 +17,7 @@ const formKey = ref(0)
 const previewImage = ref('')
 const imageBase64 = ref('')
 const ocrRawText = ref('')
+let ocrRequestId = 0
 
 async function analyze() {
   if (!text.value.trim()) {
@@ -64,39 +66,46 @@ function onFileChange(event) {
 }
 
 function handleImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    ElMessage.warning('剪贴板内容不是图片，请重新截图后粘贴')
+    return
+  }
+  const requestId = ++ocrRequestId
+  analyzing.value = true
+  analyzingText.value = '已读取到图片，正在调用视觉模型识别并解题，约需 30-60 秒，请稍候…'
+  parsed.value = null
+  ocrRawText.value = ''
   const reader = new FileReader()
   reader.onload = async () => {
+    if (requestId !== ocrRequestId) return
     previewImage.value = String(reader.result)
     imageBase64.value = String(reader.result).split(',')[1] || String(reader.result)
-    await runOcr()
+    await runOcr(requestId)
+  }
+  reader.onerror = () => {
+    if (requestId !== ocrRequestId) return
+    analyzing.value = false
+    analyzingText.value = ''
+    ElMessage.error('图片读取失败，请重新截图后粘贴')
   }
   reader.readAsDataURL(file)
 }
 
-async function onPaste(event) {
-  const items = event.clipboardData?.items || []
-  let imageItem = null
-  for (const item of items) {
-    if (item.type && item.type.startsWith('image/')) {
-      imageItem = item
-      break
-    }
-  }
-  if (!imageItem) return
-
-  const file = imageItem.getAsFile()
+function onPaste(event) {
+  const file = getClipboardImage(event)
   if (!file) return
   event.preventDefault()
   activeTab.value = 'image'
   handleImageFile(file)
 }
 
-async function runOcr() {
+async function runOcr(requestId) {
   if (!imageBase64.value) return
   analyzing.value = true
-  analyzingText.value = '正在识别图片并生成解析，约需 30-60 秒，请稍候…'
+  analyzingText.value = '正在调用视觉模型识别图片并生成解析，约需 30-60 秒，请稍候…'
   try {
     const res = await request.post('/ai/ocr', { image_base64: imageBase64.value })
+    if (requestId !== ocrRequestId) return
     parsed.value = res.data.data
     ocrRawText.value =
       parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
@@ -105,8 +114,10 @@ async function runOcr() {
   } catch (err) {
     // 错误提示由请求拦截器统一处理
   } finally {
-    analyzing.value = false
-    analyzingText.value = ''
+    if (requestId === ocrRequestId) {
+      analyzing.value = false
+      analyzingText.value = ''
+    }
   }
 }
 
@@ -114,13 +125,6 @@ function onSubmitted() {
   router.push('/mistakes')
 }
 
-onMounted(() => {
-  window.addEventListener('paste', onPaste)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('paste', onPaste)
-})
 </script>
 
 <template>
