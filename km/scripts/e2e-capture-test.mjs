@@ -85,6 +85,10 @@ async function evaluate(expression) {
 
 await send('Page.enable')
 await send('Runtime.enable')
+await send('Browser.grantPermissions', {
+  origin: 'http://127.0.0.1:8000',
+  permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'],
+})
 await send('Page.navigate', { url: APP_URL })
 await sleep(4000)
 
@@ -120,19 +124,56 @@ console.log('step2=', step2)
 await send('Page.navigate', { url: APP_URL })
 await sleep(3000)
 
-const pasteStep = await evaluate(`(() => {
+await send('Page.bringToFront')
+const focused = await evaluate(
+  'window.focus(); document.body.focus(); document.hasFocus()',
+)
+console.log('focused=', focused)
+
+const pasteStep = await evaluate(`(async () => {
   const bytes = Uint8Array.from(atob(${JSON.stringify(PNG_BASE64)}), (c) => c.charCodeAt(0))
-  const transfer = new DataTransfer()
-  transfer.items.add(new File([bytes], 'paste.png', { type: 'image/png' }))
-  const event = new Event('paste', { bubbles: true })
-  Object.defineProperty(event, 'clipboardData', { value: transfer })
-  const page = document.querySelector('.page')
-  if (!page) return 'no-page'
-  page.dispatchEvent(event)
-  return 'dispatched'
+  await navigator.clipboard.write([
+    new ClipboardItem({ 'image/png': new Blob([bytes], { type: 'image/png' }) })
+  ])
+  return 'clipboard-written'
 })()`)
 console.log('paste_step=', pasteStep)
+await send('Input.dispatchKeyEvent', {
+  type: 'keyDown',
+  key: 'v',
+  code: 'KeyV',
+  windowsVirtualKeyCode: 86,
+  nativeVirtualKeyCode: 86,
+  modifiers: 2,
+})
+await send('Input.dispatchKeyEvent', {
+  type: 'keyUp',
+  key: 'v',
+  code: 'KeyV',
+  windowsVirtualKeyCode: 86,
+  nativeVirtualKeyCode: 86,
+  modifiers: 2,
+})
 await sleep(2500)
+
+const needsFallback = await evaluate(
+  `!document.querySelector('.image-preview img') && !document.body.innerText.includes('正在调用视觉模型')`,
+)
+if (needsFallback) {
+  const synth = await evaluate(`(() => {
+    const bytes = Uint8Array.from(atob(${JSON.stringify(PNG_BASE64)}), (c) => c.charCodeAt(0))
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([bytes], 'paste.png', { type: 'image/png' }))
+    const event = new Event('paste', { bubbles: true })
+    Object.defineProperty(event, 'clipboardData', { value: transfer })
+    const page = document.querySelector('.page')
+    if (!page) return 'no-page'
+    page.dispatchEvent(event)
+    return 'dispatched'
+  })()`)
+  console.log('synthetic_fallback=', synth)
+  await sleep(2500)
+}
 
 const pasteCheck = await evaluate(`JSON.stringify({
   hasPreview: !!document.querySelector('.image-preview img'),

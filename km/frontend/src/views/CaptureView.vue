@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -121,6 +121,8 @@ function handleImageFile(file) {
 }
 
 function onPaste(event) {
+  if (event.__pasteHandled) return
+  event.__pasteHandled = true
   const file = getClipboardImage(event)
   if (!file) return
   event.preventDefault()
@@ -157,6 +159,14 @@ async function runOcr(requestId) {
 function onSubmitted() {
   router.push('/mistakes')
 }
+
+onMounted(() => {
+  window.addEventListener('paste', onPaste, true)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('paste', onPaste, true)
+})
 
 </script>
 

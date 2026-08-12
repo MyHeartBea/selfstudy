@@ -52,6 +52,8 @@ class Settings:
     AI_VISION_3_BASE_URL = os.environ.get("AI_VISION_3_BASE_URL", "")
     AI_VISION_3_API_KEY = os.environ.get("AI_VISION_3_API_KEY", "")
     AI_TIMEOUT = int(os.environ.get("AI_TIMEOUT", "90"))
+    # 单个视觉通道的超时，避免第一个模型卡住导致后续通道没有机会。
+    AI_VISION_TIMEOUT = int(os.environ.get("AI_VISION_TIMEOUT", "30"))
     # 图片识别整体预算：所有视觉通道 + 本地 OCR 前的总耗时上限，默认低于前端 120s 超时。
     AI_OCR_TOTAL_TIMEOUT = int(os.environ.get("AI_OCR_TOTAL_TIMEOUT", "100"))
 

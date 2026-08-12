@@ -1,6 +1,7 @@
 """AI 解析接口：题干解析、图片识别、知识点自动总结。"""
 
 import time
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from fastapi import APIRouter
 from typing import List
 
@@ -86,29 +87,57 @@ def ocr_image(body: AiOcrRequest):
     def remaining() -> float:
         return max(0.0, settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started))
 
-    for vision_model, vision_base_url, vision_api_key in vision_providers:
+    def call_provider(vision_model, vision_base_url, vision_api_key):
         budget = remaining()
         if budget <= 2:
-            if not last_vision_error:
-                last_vision_error = "整体识别预算耗尽"
-            break
-        try:
-            parsed = ai_service.ocr_image(
-                body.image_base64,
-                standard_tags=_standard_tags(),
-                model=vision_model,
-                base_url=vision_base_url,
-                api_key=vision_api_key,
-                timeout=min(settings.AI_TIMEOUT, int(budget)),
+            raise RuntimeError("整体识别预算耗尽")
+        return ai_service.ocr_image(
+            body.image_base64,
+            standard_tags=_standard_tags(),
+            model=vision_model,
+            base_url=vision_base_url,
+            api_key=vision_api_key,
+            timeout=min(settings.AI_VISION_TIMEOUT, int(budget)),
+        )
+
+    if vision_providers:
+        executor = ThreadPoolExecutor(max_workers=len(vision_providers))
+        futures = {
+            executor.submit(call_provider, model, base_url, api_key): (
+                model,
+                base_url,
+                api_key,
             )
-            parsed["method"] = "vision"
-            parsed["raw_text"] = ""
-            parsed["vision_model"] = vision_model
-            return ok(parsed, "视觉模型识别完成")
-        except Exception as exc:
-            last_vision_error = str(exc)
-        if remaining() > 1:
-            time.sleep(0.5)
+            for model, base_url, api_key in vision_providers
+        }
+        try:
+            pending = set(futures)
+            while pending:
+                wait_timeout = max(0.1, min(2.0, remaining()))
+                done, _ = wait(
+                    pending,
+                    timeout=wait_timeout,
+                    return_when=FIRST_COMPLETED,
+                )
+                if not done:
+                    if remaining() <= 2:
+                        break
+                    continue
+                for future in done:
+                    pending.discard(future)
+                    provider = futures[future]
+                    try:
+                        parsed = future.result()
+                        parsed["method"] = "vision"
+                        parsed["raw_text"] = ""
+                        parsed["vision_model"] = provider[0]
+                        return ok(parsed, "视觉模型识别完成")
+                    except Exception as exc:
+                        last_vision_error = str(exc)
+                if remaining() <= 2:
+                    break
+        finally:
+            executor.shutdown(wait=False)
     try:
         if local_ocr.is_available():
             try:
