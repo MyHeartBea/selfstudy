@@ -71,8 +71,12 @@ onMounted(loadBaseData)
 
 <template>
   <div class="page">
-    <div class="page-header">
-      <h2>自主练习</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Practice Lab</div>
+        <h2>自主练习</h2>
+        <p class="view-desc">按记忆曲线、错误时间或随机抽题，主动巩固。</p>
+      </div>
     </div>
 
     <el-card shadow="never" class="filter-card">

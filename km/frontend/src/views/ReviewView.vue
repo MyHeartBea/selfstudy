@@ -199,14 +199,18 @@ onMounted(loadQueue)
 
 <template>
   <div v-loading="loading" class="page">
-    <div class="page-header">
-      <h2>{{ practiceTitle || '今日复习' }}</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Review Flow</div>
+        <h2>{{ practiceTitle || '今日复习' }}</h2>
+        <p class="view-desc">按记忆节奏完成复习，只做当前最该做的题。</p>
+      </div>
       <div class="header-actions">
         <el-button v-if="isPractice" @click="router.push('/practice')">
           重新选题
         </el-button>
+        <span class="count-tip">待复习 {{ queue.length - index }} 题</span>
       </div>
-      <span class="count-tip">待复习 {{ queue.length - index }} 题</span>
     </div>
 
     <template v-if="done">

@@ -52,6 +52,23 @@ const subSubjectOptions = computed(() => {
   return baseData.subSubjects.filter((item) => item.subject_id === filters.subjectId)
 })
 
+const activeFilterCount = computed(
+  () =>
+    [
+      filters.questionType,
+      filters.subjectId,
+      filters.subSubjectId,
+      filters.sourceType,
+      filters.sourceYear,
+      filters.difficulties.length,
+      filters.tag,
+      filters.approach,
+      filters.search,
+    ].filter(Boolean).length,
+)
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
 async function loadMistakes() {
   loading.value = true
   selectedIds.value = []
@@ -295,14 +312,20 @@ onMounted(loadMistakes)
 
 <template>
   <div class="page">
-    <div class="page-header">
-      <h2>错题列表</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Mistake Library</div>
+        <h2>错题列表</h2>
+        <p class="view-desc">统一管理、筛选和复习你的考研错题。</p>
+      </div>
       <div class="header-actions">
         <el-button type="primary" plain @click="startPractice">
+          <el-icon class="btn-icon"><EditPen /></el-icon>
           自主练习
         </el-button>
         <el-dropdown @command="startRandom">
           <el-button type="primary" plain>
+            <el-icon class="btn-icon"><Refresh /></el-icon>
             随机抽题
           </el-button>
           <template #dropdown>
@@ -313,8 +336,14 @@ onMounted(loadMistakes)
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-button type="primary" plain @click="exportJson">导出当前结果</el-button>
-        <el-button @click="triggerImport">导入 JSON</el-button>
+        <el-button type="primary" plain @click="exportJson">
+          <el-icon class="btn-icon"><Download /></el-icon>
+          导出当前结果
+        </el-button>
+        <el-button @click="triggerImport">
+          <el-icon class="btn-icon"><Upload /></el-icon>
+          导入 JSON
+        </el-button>
         <input
           ref="fileInput"
           type="file"
@@ -325,7 +354,22 @@ onMounted(loadMistakes)
       </div>
     </div>
 
-    <el-card shadow="never" class="filter-card">
+    <div class="hero-metrics" data-reveal>
+      <div class="hero-metric">
+        <span class="hero-metric-label">错题总数</span>
+        <strong>{{ total }}</strong>
+      </div>
+      <div class="hero-metric">
+        <span class="hero-metric-label">筛选条件</span>
+        <strong>{{ activeFilterCount }}</strong>
+      </div>
+      <div class="hero-metric">
+        <span class="hero-metric-label">当前页码</span>
+        <strong>{{ page }}<small>/{{ totalPages }}</small></strong>
+      </div>
+    </div>
+
+    <el-card shadow="never" class="filter-card" data-reveal>
       <el-form :inline="true">
         <el-form-item label="题型">
           <el-select

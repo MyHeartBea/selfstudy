@@ -125,8 +125,12 @@ onUnmounted(() => {
 
 <template>
   <div class="page" @paste="onPaste">
-    <div class="page-header">
-      <h2>智能录入</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Smart Capture</div>
+        <h2>智能录入</h2>
+        <p class="view-desc">粘贴题干或上传图片，AI 自动整理成完整错题。</p>
+      </div>
     </div>
 
     <el-alert

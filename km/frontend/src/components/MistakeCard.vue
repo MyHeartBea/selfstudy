@@ -20,6 +20,7 @@ defineEmits(['open'])
 
 <template>
   <el-card shadow="hover" class="mistake-card" @click="$emit('open', mistake.id)">
+    <div class="card-index">{{ String(mistake.id).padStart(3, '0') }}</div>
     <div class="card-top">
       <el-tag
         :color="questionTypeColor(mistake.question_type)"
@@ -64,6 +65,7 @@ defineEmits(['open'])
       </el-tag>
     </div>
     <div class="card-foot">
+      <span v-if="mistake.approach" class="approach-chip">{{ mistake.approach }}</span>
       <el-tag
         v-if="mistake.review_paused"
         size="small"
@@ -82,3 +84,28 @@ defineEmits(['open'])
     </div>
   </el-card>
 </template>
+
+<style scoped>
+.card-index {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #b9b4a7;
+}
+
+.approach-chip {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 700;
+}
+</style>

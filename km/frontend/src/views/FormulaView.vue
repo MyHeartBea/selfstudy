@@ -175,8 +175,12 @@ onMounted(loadFormulas)
 
 <template>
   <div class="page">
-    <div class="page-header">
-      <h2>公式背诵库</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Formula Deck</div>
+        <h2>公式背诵库</h2>
+        <p class="view-desc">常用公式集中管理、检索与背诵。</p>
+      </div>
       <div class="header-actions">
         <el-button
           v-if="filteredItems.length"

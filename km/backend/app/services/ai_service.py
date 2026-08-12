@@ -102,7 +102,8 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
         "5. 不要堆砌术语或做大段绕口的综合论证，把大结论拆成几个能看懂的小结论逐步推出。\n"
         "6. 解析控制在 200-500 字左右，除非推导确实需要更长。\n"
         "7. 最后单独一行写明“结论：”或“答案：”。\n"
-        "8. 解析和题干中的所有公式统一用 $...$ 行内、$$...$$ 独立行的 LaTeX 写法。"
+        "8. 解析和题干中的所有公式统一用 $...$ 行内、$$...$$ 独立行的 LaTeX 写法。\n"
+        "9. JSON 字符串中的换行使用真实换行符，不要把 \\n 当作字面量文本输出；$ 只能包裹同一行内的单个公式。"
     )
     if standard_tags:
         prompt += (
@@ -130,6 +131,11 @@ def _wrap_math(text: str) -> str:
     """把裸露的公式片段包成 $...$，已存在的 $...$ / $$...$$ 保持不变。"""
     if not text:
         return text
+    # 修复模型偶尔输出的字面 \n，以及被错误放在换行/编号旁的 $。
+    text = text.replace("\\n", "\n")
+    text = re.sub(r"\$\s*\n", "\n", text)
+    text = re.sub(r"\n\s*\$", "\n", text)
+    text = re.sub(r"(\d+\.\d+)\$", r"\1", text)
     protected: List[str] = []
 
     def stash(match):

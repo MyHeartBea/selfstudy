@@ -89,8 +89,12 @@ onMounted(loadProfiles)
 
 <template>
   <div v-loading="loading" class="page">
-    <div class="page-header">
-      <h2>科目指南</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Subject Guide</div>
+        <h2>科目指南</h2>
+        <p class="view-desc">每科复习重点与表达方式，按需编辑维护。</p>
+      </div>
     </div>
 
     <el-alert

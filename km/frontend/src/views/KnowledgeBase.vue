@@ -159,8 +159,12 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <div class="page-header">
-      <h2>知识点库</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Knowledge Base</div>
+        <h2>知识点库</h2>
+        <p class="view-desc">沉淀每个标签背后的核心概念与补充讲解。</p>
+      </div>
     </div>
 
     <el-card shadow="never" class="filter-card">

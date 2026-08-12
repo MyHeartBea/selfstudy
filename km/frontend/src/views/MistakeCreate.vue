@@ -28,8 +28,12 @@ function onSubmitted() {
 
 <template>
   <div class="page">
-    <div class="page-header">
-      <h2>编辑错题</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Edit Mistake</div>
+        <h2>编辑错题</h2>
+        <p class="view-desc">修改题干、答案、解析与知识点标签。</p>
+      </div>
     </div>
     <el-card shadow="never" class="form-card">
       <MistakeForm

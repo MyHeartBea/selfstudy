@@ -71,18 +71,24 @@ onMounted(loadStats)
 
 <template>
   <div v-loading="loading" class="page">
-    <div class="page-header">
-      <h2>统计</h2>
+    <div class="view-hero">
+      <div class="view-hero-copy">
+        <div class="view-kicker">Learning Analytics</div>
+        <h2>学习统计</h2>
+        <p class="view-desc">用数据看复习节奏，找到下一轮该攻克的薄弱点。</p>
+      </div>
     </div>
 
-    <div class="stats-cards">
+    <div class="stats-cards" data-reveal>
       <div class="stat-card total">
+        <el-icon class="stat-icon"><DataAnalysis /></el-icon>
         <div>
           <div class="stat-value">{{ stats.total_mistakes }}</div>
           <div class="stat-label">总错题数</div>
         </div>
       </div>
       <div class="stat-card today">
+        <el-icon class="stat-icon"><DocumentAdd /></el-icon>
         <div>
           <div class="stat-value">{{ stats.today_new }}</div>
           <div class="stat-label">今日新增</div>
@@ -90,38 +96,44 @@ onMounted(loadStats)
       </div>
     </div>
 
-    <div class="stats-cards">
+    <div class="stats-cards" data-reveal>
       <div class="stat-card due">
+        <el-icon class="stat-icon"><RefreshLeft /></el-icon>
         <div>
           <div class="stat-value">{{ reviewStats.due_today }}</div>
           <div class="stat-label">今日待复习</div>
         </div>
       </div>
       <div class="stat-card done">
+        <el-icon class="stat-icon"><CircleCheck /></el-icon>
         <div>
           <div class="stat-value">{{ reviewStats.reviewed_today }}</div>
           <div class="stat-label">今日已复习</div>
         </div>
       </div>
       <div class="stat-card accuracy">
+        <el-icon class="stat-icon"><TrendCharts /></el-icon>
         <div>
           <div class="stat-value">{{ reviewStats.accuracy_today }}%</div>
           <div class="stat-label">今日正确率</div>
         </div>
       </div>
       <div class="stat-card mastery">
+        <el-icon class="stat-icon"><Star /></el-icon>
         <div>
           <div class="stat-value">{{ reviewStats.avg_mastery }}</div>
           <div class="stat-label">平均掌握度</div>
         </div>
       </div>
       <div class="stat-card totalacc">
+        <el-icon class="stat-icon"><Medal /></el-icon>
         <div>
           <div class="stat-value">{{ reviewStats.total_accuracy }}%</div>
           <div class="stat-label">累计正确率</div>
         </div>
       </div>
       <div class="stat-card streak">
+        <el-icon class="stat-icon"><Calendar /></el-icon>
         <div>
           <div class="stat-value">{{ reviewStats.streak_days }} 天</div>
           <div class="stat-label">连续复习</div>
@@ -129,7 +141,7 @@ onMounted(loadStats)
       </div>
     </div>
 
-    <el-card shadow="never" class="subject-stats">
+    <el-card shadow="never" class="subject-stats" data-reveal>
       <template #header>
         <span style="font-weight: 700; color: #1d3a5f">掌握度分布</span>
       </template>
