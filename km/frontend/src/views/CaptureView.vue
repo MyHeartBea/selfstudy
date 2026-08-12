@@ -197,7 +197,7 @@ onUnmounted(() => {
       :closable="false"
       show-icon
       class="capture-alert"
-      title="本地 OCR 识别完成，复杂公式可能识别不准；请对照下面的识别原文核对，配置免费视觉模型（如智谱 GLM-4V-Flash）可大幅提高准确率。"
+      title="本地 OCR 识别完成，复杂公式可能识别不准；请对照下面的识别原文核对。若已配置视觉模型仍走本地 OCR，请重启后端后重试。"
     >
       <pre class="ocr-raw">{{ ocrRawText }}</pre>
     </el-alert>

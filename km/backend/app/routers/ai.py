@@ -1,5 +1,6 @@
 """AI 解析接口：题干解析、图片识别、知识点自动总结。"""
 
+import time
 from fastapi import APIRouter
 from typing import List
 
@@ -79,6 +80,21 @@ def ocr_image(body: AiOcrRequest):
             )
         except Exception as exc:
             last_vision_error = str(exc)
+    if last_vision_error and ("429" in last_vision_error or "访问量过大" in last_vision_error):
+        time.sleep(5)
+        for vision_model in vision_models:
+            try:
+                parsed = ai_service.ocr_image(
+                    body.image_base64,
+                    standard_tags=_standard_tags(),
+                    model=vision_model,
+                )
+                parsed["method"] = "vision"
+                parsed["raw_text"] = ""
+                parsed["vision_model"] = vision_model
+                return ok(parsed, "视觉模型识别完成")
+            except Exception as exc:
+                last_vision_error = str(exc)
     try:
         if local_ocr.is_available():
             try:
@@ -90,7 +106,12 @@ def ocr_image(body: AiOcrRequest):
                     )
                     parsed["method"] = "local"
                     parsed["raw_text"] = text
-                    return ok(parsed, "本地 OCR 识别完成")
+                    reason = (
+                        f"（视觉模型失败：{last_vision_error[:120]}）"
+                        if last_vision_error
+                        else ""
+                    )
+                    return ok(parsed, f"本地 OCR 识别完成{reason}")
             except Exception as exc:
                 # 本地识别失败时退回多模态图片接口
                 last_local_error = str(exc)
