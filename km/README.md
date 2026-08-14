@@ -218,9 +218,12 @@ pip install winsdk
 - 官方 16 个技能已安装到 `~/.codex/skills`
 - hook：官方插件 `agentmemory-hooks@agentmemory-local` 已安装启用；
   当前 Codex 桌面版不执行插件 hooks，实际自动记录由
-  `D:\agentmemory\transcript-watcher.mjs` 完成——每 5 秒扫描
-  `~/.codex/sessions` 的 rollout JSONL，把用户提问、工具调用/输出、
-  助手回复写入 agentmemory；进度状态在 `D:\agentmemory\watcher-state.json`
+  `D:\agentmemory\transcript-watcher.mjs` 完成——每 5 秒扫描两类会话写入 agentmemory：
+  Codex CLI（`~/.codex/sessions` 的 rollout JSONL，字节偏移增量）与
+  DSH 图形界面（`~/.dsh/sessions/**/session.jsonl.zstd`，追加式多帧 zstd，按帧数增量）；
+  user 提问以 `prompt_submit`、工具调用/结果与助手回复以 `post_tool_use` 提交，
+  观察立即可被 `memory_recall` / `memory_smart_search` 搜索；进度状态在
+  `D:\agentmemory\watcher-state.json`
 - 新窗口用法：直接说“召回记忆”，或调用 `memory_recall` / `memory_smart_search`
 
 ## 已安装 Skills（全局 + 工作区）
