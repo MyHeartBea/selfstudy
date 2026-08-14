@@ -1587,3 +1587,12 @@ select {
     font-size: 20px;
   }
 }
+
+/* 弹窗移动端适配：窄屏下限制宽度不溢出（覆盖组件内固定 px 宽度） */
+@media (max-width: 640px) {
+  .el-dialog {
+    --el-dialog-width: 92vw;
+    width: var(--el-dialog-width) !important;
+    margin-top: 6vh !important;
+  }
+}

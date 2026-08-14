@@ -2,8 +2,10 @@
 # Safe to run repeatedly: if a port is already listening, that service is skipped.
 
 $ErrorActionPreference = 'SilentlyContinue'
-$root = 'C:\Users\Administrator\Documents\Codex\2026-08-08\new-chat\work\km'
-$python = 'D:\python\python.exe'
+# 相对化：脚本所在目录即项目根，仓库迁移无需改路径
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+# 优先本机已知 Python，找不到时回退 PATH
+$python = if (Test-Path 'D:\python\python.exe') { 'D:\python\python.exe' } else { 'python' }
 
 function Test-PortListening([int]$port) {
     return $null -ne (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)

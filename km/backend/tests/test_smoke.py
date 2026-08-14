@@ -106,6 +106,14 @@ class TestSmoke(unittest.TestCase):
                 "VALUES (1, 'choice', 'q2', 'B', 3, '导数应用')"
             )
             conn.commit()
+            # 标签检索走 mistake_tag_map，需同步维护关联表（与 create_mistake 行为一致）
+            from app.database import sync_mistake_tags
+
+            rows = conn.execute("SELECT id, knowledge_tags FROM mistakes").fetchall()
+            for row in rows:
+                tags = [t.strip() for t in (row["knowledge_tags"] or "").split(",") if t.strip()]
+                sync_mistake_tags(conn, row["id"], tags)
+            conn.commit()
             rows = mistake_service.list_mistakes(conn, {"tag": "导数"})
             self.assertEqual([row["question"] for row in rows], ["q1"])
         finally:
@@ -131,6 +139,35 @@ class TestSmoke(unittest.TestCase):
             self.assertEqual(len(curve_rows), 3)
         finally:
             conn.close()
+
+    def test_list_mistakes_page_without_page_size(self):
+        """只传 page 不传 page_size 时兜底默认值，不抛 TypeError。"""
+        conn = make_conn()
+        try:
+            for index in range(1, 4):
+                conn.execute(
+                    "INSERT INTO mistakes (subject_id, question_type, question, correct_answer, difficulty) "
+                    "VALUES (1, 'choice', ?, 'A', 2)",
+                    (f"q{index}",),
+                )
+            conn.commit()
+            data = mistake_service.list_mistakes(conn, {}, page=1)
+            self.assertEqual(data["page"], 1)
+            self.assertEqual(data["page_size"], 20)
+            self.assertEqual(data["total"], 3)
+            self.assertEqual(len(data["items"]), 3)
+        finally:
+            conn.close()
+
+    def test_choice_answer_normalized(self):
+        """选择题判卷复用答案归一化：全角/空白变体应判对。"""
+        from app.services.answer_service import normalize_answer
+
+        self.assertEqual(normalize_answer("Ａ"), "a")
+        self.assertEqual(normalize_answer("A "), "a")
+        self.assertEqual(normalize_answer("a"), "a")
+        # 空输入归一化后为空，不得与答案相等
+        self.assertNotEqual(normalize_answer(""), normalize_answer("A"))
 
 
 if __name__ == "__main__":

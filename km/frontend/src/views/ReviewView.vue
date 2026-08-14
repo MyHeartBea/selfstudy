@@ -265,6 +265,7 @@ onMounted(loadQueue)
             :review-saved="reviewSaved"
             @submit="submitFill"
             @next="nextFill"
+            @mark="(result) => submitReview(result, true)"
           />
         </template>
 

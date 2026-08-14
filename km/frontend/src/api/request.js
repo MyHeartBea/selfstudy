@@ -13,9 +13,12 @@ request.interceptors.response.use(
   (error) => {
     // 在 error 上附加 HTTP 状态码，供页面按需分支（如 502 提示 AI 未配置）
     error.status = error.response?.status
-    const message =
-      error.response?.data?.message || error.message || '请求失败'
-    ElMessage.error(message)
+    const silent = error.config?.silent === true
+    if (!silent) {
+      const message =
+        error.response?.data?.message || error.message || '请求失败'
+      ElMessage.error(message)
+    }
     return Promise.reject(error)
   },
 )

@@ -352,7 +352,17 @@ onUnmounted(() => {
     </div>
 
     <div v-loading="loading">
-      <el-empty v-if="!items.length" description="暂无错题，去录入一道吧" />
+      <el-result
+        v-if="loadError"
+        icon="error"
+        title="错题列表加载失败"
+        sub-title="请检查后端服务是否运行，然后重试。"
+      >
+        <template #extra>
+          <el-button type="primary" @click="loadMistakes">重新加载</el-button>
+        </template>
+      </el-result>
+      <el-empty v-else-if="!items.length" description="暂无错题，去录入一道吧" />
       <div v-else class="mistake-grid">
         <div v-for="(item, i) in items" :key="item.id" class="mistake-card-wrap">
           <div class="mistake-select-row">

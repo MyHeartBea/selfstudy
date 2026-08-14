@@ -16,6 +16,7 @@
   - 不传 `page` 返回错题数组；传 `page` 返回
     `{"items": [...], "total": n, "page": p, "page_size": s}`
 - `GET /api/mistakes/{id}`：错题详情，含 `knowledge_extra` 与 `related_mistakes`
+- `GET /api/mistakes/approaches`：已有解题思路列表（表单联想，`limit` 默认 200）
 - `GET /api/mistakes/{id}/reviews`：该错题的复习记录（按时间倒序）
 - `POST /api/mistakes/{id}/judge`：body 为 `{"user_answer": "..."}`，自动判断
   选择题（比对选项）或填空题（规范化 + 别名 + 数值容差）
@@ -37,9 +38,10 @@
   传 `page`、`page_size` 时返回 `{"items": [...], "total": n, "page": p, "page_size": s}`，
   不传 `page` 时返回完整数组
 - `GET /api/knowledge/by-tag?tag=xxx`：按标签精确查询
-- `PUT /api/knowledge/{id}`：更新摘要与科目归属，
+- `PATCH /api/knowledge/{id}`：更新摘要与科目归属（PATCH 语义，`None` 字段保持不变），
   body 为 `{"summary": "...", "subject_id": 3, "sub_subject_id": 5}`
 - `DELETE /api/knowledge/{id}`：删除词条，不影响错题
+- `POST /api/knowledge/{id}/auto-summarize`：根据关联错题自动生成知识点总结
 
 ## 公式背诵库
 
@@ -75,13 +77,17 @@
 ## 科目档案
 
 - `GET /api/subjects/{subject_id}/profile`：科目的复习重点与方法建议
-- `PUT /api/subjects/{subject_id}/profile`：更新科目档案，
+- `PATCH /api/subjects/{subject_id}/profile`：更新科目档案（PATCH 语义，`None` 字段保持不变），
   body 为 `{"focus_areas": ["..."], "review_tips": "..."}`
 
 ## AI
 
-- `POST /api/ai/analyze`：body 为 `{"text": "题干文本"}`，返回结构化错题
-- `POST /api/ai/ocr`：body 为 `{"image_base64": "..."}`，识别图片题目
+- `POST /api/ai/analyze`：body 为 `{"text": "题干文本", "instruction": "可选解题要求"}`，
+  返回结构化错题
+- `POST /api/ai/ocr`：body 为 `{"image_base64": "...", "instruction": "...",
+  "reference_image_base64": "..."}`，识别图片题目（三视觉通道轮询，全失败退回本地 OCR）
 - `POST /api/knowledge/{id}/auto-summarize`：根据关联错题自动生成知识点总结
 
 AI 接口需要先在 `backend/.env` 中配置 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`。
+AI 端点有每分钟限流（默认 30 次，可用 `AI_RATE_LIMIT` 调整）；设置 `API_TOKEN` 后
+所有 `/api` 请求需携带 `X-API-Token` 头或 `Authorization: Bearer <token>`。

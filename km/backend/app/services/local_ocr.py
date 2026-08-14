@@ -14,7 +14,6 @@ except ImportError:
     PIL_AVAILABLE = False
 
 try:
-    from winsdk.windows.globalization import Language
     from winsdk.windows.graphics.imaging import BitmapDecoder
     from winsdk.windows.media.ocr import OcrEngine
     from winsdk.windows.storage.streams import (

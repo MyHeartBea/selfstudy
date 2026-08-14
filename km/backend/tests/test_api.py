@@ -140,6 +140,37 @@ class TestApiSmoke(unittest.TestCase):
         self.assertEqual(r3.status_code, 200)
         self.assertIn("items", r3.json()["data"])
 
+    def test_knowledge_patch_semantics(self):
+        """PATCH 空 body 不清空摘要；单字段更新生效。"""
+        mid = self._create_mistake(knowledge_tags=["导数"])
+        rows = self.client.get(
+            "/api/knowledge", params={"tag": "导数", "page": 1, "page_size": 10}
+        ).json()["data"]["items"]
+        kid = rows[0]["id"]
+        summary_before = rows[0]["summary"]
+        r = self.client.patch(f"/api/knowledge/{kid}", json={})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["data"]["summary"], summary_before)
+        r2 = self.client.patch(f"/api/knowledge/{kid}", json={"summary": "新的摘要"})
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["data"]["summary"], "新的摘要")
+        self.client.patch(f"/api/knowledge/{kid}", json={"summary": summary_before})
+        self.client.delete(f"/api/mistakes/{mid}")
+
+    def test_pagination_page_without_page_size(self):
+        """只传 page 不传 page_size 应正常返回（不再 500）。"""
+        r = self.client.get("/api/mistakes", params={"page": 1})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["data"]["page_size"], 20)
+
+    def test_unknown_api_returns_uniform_json(self):
+        """未知 API 路径返回统一 JSON 结构而非 FastAPI 默认格式。"""
+        r = self.client.post("/api/definitely-not-exist")
+        self.assertEqual(r.status_code, 405)
+        body = r.json()
+        self.assertNotIn("detail", body)
+        self.assertEqual(body["code"], 405)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,7 +20,7 @@
 ## 目录结构
 
 ```text
-kaoyan-mistakes/
+kaoyan-mistakes/            # 仓库内项目目录（git 仓库根为 work/，本项目位于 km/）
 ├── backend/                 # FastAPI 后端
 │   ├── app/
 │   │   ├── config.py        # 应用配置
@@ -205,6 +205,12 @@ pip install winsdk
 约定：DeepSeek 负责文本/解题，GLM 只负责识图；AI 识别结果只作草稿，
 最终题目、答案、解析必须人工复核并重写。
 
+### 安全与限流（可选）
+
+- `API_TOKEN`：设置后所有 `/api` 请求需携带 `X-API-Token` 头或
+  `Authorization: Bearer <token>`，防止误对外暴露时刷 AI 额度/导出数据。
+- `AI_RATE_LIMIT`：AI 端点每分钟请求上限（默认 30）。
+
 ## 长期记忆（agentmemory）
 
 本机已安装 agentmemory（0.9.28 + iii-engine 0.11.2），用于跨会话长期记忆，
@@ -243,6 +249,16 @@ pip install winsdk
   工作区位置 `.agents\skills\caveman`
 
 新窗口做前端时优先按 `gpt-taste` 规则设计；希望省 token 时使用 `caveman`。
+
+## 测试与 CI
+
+- 后端 30 个单元/接口测试（`backend/tests/`）：接口层（临时库 + TestClient）、
+  服务层回归（内存库）、AI 解析与公式加固冒烟，均不依赖外部 AI 服务与真实数据库。
+  运行：`cd backend && python -m unittest discover -s tests -v`。
+- GitHub Actions CI（仓库根 `.github/workflows/ci.yml`）：
+  backend job 跑全部测试 + coverage（阈值 40%）；frontend job 执行 `npm run build`
+  并运行 markdown/clipboard 脚本测试。
+- 启动时自动备份数据库到 `data/backups/`，保留最近 20 份。
 
 ## 数据安全
 

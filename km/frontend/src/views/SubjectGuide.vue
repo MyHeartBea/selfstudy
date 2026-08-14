@@ -37,7 +37,10 @@ async function loadProfiles() {
     const items = await Promise.all(
       subjects.map(async (subject) => {
         try {
-          const profileRes = await request.get(`/subjects/${subject.id}/profile`)
+          // silent：profile 404 是预期路径（新库无档案），不触发全局错误 toast
+          const profileRes = await request.get(`/subjects/${subject.id}/profile`, {
+            silent: true,
+          })
           return { ...subject, ...profileRes.data.data }
         } catch (err) {
           return { ...subject, focus_areas: [], review_tips: '' }
@@ -71,7 +74,7 @@ async function save() {
   if (saving.value) return
   saving.value = true
   try {
-    await request.put(`/subjects/${form.subject_id}/profile`, {
+    await request.patch(`/subjects/${form.subject_id}/profile`, {
       focus_areas: form.focus_areas,
       review_tips: form.review_tips,
     })

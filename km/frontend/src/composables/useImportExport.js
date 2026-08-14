@@ -17,14 +17,9 @@ export function useImportExport({ buildParams, onImported }) {
 
   async function exportJson() {
     try {
-      const params = buildParams()
-      params.page_size = 1000
-      const [exportRes, listRes] = await Promise.all([
-        request.get('/export'),
-        request.get('/mistakes', { params }),
-      ])
+      // /export 一次返回全部错题+知识点+科目主数据，无需再按筛选拉 /mistakes
+      const exportRes = await request.get('/export')
       const payload = exportRes.data.data
-      payload.mistakes = listRes.data.data.items || []
       const blob = new Blob([JSON.stringify(payload, null, 2)], {
         type: 'application/json',
       })

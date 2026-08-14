@@ -66,4 +66,21 @@ const router = createRouter({
   routes,
 })
 
+// 路由级标题：多标签页可辨识（与 Layout 的 pageTitle 文案保持一致）
+const TITLE_MAP = {
+  'mistake-list': '错题列表',
+  capture: '智能录入',
+  review: '今日复习',
+  practice: '自主练习',
+  'mistake-edit': '编辑错题',
+  knowledge: '知识点库',
+  formulas: '公式背诵',
+  'subject-guide': '科目指南',
+  stats: '学习统计',
+}
+router.afterEach((to) => {
+  const title = TITLE_MAP[to.name]
+  document.title = title ? `${title} · 考研错题本` : '考研错题本'
+})
+
 export default router

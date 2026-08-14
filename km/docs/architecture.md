@@ -27,16 +27,24 @@ SQLite（sqlite3 + 表结构 models/）
 
 ## 前端
 
-- `api/request.js`：axios 实例与统一错误提示。
-- `composables/useBaseData.js`：科目/二级科目共享数据与展示工具。
-- `router/`：错题列表、录入/编辑、知识点库、统计四个页面。
-- `components/`：错题卡片、详情对话框、录入表单、知识点编辑对话框。
-- `views/`：页面级组件，组合复用组件完成业务页面。
+- `api/request.js`：axios 实例与统一错误提示（支持 `silent` 选项抑制全局 toast）。
+- `composables/`：useBaseData（科目数据单例）、useMistakeFilters、useBulkActions、
+  useImportExport、useSubSubject、useTagInput、mistakeDraft 等逻辑复用单元。
+- `router/`：错题列表、智能录入、今日复习、自主练习、知识点库、公式背诵、
+  科目指南、学习统计、错题编辑（共 9 个路由，全部懒加载，嵌套在 Layout 下）。
+- `components/`：错题卡片、详情对话框、录入表单、三种题型作答组件、知识点编辑对话框、
+  公式/表格渲染（MathText/RichText）等 13 个组件。
+- `views/`：10 个页面级组件（Layout、MistakeList、CaptureView、ReviewView、PracticeView、
+  KnowledgeBase、FormulaView、SubjectGuide、Stats、MistakeCreate）。
 
 ## 关键联动
 
-1. 录入错题时，后端遍历 `knowledge_tags`，缺失标签自动写入 `knowledge_base`。
+1. 录入错题时，后端遍历 `knowledge_tags`，缺失标签自动写入 `knowledge_base`，
+   并同步维护 `mistake_tag_map` 关联表（按标签检索走索引，避免全表扫描）。
 2. 错题详情接口返回 `knowledge_extra`（第一个标签的摘要）与
    `related_mistakes`（同标签其他错题，最多 5 条）。
 3. 统计接口按科目聚合，包含零错题科目，便于前端展示完整进度。
 4. 导出生成完整 JSON；导入时逐条校验并复用自动建标签逻辑。
+5. 启动时自动备份数据库到 `data/backups/`（保留最近 20 份）；
+   数据库结构升级通过 `app_meta.migration_version` 门控（当前 v3）。
+6. AI 端点带每分钟限流；设置 `API_TOKEN` 后所有接口需鉴权（可选）。

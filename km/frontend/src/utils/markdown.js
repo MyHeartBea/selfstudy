@@ -9,22 +9,33 @@ export function escapeHtml(value) {
 }
 
 /**
- * KaTeX 渲染结果缓存：同一公式字符串（含展示模式区分）只渲染一次，
- * 避免大列表 / 弹窗中重复 renderToString 的 CPU 开销。
+ * KaTeX 渲染结果缓存（LRU 淘汰）：同一公式字符串（含展示模式区分）只渲染一次，
+ * 命中时刷新到末尾保持热点，超限时删除最久未用的条目，避免大列表/弹窗重复
+ * renderToString 的 CPU 开销，也避免整表清空导致热公式一并失效。
  */
 export const katexCache = new Map()
+export const KATEX_CACHE_MAX = 500
 
 export function renderMath(expr, displayMode) {
   const key = `${displayMode ? 'b' : 'i'}:${expr}`
-  if (katexCache.has(key)) return katexCache.get(key)
+  if (katexCache.has(key)) {
+    // LRU：命中即刷新位置
+    const html = katexCache.get(key)
+    katexCache.delete(key)
+    katexCache.set(key, html)
+    return html
+  }
   try {
     const html = katex.renderToString(expr, {
       throwOnError: false,
       displayMode,
       strict: false,
     })
-    if (katexCache.size > 500) katexCache.clear()
     katexCache.set(key, html)
+    if (katexCache.size > KATEX_CACHE_MAX) {
+      const oldest = katexCache.keys().next().value
+      katexCache.delete(oldest)
+    }
     return html
   } catch (err) {
     return escapeHtml(expr)

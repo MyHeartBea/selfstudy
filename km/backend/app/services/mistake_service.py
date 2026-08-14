@@ -3,7 +3,13 @@
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from app.database import mistake_field, mistake_to_dict, normalize_tags
+from app.database import (
+    mistake_field,
+    mistake_tag_condition,
+    mistake_to_dict,
+    normalize_tags,
+    sync_mistake_tags,
+)
 from app.models.tables import MISTAKE_COLUMNS
 from app.services.knowledge_service import (
     canonical_tags,
@@ -46,8 +52,14 @@ def validate_source_requirements(
 def build_mistake_fields(
     body: Dict[str, Any],
     conn: sqlite3.Connection,
+    *,
+    skip_subject_check: bool = False,
 ) -> Tuple[Optional[dict], List[str]]:
-    """校验并整理错题字段，返回 (字段字典, 错误列表)。"""
+    """校验并整理错题字段，返回 (字段字典, 错误列表)。
+
+    skip_subject_check=True 时跳过科目存在性查询（调用方已预校验，
+    用于批量导入避免逐条 N+1）。
+    """
     errors: List[str] = []
 
     subject_id = body.get("subject_id")
@@ -60,7 +72,7 @@ def build_mistake_fields(
         except (TypeError, ValueError):
             errors.append("科目参数无效")
             subject_id = None
-    if subject_id is not None:
+    if subject_id is not None and not skip_subject_check:
         exists = conn.execute("SELECT 1 FROM subjects WHERE id = ?", (subject_id,)).fetchone()
         if not exists:
             errors.append("所选科目不存在")
@@ -74,7 +86,11 @@ def build_mistake_fields(
         except (TypeError, ValueError):
             errors.append("二级科目参数无效")
             sub_subject_id = None
-    if sub_subject_id is not None and subject_id is not None:
+    if (
+        sub_subject_id is not None
+        and subject_id is not None
+        and not skip_subject_check
+    ):
         exists = conn.execute(
             "SELECT 1 FROM sub_subjects WHERE id = ? AND subject_id = ?",
             (sub_subject_id, subject_id),
@@ -212,8 +228,8 @@ def list_mistakes(
     if filters.get("tag"):
         tag = str(filters["tag"]).strip()
         if tag:
-            conditions.append("instr(',' || knowledge_tags || ',', ?) > 0")
-            params.append(f",{tag},")
+            conditions.append(mistake_tag_condition(alias="mistakes"))
+            params.append(tag)
     if filters.get("approach"):
         conditions.append("approach LIKE ?")
         params.append(f"%{filters['approach']}%")
@@ -248,6 +264,8 @@ def list_mistakes(
     sql = "SELECT * FROM mistakes" + where_sql
     sql += " ORDER BY " + order_by
     if page is not None:
+        # 只传 page 不传 page_size 时兜底默认值，避免 (page-1)*None 抛 TypeError
+        page_size = page_size or 20
         sql += " LIMIT ? OFFSET ?"
         rows = conn.execute(
             sql,
@@ -288,21 +306,34 @@ def get_mistake_detail(conn: sqlite3.Connection, mistake_id: int) -> Optional[di
             )
         related_rows = conn.execute(
             "SELECT * FROM mistakes "
-            "WHERE instr(',' || knowledge_tags || ',', ?) > 0 AND id != ? "
+            f"WHERE {mistake_tag_condition(alias='mistakes')} AND id != ? "
             "ORDER BY created_at DESC, id DESC LIMIT 5",
-            (f",{first_tag},", mistake_id),
+            (first_tag, mistake_id),
         ).fetchall()
         related_mistakes = [mistake_to_dict(row) for row in related_rows]
 
     data["knowledge_extra"] = knowledge_extra
     data["related_knowledge"] = related_knowledge
     data["related_mistakes"] = related_mistakes
+    import json as _json
+
     grade_row = conn.execute(
-        "SELECT id, score, verdict, created_at FROM solution_grades "
+        "SELECT id, score, verdict, created_at, errors, strengths, "
+        "solution, alternate_methods FROM solution_grades "
         "WHERE mistake_id = ? ORDER BY id DESC LIMIT 1",
         (mistake_id,),
     ).fetchone()
-    data["last_grade"] = dict(grade_row) if grade_row else None
+    if grade_row is not None:
+        grade = dict(grade_row)
+        for column in ("errors", "strengths", "alternate_methods"):
+            raw = grade.get(column) or ""
+            try:
+                grade[column] = _json.loads(raw) if raw else []
+            except (TypeError, ValueError):
+                grade[column] = []
+        data["last_grade"] = grade
+    else:
+        data["last_grade"] = None
     return data
 
 
@@ -323,6 +354,7 @@ def create_mistake(conn: sqlite3.Connection, body: Dict[str, Any]) -> Tuple[Opti
         f"VALUES ({', '.join('?' for _ in MISTAKE_COLUMNS)})",
         tuple(mistake_field(fields, column) for column in MISTAKE_COLUMNS),
     )
+    sync_mistake_tags(conn, cur.lastrowid, fields["knowledge_tags"])
     conn.commit()
     created = conn.execute("SELECT * FROM mistakes WHERE id = ?", (cur.lastrowid,)).fetchone()
     return mistake_to_dict(created), []
@@ -336,7 +368,7 @@ def update_mistake(
     """更新指定错题，同时补全缺失的知识点词条。"""
     row = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
     if row is None:
-        return None, ["错题不存在"]
+        return None, ["NOT_FOUND"]
 
     fields, errors = build_mistake_fields(body, conn)
     if errors:
@@ -353,6 +385,7 @@ def update_mistake(
         f"UPDATE mistakes SET {assignments} WHERE id = ?",
         tuple(mistake_field(fields, column) for column in MISTAKE_COLUMNS) + (mistake_id,),
     )
+    sync_mistake_tags(conn, mistake_id, fields["knowledge_tags"])
     conn.commit()
     updated = conn.execute("SELECT * FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
     return mistake_to_dict(updated), []
@@ -365,6 +398,7 @@ def delete_mistake(conn: sqlite3.Connection, mistake_id: int) -> bool:
         return False
     conn.execute("DELETE FROM solution_grades WHERE mistake_id = ?", (mistake_id,))
     conn.execute("DELETE FROM review_records WHERE mistake_id = ?", (mistake_id,))
+    conn.execute("DELETE FROM mistake_tag_map WHERE mistake_id = ?", (mistake_id,))
     conn.execute("DELETE FROM mistakes WHERE id = ?", (mistake_id,))
     conn.commit()
     return True
@@ -393,6 +427,10 @@ def batch_mistakes(
             f"DELETE FROM review_records WHERE mistake_id IN ({placeholders})",
             ids,
         )
+        conn.execute(
+            f"DELETE FROM mistake_tag_map WHERE mistake_id IN ({placeholders})",
+            ids,
+        )
         cur = conn.execute(
             f"DELETE FROM mistakes WHERE id IN ({placeholders})",
             ids,
@@ -401,12 +439,12 @@ def batch_mistakes(
         return cur.rowcount
 
     if action in ("pause", "resume"):
-        conn.execute(
+        cur = conn.execute(
             f"UPDATE mistakes SET review_paused = ? WHERE id IN ({placeholders})",
             (1 if action == "pause" else 0, *ids),
         )
         conn.commit()
-        return len(ids)
+        return cur.rowcount
 
     if action == "source_type":
         source_type = validate_source_type(source_type)
@@ -419,12 +457,12 @@ def batch_mistakes(
         )
         if source_issue:
             raise ValueError(source_issue)
-        conn.execute(
+        cur = conn.execute(
             f"UPDATE mistakes SET source_type = ?, source_year = ?, source_name = ? "
             f"WHERE id IN ({placeholders})",
             (source_type, source_year, source_name, *ids),
         )
         conn.commit()
-        return len(ids)
+        return cur.rowcount
 
     raise ValueError("批量操作类型不支持")

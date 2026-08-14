@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from app.database import mistake_to_dict
+from app.database import local_day_bounds_utc, mistake_tag_condition, mistake_to_dict
 from app.services.answer_service import judge_fill
 
 INTERVALS = [1, 3, 7, 15, 30]
@@ -19,18 +19,6 @@ def _utc_to_local_datetime(value):
         ).astimezone()
     except ValueError:
         return None
-
-
-def _local_day_bounds_utc():
-    """返回本地今天在 UTC 中的起止时间（用于查询今日记录）。"""
-    now = datetime.now().astimezone()
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + timedelta(days=1)
-    fmt = "%Y-%m-%d %H:%M:%S"
-    return (
-        start.astimezone(timezone.utc).strftime(fmt),
-        end.astimezone(timezone.utc).strftime(fmt),
-    )
 
 
 def _days_between(value, now_text: str):
@@ -89,8 +77,8 @@ def get_practice_mistakes(
         params.append(difficulty)
     if tag:
         tag = tag.strip()
-        conditions.append("instr(',' || m.knowledge_tags || ',', ?) > 0")
-        params.append(f",{tag},")
+        conditions.append(mistake_tag_condition())
+        params.append(tag)
     if search:
         conditions.append("m.question LIKE ?")
         params.append(f"%{search}%")
@@ -103,11 +91,14 @@ def get_practice_mistakes(
 
     sql = (
         "SELECT m.*, "
-        "(SELECT MAX(reviewed_at) FROM review_records "
-        " WHERE mistake_id = m.id AND result = 'wrong') AS last_wrong_at, "
-        "(SELECT MAX(reviewed_at) FROM review_records "
-        " WHERE mistake_id = m.id) AS last_reviewed_at "
-        "FROM mistakes m WHERE " + " AND ".join(conditions)
+        "r.last_wrong_at, r.last_reviewed_at "
+        "FROM mistakes m "
+        "LEFT JOIN ("
+        "  SELECT mistake_id, "
+        "  MAX(CASE WHEN result = 'wrong' THEN reviewed_at END) AS last_wrong_at, "
+        "  MAX(reviewed_at) AS last_reviewed_at "
+        "  FROM review_records GROUP BY mistake_id"
+        ") r ON r.mistake_id = m.id WHERE " + " AND ".join(conditions)
     )
     limit = max(1, count)
     if mode == "random":
@@ -172,15 +163,17 @@ def review_mistake(
 
     if result:
         mastery = min(5, mastery + 1)
-        interval = INTERVALS[min(mastery, len(INTERVALS) - 1)]
+        # 递增前取档：首次答对（0→1）1 天后复习，之后 3/7/15/30 天逐级拉长
+        interval = INTERVALS[max(0, mastery - 1)]
     else:
         mastery = max(0, mastery - 1)
         wrong_count += 1
         interval = 1
     review_count += 1
 
-    now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    next_at = (datetime.now(timezone.utc) + timedelta(days=interval)).strftime(
+    now = datetime.now(timezone.utc)
+    now_text = now.strftime("%Y-%m-%d %H:%M:%S")
+    next_at = (now + timedelta(days=interval)).strftime(
         "%Y-%m-%d %H:%M:%S"
     )
 
@@ -252,7 +245,7 @@ def _compute_streak(conn: sqlite3.Connection) -> int:
 
 def get_review_stats(conn: sqlite3.Connection) -> dict:
     """返回复习统计：待复习数、今日完成、正确率、连续天数、薄弱知识点等。"""
-    day_start_utc, day_end_utc = _local_day_bounds_utc()
+    day_start_utc, day_end_utc = local_day_bounds_utc()
     due = conn.execute(
         "SELECT COUNT(*) FROM mistakes "
         "WHERE COALESCE(review_paused, 0) = 0 "
@@ -285,24 +278,25 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
         for level in range(6)
     ]
 
+    # 薄弱知识点：用递归 CTE 把 knowledge_tags 拆行后全量按标签聚合，
+    # 不再只统计 wrong_count 前 30 行错题，结果完整准确。
     weak_rows = conn.execute(
-        "SELECT knowledge_tags, wrong_count FROM mistakes WHERE wrong_count > 0 "
-        "ORDER BY wrong_count DESC LIMIT 30"
+        "WITH RECURSIVE split(mistake_id, wrong_count, tag, rest) AS ("
+        "  SELECT id, wrong_count, '', knowledge_tags || ',' FROM mistakes WHERE wrong_count > 0"
+        "  UNION ALL"
+        "  SELECT mistake_id, wrong_count,"
+        "         substr(rest, 1, instr(rest, ',') - 1),"
+        "         substr(rest, instr(rest, ',') + 1)"
+        "  FROM split WHERE rest != ''"
+        ") "
+        "SELECT tag, COUNT(*) AS mistake_count, SUM(wrong_count) AS wrong_count "
+        "FROM split WHERE tag != '' GROUP BY tag "
+        "ORDER BY wrong_count DESC LIMIT 10"
     ).fetchall()
-    tag_stats = {}
-    for row in weak_rows:
-        for tag in (row["knowledge_tags"] or "").split(","):
-            tag = tag.strip()
-            if not tag:
-                continue
-            item = tag_stats.setdefault(tag, {"wrong_count": 0, "mistake_count": 0})
-            item["wrong_count"] += row["wrong_count"]
-            item["mistake_count"] += 1
-    weakest_tags = sorted(
-        ({"tag_name": key, **value} for key, value in tag_stats.items()),
-        key=lambda item: item["wrong_count"],
-        reverse=True,
-    )[:10]
+    weakest_tags = [
+        {"tag_name": row["tag"], "wrong_count": row["wrong_count"], "mistake_count": row["mistake_count"]}
+        for row in weak_rows
+    ]
 
     today_local = datetime.now().astimezone().date()
     start_local = (
@@ -335,17 +329,46 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
                 day_map[day_key]["correct"] += 1
     last_7_rows = list(day_map.values())
 
-    subject_rows = conn.execute(
-        "SELECT s.id AS subject_id, s.name AS name, "
-        "COUNT(DISTINCT m.id) AS mistake_count, "
-        "COUNT(r.id) AS review_count, "
+    # 各科目复习情况：两个独立聚合再合并，避免 subjects×mistakes×review_records 三表
+    # join 把每道错题的每条复习记录放大成一行。
+    subject_mistakes = conn.execute(
+        "SELECT subject_id, COUNT(*) AS mistake_count "
+        "FROM mistakes GROUP BY subject_id"
+    ).fetchall()
+    mistake_map = {row["subject_id"]: row["mistake_count"] for row in subject_mistakes}
+    subject_reviews = conn.execute(
+        "SELECT m.subject_id, COUNT(r.id) AS review_count, "
         "COALESCE(SUM(CASE WHEN r.result = 'correct' THEN 1 ELSE 0 END), 0) AS correct_count, "
         "COALESCE(SUM(CASE WHEN r.result = 'wrong' THEN 1 ELSE 0 END), 0) AS wrong_count "
-        "FROM subjects s "
-        "LEFT JOIN mistakes m ON m.subject_id = s.id "
-        "LEFT JOIN review_records r ON r.mistake_id = m.id "
-        "GROUP BY s.id, s.name ORDER BY s.id"
+        "FROM review_records r JOIN mistakes m ON m.id = r.mistake_id "
+        "GROUP BY m.subject_id"
     ).fetchall()
+    review_map = {row["subject_id"]: row for row in subject_reviews}
+    subject_names = conn.execute(
+        "SELECT id, name FROM subjects ORDER BY id"
+    ).fetchall()
+    by_subject_rows = []
+    for subject in subject_names:
+        sid = subject["id"]
+        reviews_row = review_map.get(sid)
+        review_count = reviews_row["review_count"] if reviews_row else 0
+        correct_count = reviews_row["correct_count"] if reviews_row else 0
+        wrong_count = reviews_row["wrong_count"] if reviews_row else 0
+        by_subject_rows.append(
+            {
+                "subject_id": sid,
+                "name": subject["name"],
+                "mistake_count": mistake_map.get(sid, 0),
+                "review_count": review_count,
+                "correct_count": correct_count,
+                "wrong_count": wrong_count,
+                "accuracy": (
+                    round(correct_count / review_count * 100, 1)
+                    if review_count
+                    else 0.0
+                ),
+            }
+        )
 
     return {
         "due_today": due,
@@ -358,20 +381,5 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
         "mastery_distribution": mastery_distribution,
         "weakest_tags": weakest_tags,
         "last_7_days": [dict(row) for row in last_7_rows],
-        "by_subject": [
-            {
-                "subject_id": row["subject_id"],
-                "name": row["name"],
-                "mistake_count": row["mistake_count"],
-                "review_count": row["review_count"],
-                "correct_count": row["correct_count"],
-                "wrong_count": row["wrong_count"],
-                "accuracy": (
-                    round(row["correct_count"] / row["review_count"] * 100, 1)
-                    if row["review_count"]
-                    else 0.0
-                ),
-            }
-            for row in subject_rows
-        ],
+        "by_subject": by_subject_rows,
     }

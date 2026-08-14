@@ -60,7 +60,7 @@ function onSubjectChange() {
 async function save() {
   saving.value = true
   try {
-    await request.put(`/knowledge/${form.id}`, {
+    await request.patch(`/knowledge/${form.id}`, {
       summary: form.summary,
       subject_id: form.subject_id || null,
       sub_subject_id: form.sub_subject_id || null,

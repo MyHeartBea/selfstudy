@@ -1,14 +1,8 @@
 """Pydantic 请求与响应模型，用于接口文档和基础校验。"""
 
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
-
-
-class ApiResponse(BaseModel):
-    code: int = 200
-    data: Any = None
-    message: str = "success"
 
 
 class MistakeCreate(BaseModel):
@@ -41,10 +35,12 @@ class MistakeUpdate(MistakeCreate):
 
 
 class KnowledgeUpdate(BaseModel):
-    summary: str = ""
+    """知识点更新（PATCH 语义）：字段为 None 表示不修改，避免空 body 静默清空。"""
+
+    summary: Optional[str] = None
     subject_id: Optional[int] = None
     sub_subject_id: Optional[int] = None
-    related_tags: List[str] = []
+    related_tags: Optional[List[str]] = None
 
 
 class ImportPayload(BaseModel):
@@ -71,10 +67,6 @@ class AiOcrRequest(BaseModel):
     reference_image_base64: str = Field(default="", max_length=20000000)
 
 
-class AiSummarizeRequest(BaseModel):
-    tag_name: str = Field(min_length=1)
-
-
 class JudgeRequest(BaseModel):
     user_answer: str = Field(min_length=1)
 
@@ -84,8 +76,10 @@ class GradeRequest(BaseModel):
 
 
 class SubjectProfileUpdate(BaseModel):
-    focus_areas: List[str] = []
-    review_tips: str = ""
+    """科目档案更新（PATCH 语义）：字段为 None 表示不修改。"""
+
+    focus_areas: Optional[List[str]] = None
+    review_tips: Optional[str] = None
 
 
 class SourceTypeUpdate(BaseModel):

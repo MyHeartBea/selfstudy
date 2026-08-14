@@ -2,11 +2,12 @@
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.database import get_connection, mistake_to_dict
 from app.responses import error, ok, server_error
 from app.schemas import BatchMistakeRequest, GradeRequest, JudgeRequest, MistakeCreate, MistakeUpdate, SourceTypeUpdate
+from app.security import ai_rate_limit
 from app.services import ai_service, answer_service, mistake_service, review_service
 from app.services.ai_service import AiNotConfigured, AiRequestError
 
@@ -116,7 +117,14 @@ def judge_mistake(mistake_id: int, body: JudgeRequest):
         mistake = mistake_to_dict(row)
         question_type = mistake.get("question_type") or "choice"
         if question_type == "choice":
-            correct = body.user_answer.strip().upper() == (mistake.get("correct_answer") or "").upper()
+            # 与填空题同一套归一化口径：全角/空白/大小写变体都能正确判对
+            from app.services.answer_service import normalize_answer
+
+            correct = (
+                normalize_answer(body.user_answer)
+                == normalize_answer(mistake.get("correct_answer") or "")
+                and normalize_answer(body.user_answer) != ""
+            )
             return ok(
                 {
                     "correct": correct,
@@ -138,7 +146,7 @@ def judge_mistake(mistake_id: int, body: JudgeRequest):
         conn.close()
 
 
-@router.post("/{mistake_id}/grade")
+@router.post("/{mistake_id}/grade", dependencies=[Depends(ai_rate_limit)])
 def grade_mistake(mistake_id: int, body: GradeRequest):
     """AI 批改解答题：按过程给分并返回详细解析。"""
     conn = get_connection()
@@ -157,15 +165,23 @@ def grade_mistake(mistake_id: int, body: GradeRequest):
             mistake.get("analysis") or "",
             body.user_answer,
         )
+        import json as _json
+
         cur = conn.execute(
-            "INSERT INTO solution_grades (mistake_id, user_answer, score, verdict, feedback) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO solution_grades "
+            "(mistake_id, user_answer, score, verdict, feedback, "
+            " errors, strengths, solution, alternate_methods) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 mistake_id,
                 body.user_answer,
                 grade["score"],
                 grade["verdict"],
                 grade["feedback"],
+                _json.dumps(grade["errors"], ensure_ascii=False),
+                _json.dumps(grade["strengths"], ensure_ascii=False),
+                grade["solution"],
+                _json.dumps(grade["alternate_methods"], ensure_ascii=False),
             ),
         )
         conn.commit()
@@ -226,7 +242,7 @@ def update_mistake(mistake_id: int, body: MistakeUpdate):
         updated, errors = mistake_service.update_mistake(conn, mistake_id, body.model_dump())
         if errors:
             message = errors[0]
-            return error(404 if message == "错题不存在" else 400, "；".join(errors))
+            return error(404 if message == "NOT_FOUND" else 400, "；".join(errors))
         return ok(updated, "错题更新成功")
     except Exception as exc:
         return server_error(exc)

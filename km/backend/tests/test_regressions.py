@@ -81,12 +81,22 @@ class TestReviewSchedule(unittest.TestCase):
         updated = review_service.review_mistake(self.conn, self.id, True)
         after = updated["mastery_level"]
         self.assertEqual(after, min(5, before + 1))
-        interval = review_service.INTERVALS[min(after, len(review_service.INTERVALS) - 1)]
+        # 递增前取档：首次答对（0→1）为 1 天，之后 3/7/15/30 逐级拉长
+        interval = review_service.INTERVALS[max(0, after - 1)]
         expected = datetime.now(timezone.utc) + timedelta(days=interval)
         next_at = datetime.strptime(updated["next_review_at"], "%Y-%m-%d %H:%M:%S").replace(
             tzinfo=timezone.utc
         )
         self.assertLess(abs((next_at - expected).total_seconds()), 5)
+
+    def test_interval_sequence_1_3_7_15_30(self):
+        """连续答对：间隔依次为 1/3/7/15/30 天（回归 off-by-one 修复）。"""
+        intervals = []
+        for _ in range(5):
+            updated = review_service.review_mistake(self.conn, self.id, True)
+            mastery = updated["mastery_level"]
+            intervals.append(review_service.INTERVALS[max(0, mastery - 1)])
+        self.assertEqual(intervals, [1, 3, 7, 15, 30])
 
     def test_wrong_resets_interval_to_one_day(self):
         updated = review_service.review_mistake(self.conn, self.id, False)

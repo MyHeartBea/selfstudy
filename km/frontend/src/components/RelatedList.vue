@@ -52,7 +52,14 @@ function summaryPreview(text) {
         :key="rk.id"
         class="related-kn-card"
       >
-        <div class="related-kn-title" @click="emit('go-knowledge', rk.tag_name)">
+        <div
+          class="related-kn-title"
+          role="link"
+          tabindex="0"
+          @click="emit('go-knowledge', rk.tag_name)"
+          @keydown.enter="emit('go-knowledge', rk.tag_name)"
+          @keydown.space.prevent="emit('go-knowledge', rk.tag_name)"
+        >
           {{ rk.tag_name }}
           <span v-if="rk.subject_name" class="muted">
             · {{ rk.subject_name }}{{ rk.sub_subject_name ? ' / ' + rk.sub_subject_name : '' }}
@@ -82,7 +89,11 @@ function summaryPreview(text) {
         v-for="rm in relatedMistakes"
         :key="rm.id"
         class="related-card"
+        role="button"
+        tabindex="0"
         @click="emit('switch', rm.id)"
+        @keydown.enter="emit('switch', rm.id)"
+        @keydown.space.prevent="emit('switch', rm.id)"
       >
         <span class="related-question">{{ truncate(rm.question, 40) }}</span>
         <el-tag

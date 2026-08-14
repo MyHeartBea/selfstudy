@@ -15,7 +15,7 @@ export function createMistakeDraft(question = '') {
     option_b: '',
     option_c: '',
     option_d: '',
-    correct_answer: 'A',
+    correct_answer: '',
     answer_aliases: [],
     analysis: '',
     difficulty: 3,

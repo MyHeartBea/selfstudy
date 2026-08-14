@@ -9,6 +9,7 @@ const route = useRoute()
 const router = useRouter()
 const isEdit = computed(() => route.name === 'mistake-edit')
 const initial = ref(null)
+const loadFailed = ref(false)
 
 onMounted(async () => {
   if (isEdit.value) {
@@ -16,7 +17,8 @@ onMounted(async () => {
       const res = await request.get(`/mistakes/${route.params.id}`)
       initial.value = res.data.data
     } catch (err) {
-      // 错误提示由请求拦截器统一处理
+      // 加载失败给明确错误态，不再静默白屏
+      loadFailed.value = true
     }
   }
 })
@@ -36,8 +38,20 @@ function onSubmitted() {
       </div>
     </div>
     <el-card shadow="never" class="form-card">
+      <el-result
+        v-if="loadFailed"
+        icon="error"
+        title="错题加载失败"
+        sub-title="该错题可能已被删除，或网络异常。"
+      >
+        <template #extra>
+          <el-button type="primary" @click="router.push('/mistakes')">
+            返回错题列表
+          </el-button>
+        </template>
+      </el-result>
       <MistakeForm
-        v-if="!isEdit || initial"
+        v-else-if="!isEdit || initial"
         :initial="initial"
         :is-edit="isEdit"
         @submitted="onSubmitted"

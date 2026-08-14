@@ -56,6 +56,10 @@ class Settings:
     AI_VISION_TIMEOUT = int(os.environ.get("AI_VISION_TIMEOUT", "30"))
     # 图片识别整体预算：所有视觉通道 + 本地 OCR 前的总耗时上限，默认低于前端 120s 超时。
     AI_OCR_TOTAL_TIMEOUT = int(os.environ.get("AI_OCR_TOTAL_TIMEOUT", "100"))
+    # 可选 API Token：设置后所有 /api 请求需携带（X-API-Token 或 Authorization: Bearer）。
+    API_TOKEN = os.environ.get("API_TOKEN", "")
+    # AI 端点限流：每分钟最大请求数（默认 30，单机个人使用足够）。
+    AI_RATE_LIMIT = int(os.environ.get("AI_RATE_LIMIT", "30"))
 
 
 settings = Settings()

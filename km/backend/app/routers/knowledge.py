@@ -2,11 +2,12 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.database import get_connection
 from app.responses import error, ok, server_error
 from app.schemas import KnowledgeUpdate
+from app.security import ai_rate_limit
 from app.services import ai_service, knowledge_service
 from app.services.ai_service import AiNotConfigured, AiRequestError
 
@@ -54,9 +55,9 @@ def get_knowledge_by_tag(tag: str = Query(..., min_length=1)):
         conn.close()
 
 
-@router.put("/{knowledge_id}")
+@router.patch("/{knowledge_id}")
 def update_knowledge(knowledge_id: int, body: KnowledgeUpdate):
-    """更新知识点摘要。"""
+    """更新知识点摘要（PATCH 语义：None 字段保持不变）。"""
     conn = get_connection()
     try:
         updated = knowledge_service.update_knowledge(
@@ -92,7 +93,7 @@ def delete_knowledge(knowledge_id: int):
         conn.close()
 
 
-@router.post("/{knowledge_id}/auto-summarize")
+@router.post("/{knowledge_id}/auto-summarize", dependencies=[Depends(ai_rate_limit)])
 def auto_summarize(knowledge_id: int):
     """根据关联错题自动生成并保存知识点总结。"""
     conn = get_connection()
@@ -105,8 +106,9 @@ def auto_summarize(knowledge_id: int):
         tag_name = row["tag_name"]
         mistake_rows = conn.execute(
             "SELECT question, correct_answer, analysis FROM mistakes "
-            "WHERE instr(',' || knowledge_tags || ',', ?) > 0 LIMIT 8",
-            (f",{tag_name},",),
+            "WHERE EXISTS (SELECT 1 FROM mistake_tag_map mt "
+            "              WHERE mt.mistake_id = mistakes.id AND mt.tag = ?) LIMIT 8",
+            (tag_name,),
         ).fetchall()
         if not mistake_rows:
             return error(400, "该知识点下暂无错题，无法自动总结")

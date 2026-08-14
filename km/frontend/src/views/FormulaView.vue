@@ -242,7 +242,11 @@ onMounted(loadFormulas)
             <span
               class="formula-title"
               title="查看内容"
+              role="button"
+              tabindex="0"
               @click="openDetail(item)"
+              @keydown.enter="openDetail(item)"
+              @keydown.space.prevent="openDetail(item)"
             >
               {{ item.title }}
             </span>

@@ -19,6 +19,7 @@ defineEmits(['open'])
     role="button"
     @click="$emit('open', mistake.id)"
     @keydown.enter="$emit('open', mistake.id)"
+    @keydown.space.prevent="$emit('open', mistake.id)"
   >
     <div class="card-top">
       <span class="card-index">{{ String(index).padStart(4, '0') }}</span>
@@ -53,7 +54,6 @@ defineEmits(['open'])
       </span>
       <span v-if="mistake.source_name" class="source">{{ mistake.source_name }}</span>
       <span v-if="mistake.source" class="source">{{ mistake.source }}</span>
-      <span v-else class="source"></span>
       <span>{{ formatTime(mistake.created_at) }}</span>
     </div>
   </el-card>

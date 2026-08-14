@@ -120,6 +120,8 @@ def list_knowledge(
     ).fetchone()[0]
     sql += where_sql + " ORDER BY kb.created_at DESC, kb.id DESC"
     if page is not None:
+        # 只传 page 不传 page_size 时兜底默认值，避免 (page-1)*None 抛 TypeError
+        page_size = page_size or 20
         sql += " LIMIT ? OFFSET ?"
         rows = conn.execute(
             sql,
@@ -147,12 +149,15 @@ def get_by_tag(conn: sqlite3.Connection, tag: str) -> Optional[dict]:
 def update_knowledge(
     conn: sqlite3.Connection,
     knowledge_id: int,
-    summary: str,
+    summary: Optional[str] = None,
     subject_id: Optional[int] = None,
     sub_subject_id: Optional[int] = None,
     related_tags: Optional[List[str]] = None,
 ) -> Optional[dict]:
-    """更新知识点摘要，并允许修正所属科目、二级科目与关联知识点。"""
+    """更新知识点摘要，并允许修正所属科目、二级科目与关联知识点。
+
+    PATCH 语义：为 None 的字段保持不变，杜绝空 body 误清空数据。
+    """
     row = conn.execute("SELECT 1 FROM knowledge_base WHERE id = ?", (knowledge_id,)).fetchone()
     if row is None:
         return None
@@ -181,11 +186,15 @@ def update_knowledge(
         if sub_exists is None:
             raise ValueError("二级科目不存在或与科目不匹配")
 
-    sets = ["summary = ?"]
-    params = [summary.strip()]
-    related = canonical_tags(related_tags or [])
-    sets.append("related_tags = ?")
-    params.append(",".join(related))
+    sets = []
+    params = []
+    if summary is not None:
+        sets.append("summary = ?")
+        params.append(summary.strip())
+    if related_tags is not None:
+        related = canonical_tags(related_tags)
+        sets.append("related_tags = ?")
+        params.append(",".join(related))
     if subject_id is not None:
         sets.append("subject_id = ?")
         params.append(subject_id)
@@ -194,6 +203,12 @@ def update_knowledge(
     elif sub_subject_id is not None:
         sets.append("sub_subject_id = ?")
         params.append(sub_subject_id)
+    if not sets:
+        # 没有字段需要更新：直接返回当前行
+        updated = conn.execute(
+            "SELECT * FROM knowledge_base WHERE id = ?", (knowledge_id,)
+        ).fetchone()
+        return knowledge_to_dict(updated)
     params.append(knowledge_id)
     conn.execute(
         f"UPDATE knowledge_base SET {', '.join(sets)} WHERE id = ?",

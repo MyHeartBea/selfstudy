@@ -36,10 +36,14 @@ async function analyze() {
   analyzing.value = true
   analyzingText.value = '正在解析题干并生成答案与解析，约需 30-60 秒，请稍候…'
   try {
-    const res = await request.post('/ai/analyze', {
-      text: text.value,
-      instruction: textInstruction.value,
-    })
+    const res = await request.post(
+      '/ai/analyze',
+      {
+        text: text.value,
+        instruction: textInstruction.value,
+      },
+      { silent: true },
+    )
     if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
     ocrRawText.value = ''
@@ -47,12 +51,12 @@ async function analyze() {
     formKey.value += 1
     ElMessage.success('AI 解析完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
-    // 未配置 AI 时提示后，用户可手动整理
+    // 请求已静默（silent），错误提示统一由下方 aiWarning 呈现，避免与全局 toast 重复
     if (requestId !== analysisRequestId) return
     aiWarning.value =
       err?.status === 502
         ? 'AI 服务暂不可用（未配置或上游失败），已切换到手动整理模式，可稍后重试。'
-        : ''
+        : `AI 解析失败：${err?.response?.data?.message || err?.message || '未知错误'}，已切换到手动整理模式。`
     parsed.value = createMistakeDraft(text.value)
     ocrRawText.value = ''
     formKey.value += 1
@@ -199,11 +203,15 @@ async function analyzeImage() {
   analyzing.value = true
   analyzingText.value = '正在调用视觉模型识别图片并生成解析，约需 30-60 秒，请稍候…'
   try {
-    const res = await request.post('/ai/ocr', {
-      image_base64: imageBase64.value,
-      instruction: imageInstruction.value,
-      reference_image_base64: referenceBase64.value,
-    })
+    const res = await request.post(
+      '/ai/ocr',
+      {
+        image_base64: imageBase64.value,
+        instruction: imageInstruction.value,
+        reference_image_base64: referenceBase64.value,
+      },
+      { silent: true },
+    )
     if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
     ocrRawText.value =
@@ -212,12 +220,12 @@ async function analyzeImage() {
     formKey.value += 1
     ElMessage.success('图片识别完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
-    // 错误提示由请求拦截器统一处理
+    // 请求已静默（silent），错误提示统一由下方 aiWarning 呈现
     if (requestId !== analysisRequestId) return
     aiWarning.value =
       err?.status === 502
         ? 'AI 服务暂不可用（未配置或上游失败），已切换到手动整理模式，可稍后重试。'
-        : ''
+        : `图片识别失败：${err?.response?.data?.message || err?.message || '未知错误'}，已切换到手动整理模式。`
     parsed.value = createMistakeDraft('')
     ocrRawText.value = ''
     formKey.value += 1
@@ -261,7 +269,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page" @paste="onPaste">
+  <div class="page">
     <div class="view-hero">
       <div class="view-hero-copy">
         <div class="view-kicker">Smart Capture</div>

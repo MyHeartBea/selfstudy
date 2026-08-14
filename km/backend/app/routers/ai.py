@@ -2,13 +2,14 @@
 
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from typing import List
 
 from app.config import settings
 from app.database import get_connection
-from app.responses import error, ok, server_error
+from app.responses import error, ok
 from app.schemas import AiAnalyzeRequest, AiOcrRequest
+from app.security import ai_rate_limit
 from app.services import ai_service, local_ocr
 from app.services.ai_service import AiNotConfigured, AiRequestError
 
@@ -25,9 +26,12 @@ _VISION_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="vision"
 def _standard_tags() -> List[str]:
     conn = get_connection()
     try:
+        # 按关联错题数量降序取高频标签（而非任意前 60 个），AI 更可能复用真实常用标签
         rows = conn.execute(
-            "SELECT DISTINCT tag_name FROM knowledge_base "
-            "ORDER BY tag_name COLLATE NOCASE LIMIT 60"
+            "SELECT kb.tag_name, COUNT(mt.mistake_id) AS cnt "
+            "FROM knowledge_base kb "
+            "LEFT JOIN mistake_tag_map mt ON mt.tag = kb.tag_name "
+            "GROUP BY kb.id ORDER BY cnt DESC, kb.tag_name COLLATE NOCASE LIMIT 60"
         ).fetchall()
         return [row["tag_name"] for row in rows]
     finally:
@@ -42,7 +46,7 @@ def _ai_error_message(exc: Exception) -> str:
     return f"AI 服务调用失败：{exc}"
 
 
-@router.post("/analyze")
+@router.post("/analyze", dependencies=[Depends(ai_rate_limit)])
 def analyze_text(body: AiAnalyzeRequest):
     """根据题干文本自动解析选项、答案、解析与知识点标签。"""
     try:
@@ -57,7 +61,7 @@ def analyze_text(body: AiAnalyzeRequest):
         return error(502, _ai_error_message(exc))
 
 
-@router.post("/ocr")
+@router.post("/ocr", dependencies=[Depends(ai_rate_limit)])
 def ocr_image(body: AiOcrRequest):
     """识别图片中的题目并生成结构化错题数据。
 
@@ -123,6 +127,12 @@ def ocr_image(body: AiOcrRequest):
             for model, base_url, api_key in vision_providers
         }
         pending = set(futures)
+
+        def cancel_pending():
+            """首个通道成功或预算耗尽时，取消仍在运行的视觉请求，避免白耗 API 配额/占线程池。"""
+            for future in pending:
+                future.cancel()
+
         while pending:
             wait_timeout = max(0.1, min(2.0, remaining()))
             done, _ = wait(
@@ -132,6 +142,7 @@ def ocr_image(body: AiOcrRequest):
             )
             if not done:
                 if remaining() <= 2:
+                    cancel_pending()
                     break
                 continue
             for future in done:
@@ -142,10 +153,12 @@ def ocr_image(body: AiOcrRequest):
                     parsed["method"] = "vision"
                     parsed["raw_text"] = ""
                     parsed["vision_model"] = provider[0]
+                    cancel_pending()
                     return ok(parsed, "视觉模型识别完成")
                 except Exception as exc:
                     last_vision_error = str(exc)
             if remaining() <= 2:
+                cancel_pending()
                 break
     try:
         if local_ocr.is_available():

@@ -43,20 +43,24 @@ watch(
   { immediate: true },
 )
 
+let detailRequestId = 0
+
 async function loadDetail(id) {
+  const requestId = ++detailRequestId
   loading.value = true
   try {
     const [detailRes, historyRes] = await Promise.all([
       request.get(`/mistakes/${id}`),
       request.get(`/mistakes/${id}/reviews`),
     ])
+    if (requestId !== detailRequestId) return
     const res = detailRes
     detail.value = res.data.data
     reviewHistory.value = historyRes.data.data || []
   } catch (err) {
     // 错误提示由请求拦截器统一处理
   } finally {
-    loading.value = false
+    if (requestId === detailRequestId) loading.value = false
   }
 }
 

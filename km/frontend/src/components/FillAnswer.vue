@@ -10,7 +10,7 @@ defineProps({
   reviewSaved: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:userInput', 'submit', 'next'])
+const emit = defineEmits(['update:userInput', 'submit', 'next', 'mark'])
 </script>
 
 <template>
@@ -31,6 +31,26 @@ const emit = defineEmits(['update:userInput', 'submit', 'next'])
           @click="$emit('submit')"
         >
           提交答案，自动判断
+        </el-button>
+        <el-button
+          type="success"
+          plain
+          size="large"
+          :loading="submitting"
+          :disabled="judging"
+          @click="$emit('mark', true)"
+        >
+          手动标记：记住了
+        </el-button>
+        <el-button
+          type="warning"
+          plain
+          size="large"
+          :loading="submitting"
+          :disabled="judging"
+          @click="$emit('mark', false)"
+        >
+          手动标记：没记住
         </el-button>
       </div>
     </template>

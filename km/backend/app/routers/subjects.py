@@ -71,9 +71,9 @@ def get_subject_profile(subject_id: int):
         conn.close()
 
 
-@router.put("/subjects/{subject_id}/profile")
+@router.patch("/subjects/{subject_id}/profile")
 def update_subject_profile(subject_id: int, body: SubjectProfileUpdate):
-    """更新科目的复习重点与方法建议。"""
+    """更新科目的复习重点与方法建议（PATCH 语义：None 字段保持不变）。"""
     conn = get_connection()
     try:
         exists = conn.execute(
@@ -81,15 +81,32 @@ def update_subject_profile(subject_id: int, body: SubjectProfileUpdate):
         ).fetchone()
         if exists is None:
             return error(404, "科目不存在")
-        focus_areas = [str(item).strip() for item in body.focus_areas if str(item).strip()]
+        sets = []
+        params = []
+        if body.focus_areas is not None:
+            focus_areas = [str(item).strip() for item in body.focus_areas if str(item).strip()]
+            sets.append("focus_areas = ?")
+            params.append(json.dumps(focus_areas, ensure_ascii=False))
+        if body.review_tips is not None:
+            sets.append("review_tips = ?")
+            params.append(body.review_tips.strip())
+        if not sets:
+            row = conn.execute(
+                "SELECT * FROM subject_profiles WHERE subject_id = ?",
+                (subject_id,),
+            ).fetchone()
+            return ok(
+                _profile_to_dict(row) if row is not None
+                else {"subject_id": subject_id, "focus_areas": [], "review_tips": ""},
+                "科目档案无变化",
+            )
+        sets.append("updated_at = CURRENT_TIMESTAMP")
         conn.execute(
             "INSERT INTO subject_profiles (subject_id, focus_areas, review_tips) "
-            "VALUES (?, ?, ?) "
+            "VALUES (?, '', '') "
             "ON CONFLICT(subject_id) DO UPDATE SET "
-            "focus_areas = excluded.focus_areas, "
-            "review_tips = excluded.review_tips, "
-            "updated_at = CURRENT_TIMESTAMP",
-            (subject_id, json.dumps(focus_areas, ensure_ascii=False), body.review_tips.strip()),
+            + ", ".join(sets),
+            (subject_id, *params),
         )
         conn.commit()
         row = conn.execute(

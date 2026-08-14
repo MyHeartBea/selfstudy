@@ -9,6 +9,7 @@ import request from '../api/request'
  */
 export function useMistakeFilters({ onBeforeLoad } = {}) {
   const loading = ref(false)
+  const loadError = ref(false)
   const items = ref([])
   const total = ref(0)
   const filters = reactive({
@@ -61,6 +62,7 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
 
   async function loadMistakes() {
     loading.value = true
+    loadError.value = false
     if (onBeforeLoad) onBeforeLoad()
     try {
       const params = { ...buildParams(), page: page.value, page_size: pageSize.value }
@@ -70,7 +72,8 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
       total.value = data.total || 0
       if (data.page) page.value = data.page
     } catch (err) {
-      // 错误提示由请求拦截器统一处理
+      // 错误提示由请求拦截器统一处理；记录错误态供页面区分"真空/加载失败"
+      loadError.value = true
     } finally {
       loading.value = false
     }
@@ -101,6 +104,7 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
 
   return {
     loading,
+    loadError,
     items,
     total,
     filters,

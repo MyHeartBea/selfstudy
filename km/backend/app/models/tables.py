@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS solution_grades (
     score INTEGER,
     verdict TEXT,
     feedback TEXT,
+    errors TEXT,
+    strengths TEXT,
+    solution TEXT,
+    alternate_methods TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -93,6 +97,14 @@ CREATE TABLE IF NOT EXISTS app_meta (
     value TEXT
 );
 
+-- 错题-知识点标签关联表：让"按标签检索"走索引，替代 instr(',tags,', ?) 全表扫描。
+-- knowledge_tags 逗号串仍保留（展示用），此表只负责高效检索，由 service 层同步维护。
+CREATE TABLE IF NOT EXISTS mistake_tag_map (
+    mistake_id INTEGER NOT NULL REFERENCES mistakes(id) ON DELETE CASCADE,
+    tag TEXT NOT NULL,
+    PRIMARY KEY (mistake_id, tag)
+);
+
 CREATE INDEX IF NOT EXISTS idx_mistakes_subject_id ON mistakes(subject_id);
 CREATE INDEX IF NOT EXISTS idx_mistakes_sub_subject_id ON mistakes(sub_subject_id);
 CREATE INDEX IF NOT EXISTS idx_mistakes_source_type ON mistakes(source_type);
@@ -107,6 +119,7 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_base_subject_id ON knowledge_base(subje
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_subject_subject ON knowledge_base(subject_id, sub_subject_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_created_at ON knowledge_base(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_formula_items_category ON formula_items(category);
+CREATE INDEX IF NOT EXISTS idx_mistake_tag_map_tag ON mistake_tag_map(tag);
 """
 
 MISTAKE_COLUMNS = (

@@ -3,15 +3,17 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import settings
 from app.database import init_database
 from app.routers import ai, formulas, knowledge, mistakes, reviews, stats, subjects, transfer
+from app.security import verify_api_token
 
 logger = logging.getLogger("kaoyan")
 logging.basicConfig(
@@ -35,11 +37,8 @@ app = FastAPI(
 
 @app.middleware("http")
 async def log_http_errors(request: Request, call_next):
-    try:
-        response = await call_next(request)
-    except Exception:
-        logger.exception("未处理异常：%s %s", request.method, request.url.path)
-        raise
+    # 未捕获异常由 unhandled_exception_handler 统一记录并返回约定 JSON，这里只记录 5xx 响应
+    response = await call_next(request)
     if response.status_code >= 500:
         logger.error(
             "HTTP 错误：%s %s -> %s",
@@ -77,14 +76,33 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-app.include_router(subjects.router)
-app.include_router(formulas.router)
-app.include_router(mistakes.router)
-app.include_router(knowledge.router)
-app.include_router(stats.router)
-app.include_router(transfer.router)
-app.include_router(reviews.router)
-app.include_router(ai.router)
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """把 FastAPI/Starlette 内建 HTTPException（404/405 等）统一为项目约定的 JSON 格式。"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.status_code, "data": None, "message": str(exc.detail)},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """未捕获异常兜底：记录堆栈，返回不泄露内部细节的统一 500。"""
+    logger.exception("未处理异常：%s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"code": 500, "data": None, "message": "服务器内部错误，请稍后重试"},
+    )
+
+
+app.include_router(subjects.router, dependencies=[Depends(verify_api_token)])
+app.include_router(formulas.router, dependencies=[Depends(verify_api_token)])
+app.include_router(mistakes.router, dependencies=[Depends(verify_api_token)])
+app.include_router(knowledge.router, dependencies=[Depends(verify_api_token)])
+app.include_router(stats.router, dependencies=[Depends(verify_api_token)])
+app.include_router(transfer.router, dependencies=[Depends(verify_api_token)])
+app.include_router(reviews.router, dependencies=[Depends(verify_api_token)])
+app.include_router(ai.router, dependencies=[Depends(verify_api_token)])
 
 
 if settings.FRONTEND_DIST.is_dir():
@@ -95,7 +113,7 @@ if settings.FRONTEND_DIST.is_dir():
     @app.get("/{full_path:path}")
     async def spa(full_path: str):
         """单页应用回退：未知地址一律返回 index.html，刷新/直达不白屏。"""
-        if full_path.startswith("api/"):
+        if full_path == "api" or full_path.startswith("api/"):
             return JSONResponse(
                 {"code": 404, "data": None, "message": "接口不存在"},
                 status_code=404,

@@ -1,25 +1,14 @@
 """统计相关业务逻辑。"""
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
 
-
-def _local_day_bounds_utc():
-    """返回本地今天在 UTC 中的起止时间。"""
-    now = datetime.now().astimezone()
-    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = start + timedelta(days=1)
-    fmt = "%Y-%m-%d %H:%M:%S"
-    return (
-        start.astimezone(timezone.utc).strftime(fmt),
-        end.astimezone(timezone.utc).strftime(fmt),
-    )
+from app.database import local_day_bounds_utc
 
 
 def get_stats(conn: sqlite3.Connection) -> dict:
     """返回总错题数、今日新增和按科目统计。"""
     total = conn.execute("SELECT COUNT(*) FROM mistakes").fetchone()[0]
-    day_start_utc, day_end_utc = _local_day_bounds_utc()
+    day_start_utc, day_end_utc = local_day_bounds_utc()
     today_new = conn.execute(
         "SELECT COUNT(*) FROM mistakes WHERE created_at >= ? AND created_at < ?",
         (day_start_utc, day_end_utc),

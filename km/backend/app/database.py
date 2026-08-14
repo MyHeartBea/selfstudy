@@ -1,9 +1,8 @@
 """SQLite 连接与数据库初始化。"""
 
 import re
-import shutil
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from app.config import settings
@@ -22,6 +21,18 @@ def get_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA busy_timeout = 5000")
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def local_day_bounds_utc() -> tuple:
+    """返回本地今天在 UTC 中的起止时间（用于查询今日记录）。"""
+    now = datetime.now().astimezone()
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    fmt = "%Y-%m-%d %H:%M:%S"
+    return (
+        start.astimezone(timezone.utc).strftime(fmt),
+        end.astimezone(timezone.utc).strftime(fmt),
+    )
 
 
 def backup_database() -> None:
@@ -67,7 +78,7 @@ def init_database() -> None:
 
 
 # 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描
-MIGRATION_VERSION = 2
+MIGRATION_VERSION = 3
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
@@ -120,6 +131,14 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     if "related_tags" not in knowledge_columns:
         conn.execute("ALTER TABLE knowledge_base ADD COLUMN related_tags TEXT")
 
+    grade_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(solution_grades)").fetchall()
+    }
+    for column in ("errors", "strengths", "solution", "alternate_methods"):
+        if column not in grade_columns:
+            conn.execute(f"ALTER TABLE solution_grades ADD COLUMN {column} TEXT")
+
     _ensure_math_categories(conn)
     _ensure_english_categories(conn)
 
@@ -162,6 +181,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
                 (canonical, row["id"]),
             )
     _normalize_existing_math(conn)
+    _rebuild_mistake_tag_map(conn)
     _set_meta(conn, "migration_version", str(MIGRATION_VERSION))
 
 
@@ -292,6 +312,40 @@ def _classify_existing_sources(conn: sqlite3.Connection) -> None:
                 "UPDATE mistakes SET source_year = ? WHERE id = ?",
                 (match.group(0), row["id"]),
             )
+
+
+def _rebuild_mistake_tag_map(conn: sqlite3.Connection) -> None:
+    """从 mistakes.knowledge_tags 全量重建 mistake_tag_map（迁移用，幂等）。"""
+    conn.execute("DELETE FROM mistake_tag_map")
+    rows = conn.execute("SELECT id, knowledge_tags FROM mistakes").fetchall()
+    for row in rows:
+        tags = [t.strip() for t in (row["knowledge_tags"] or "").split(",") if t.strip()]
+        for tag in tags:
+            conn.execute(
+                "INSERT OR IGNORE INTO mistake_tag_map (mistake_id, tag) VALUES (?, ?)",
+                (row["id"], tag),
+            )
+
+
+def sync_mistake_tags(conn: sqlite3.Connection, mistake_id: int, tags) -> None:
+    """错题保存/更新后同步维护标签关联表（先清后插）。"""
+    conn.execute("DELETE FROM mistake_tag_map WHERE mistake_id = ?", (mistake_id,))
+    for tag in tags:
+        conn.execute(
+            "INSERT OR IGNORE INTO mistake_tag_map (mistake_id, tag) VALUES (?, ?)",
+            (mistake_id, tag),
+        )
+
+
+def mistake_tag_condition(alias: str = "m", column: str = "id") -> str:
+    """生成按标签检索的 EXISTS 条件（走 mistake_tag_map 索引）。
+
+    返回形如 "EXISTS (SELECT 1 FROM mistake_tag_map mt WHERE mt.mistake_id = m.id AND mt.tag = ?)"。
+    """
+    return (
+        f"EXISTS (SELECT 1 FROM mistake_tag_map mt "
+        f"WHERE mt.mistake_id = {alias}.{column} AND mt.tag = ?)"
+    )
 
 
 def normalize_tags(value) -> List[str]:
