@@ -3,6 +3,7 @@
 import sqlite3
 
 from app.services.formula_defaults import DEFAULT_FORMULAS
+from app.services.quadratic_form_defaults import QUADRATIC_FORM_NOTES
 
 
 def seed_subject_profiles(conn: sqlite3.Connection) -> None:
@@ -49,97 +50,6 @@ def seed_formula_data(conn: sqlite3.Connection) -> None:
     if seeded is not None:
         return
 
-    legacy_formulas = [
-        (
-            "高等数学",
-            "常用导数公式表",
-            """## 基本导数公式
-| 函数 | 导数 |
-|---|---|
-| $x^n$ | $n x^{n-1}$ |
-| $e^x$ | $e^x$ |
-| $a^x$ | $a^x \\ln a$ |
-| $\\ln x$ | $\\dfrac{1}{x}$ |
-| $\\sin x$ | $\\cos x$ |
-| $\\cos x$ | $-\\sin x$ |
-| $\\tan x$ | $\\sec^2 x$ |
-| $\\arcsin x$ | $\\dfrac{1}{\\sqrt{1-x^2}}$ |
-| $\\arctan x$ | $\\dfrac{1}{1+x^2}$ |""",
-        ),
-        (
-            "高等数学",
-            "基本积分表",
-            """## 常用不定积分
-| 被积函数 | 原函数 |
-|---|---|
-| $x^n$ | $\\dfrac{x^{n+1}}{n+1}+C$ |
-| $\\dfrac{1}{x}$ | $\\ln\\lvert x\\rvert+C$ |
-| $e^x$ | $e^x+C$ |
-| $a^x$ | $\\dfrac{a^x}{\\ln a}+C$ |
-| $\\cos x$ | $\\sin x+C$ |
-| $\\sin x$ | $-\\cos x+C$ |
-| $\\dfrac{1}{1+x^2}$ | $\\arctan x+C$ |
-| $\\dfrac{1}{\\sqrt{1-x^2}}$ | $\\arcsin x+C$ |
-| $\\sec^2 x$ | $\\tan x+C$ |""",
-        ),
-        (
-            "高等数学",
-            "泰勒公式表",
-            """## 泰勒展开
-$$f(x)=f(a)+f'(a)(x-a)+\\frac{f''(a)}{2!}(x-a)^2+\\cdots$$
-## 常用展开
-| 函数 | 展开式 |
-|---|---|
-| $e^x$ | $1+x+\\dfrac{x^2}{2!}+\\dfrac{x^3}{3!}+\\cdots$ |
-| $\\ln(1+x)$ | $x-\\dfrac{x^2}{2}+\\dfrac{x^3}{3}-\\cdots$ |
-| $\\sin x$ | $x-\\dfrac{x^3}{3!}+\\dfrac{x^5}{5!}-\\cdots$ |
-| $\\cos x$ | $1-\\dfrac{x^2}{2!}+\\dfrac{x^4}{4!}-\\cdots$ |
-| $\\dfrac{1}{1-x}$ | $1+x+x^2+x^3+\\cdots$ |
-| $(1+x)^\\alpha$ | $1+\\alpha x+\\dfrac{\\alpha(\\alpha-1)}{2!}x^2+\\cdots$ |""",
-        ),
-        (
-            "高等数学",
-            "常用极限与等价无穷小",
-            """## 常用极限
-$$\\lim_{x\\to0}\\frac{\\sin x}{x}=1,\\quad \\lim_{x\\to\\infty}\\left(1+\\frac{1}{x}\\right)^x=e$$
-## 等价无穷小（$x\\to0$）
-| 表达式 | 等价 |
-|---|---|
-| $\\sin x$ | $x$ |
-| $\\tan x$ | $x$ |
-| $\\arcsin x$ | $x$ |
-| $\\ln(1+x)$ | $x$ |
-| $e^x-1$ | $x$ |
-| $1-\\cos x$ | $\\dfrac{x^2}{2}$ |""",
-        ),
-        (
-            "线性代数",
-            "行列式与矩阵常用公式",
-            """## 二阶行列式
-$$\\begin{vmatrix} a & b \\\\ c & d \\end{vmatrix}=ad-bc$$
-## 伴随矩阵与逆矩阵
-$$AA^*=A^*A=\\lvert A\\rvert I,\\quad A^{-1}=\\frac{1}{\\lvert A\\rvert}A^*$$
-## 常用运算
-| 情形 | 公式 |
-|---|---|
-| 转置 | $(AB)^T=B^T A^T$ |
-| 逆矩阵 | $(AB)^{-1}=B^{-1}A^{-1}$ |
-| 行列式 | $\\lvert AB\\rvert=\\lvert A\\rvert\\lvert B\\rvert$ |
-| 秩 | $r(AB)\\le\\min(r(A),r(B))$ |""",
-        ),
-        (
-            "高等数学",
-            "三角函数恒等式",
-            """## 基本恒等式
-$$\\sin^2 x+\\cos^2 x=1$$
-## 倍角公式
-| 公式 |
-|---|
-| $\\sin 2x=2\\sin x\\cos x$ |
-| $\\cos 2x=\\cos^2 x-\\sin^2 x=1-2\\sin^2 x$ |
-| $\\tan 2x=\\dfrac{2\\tan x}{1-\\tan^2 x}$ |""",
-        ),
-    ]
     formulas = DEFAULT_FORMULAS
     conn.executemany(
         "INSERT OR IGNORE INTO formula_items (category, title, content) "
@@ -217,6 +127,17 @@ def seed_database(conn: sqlite3.Connection) -> None:
         "INSERT INTO knowledge_base (tag_name, subject_id, sub_subject_id, summary) "
         "VALUES (?, ?, ?, ?)",
         knowledge_rows,
+    )
+
+    # 数学二·线性代数：二次型细分知识点（tag_name 唯一，重复跳过）
+    conn.executemany(
+        "INSERT OR IGNORE INTO knowledge_base "
+        "(tag_name, subject_id, sub_subject_id, summary, related_tags) "
+        "VALUES (?, 3, 6, ?, ?)",
+        [
+            (note["tag"], note["summary"], note.get("related", ""))
+            for note in QUADRATIC_FORM_NOTES
+        ],
     )
 
     mistakes = [

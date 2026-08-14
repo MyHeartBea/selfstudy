@@ -35,13 +35,16 @@ const resultCount = ref({ correct: 0, wrong: 0 })
 
 const current = computed(() => queue.value[index.value] || null)
 const practiceMode = computed(() => String(route.query.mode || ''))
-const isPractice = computed(() => ['curve', 'wrong_time', 'random'].includes(practiceMode.value))
+const isPractice = computed(() =>
+  ['curve', 'wrong_time', 'random', 'real_exam'].includes(practiceMode.value),
+)
 const practiceTitle = computed(
   () =>
     ({
       curve: '记忆曲线练习',
       wrong_time: '按错误时间练习',
       random: '随机抽题',
+      real_exam: '真题专项',
     }[practiceMode.value] || ''),
 )
 const emptyText = computed(() =>
