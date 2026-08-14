@@ -46,7 +46,13 @@ def _ai_error_message(exc: Exception) -> str:
 def analyze_text(body: AiAnalyzeRequest):
     """根据题干文本自动解析选项、答案、解析与知识点标签。"""
     try:
-        return ok(ai_service.analyze_text(body.text, standard_tags=_standard_tags()))
+        return ok(
+            ai_service.analyze_text(
+                body.text,
+                standard_tags=_standard_tags(),
+                instruction=body.instruction,
+            )
+        )
     except Exception as exc:
         return error(502, _ai_error_message(exc))
 
@@ -103,6 +109,8 @@ def ocr_image(body: AiOcrRequest):
             base_url=vision_base_url,
             api_key=vision_api_key,
             timeout=min(settings.AI_VISION_TIMEOUT, int(budget)),
+            instruction=body.instruction,
+            reference_image_base64=body.reference_image_base64,
         )
 
     if vision_providers:
@@ -151,6 +159,7 @@ def ocr_image(body: AiOcrRequest):
                             settings.AI_TIMEOUT,
                             max(5, int(remaining())),
                         ),
+                        instruction=body.instruction,
                     )
                     parsed["method"] = "local"
                     parsed["raw_text"] = text
@@ -172,6 +181,8 @@ def ocr_image(body: AiOcrRequest):
             body.image_base64,
             standard_tags=standard_tags,
             timeout=min(settings.AI_TIMEOUT, int(budget)),
+            instruction=body.instruction,
+            reference_image_base64=body.reference_image_base64,
         )
         parsed["method"] = "vision"
         parsed["raw_text"] = ""

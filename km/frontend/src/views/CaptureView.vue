@@ -11,15 +11,20 @@ import { createMistakeDraft } from '../composables/mistakeDraft'
 const router = useRouter()
 const activeTab = ref('text')
 const text = ref('')
+const textInstruction = ref('')
+const imageInstruction = ref('')
 const analyzing = ref(false)
 const analyzingText = ref('')
 const parsed = ref(null)
 const formKey = ref(0)
 const previewImage = ref('')
 const imageBase64 = ref('')
+const referenceImage = ref('')
+const referenceBase64 = ref('')
 const ocrRawText = ref('')
 const aiWarning = ref('')
 const readerRef = ref(null)
+const referenceReaderRef = ref(null)
 let analysisRequestId = 0
 
 async function analyze() {
@@ -31,7 +36,10 @@ async function analyze() {
   analyzing.value = true
   analyzingText.value = '正在解析题干并生成答案与解析，约需 30-60 秒，请稍候…'
   try {
-    const res = await request.post('/ai/analyze', { text: text.value })
+    const res = await request.post('/ai/analyze', {
+      text: text.value,
+      instruction: textInstruction.value,
+    })
     if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
     ocrRawText.value = ''
@@ -86,18 +94,20 @@ function handleImageFile(file) {
     ElMessage.warning('剪贴板内容不是图片，请重新截图后粘贴')
     return
   }
+  // 粘贴/选择后先暂存预览，等待用户补充要求或参考图片后再点击分析
   const requestId = ++analysisRequestId
-  analyzing.value = true
-  analyzingText.value = '已读取到图片，正在调用视觉模型识别并解题，约需 30-60 秒，请稍候…'
+  analyzing.value = false
+  analyzingText.value = ''
   parsed.value = null
   ocrRawText.value = ''
+  aiWarning.value = ''
+  removeReference()
   const reader = new FileReader()
   readerRef.value = reader
-  reader.onload = async () => {
+  reader.onload = () => {
     if (requestId !== analysisRequestId) return
     previewImage.value = String(reader.result)
     imageBase64.value = String(reader.result).split(',')[1] || String(reader.result)
-    await runOcr(requestId)
   }
   reader.onerror = () => {
     if (requestId !== analysisRequestId) return
@@ -106,6 +116,58 @@ function handleImageFile(file) {
     ElMessage.error('图片读取失败，请重新截图后粘贴')
   }
   reader.readAsDataURL(file)
+}
+
+function removeMainImage() {
+  analysisRequestId += 1
+  analyzing.value = false
+  analyzingText.value = ''
+  previewImage.value = ''
+  imageBase64.value = ''
+  parsed.value = null
+  ocrRawText.value = ''
+  aiWarning.value = ''
+  removeReference()
+  if (readerRef.value) {
+    try {
+      readerRef.value.abort()
+    } catch (err) {
+      // 忽略中止异常
+    }
+    readerRef.value = null
+  }
+}
+
+function onReferenceFileChange(event) {
+  const file = event.target.files[0]
+  event.target.value = ''
+  if (!file || !file.type.startsWith('image/')) {
+    ElMessage.warning('参考图片格式不正确，请重新选择')
+    return
+  }
+  const reader = new FileReader()
+  referenceReaderRef.value = reader
+  reader.onload = () => {
+    referenceImage.value = String(reader.result)
+    referenceBase64.value = String(reader.result).split(',')[1] || String(reader.result)
+  }
+  reader.onerror = () => {
+    ElMessage.error('参考图片读取失败')
+  }
+  reader.readAsDataURL(file)
+}
+
+function removeReference() {
+  referenceImage.value = ''
+  referenceBase64.value = ''
+  if (referenceReaderRef.value) {
+    try {
+      referenceReaderRef.value.abort()
+    } catch (err) {
+      // 忽略中止异常
+    }
+    referenceReaderRef.value = null
+  }
 }
 
 function onPaste(event) {
@@ -118,12 +180,20 @@ function onPaste(event) {
   handleImageFile(file)
 }
 
-async function runOcr(requestId) {
-  if (!imageBase64.value) return
+async function analyzeImage() {
+  if (!imageBase64.value) {
+    ElMessage.warning('请先粘贴或选择题目图片')
+    return
+  }
+  const requestId = ++analysisRequestId
   analyzing.value = true
   analyzingText.value = '正在调用视觉模型识别图片并生成解析，约需 30-60 秒，请稍候…'
   try {
-    const res = await request.post('/ai/ocr', { image_base64: imageBase64.value })
+    const res = await request.post('/ai/ocr', {
+      image_base64: imageBase64.value,
+      instruction: imageInstruction.value,
+      reference_image_base64: referenceBase64.value,
+    })
     if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
     ocrRawText.value =
@@ -168,6 +238,14 @@ onUnmounted(() => {
     }
     readerRef.value = null
   }
+  if (referenceReaderRef.value) {
+    try {
+      referenceReaderRef.value.abort()
+    } catch (err) {
+      // 忽略中止异常
+    }
+    referenceReaderRef.value = null
+  }
 })
 
 </script>
@@ -178,12 +256,12 @@ onUnmounted(() => {
       <div class="view-hero-copy">
         <div class="view-kicker">Smart Capture</div>
         <h2>智能录入</h2>
-        <p class="view-desc">粘贴题干或上传图片，AI 自动整理成完整错题。</p>
+        <p class="view-desc">粘贴题干或上传图片，可附加解题要求与参考图，AI 按你的思路整理成完整错题。</p>
       </div>
     </div>
 
     <el-alert
-      title="支持粘贴题干或上传题目图片，AI 会自动识别并整理选项、答案、解析和知识点，保存前可再核对修改。"
+      title="支持粘贴题干或上传题目图片；粘贴图片后可补充文字解题要求（如「按配方法求解、某步写详细」）或添加参考图片（按图中思路解题），再点击「开始识别并解析」，保存前可再核对修改。"
       type="info"
       :closable="false"
       show-icon
@@ -199,6 +277,13 @@ onUnmounted(() => {
             :rows="8"
             placeholder="把题目原文粘贴到这里，包含题干和 A/B/C/D 选项"
           />
+          <el-input
+            v-model="textInstruction"
+            type="textarea"
+            :rows="3"
+            class="capture-instruction"
+            placeholder="可选：补充解题要求或思路，例如「按配方法求解，正交变换步骤写详细」「用导数定义法证明」"
+          />
           <div class="capture-actions">
             <el-button
               type="primary"
@@ -213,10 +298,18 @@ onUnmounted(() => {
           </div>
         </el-tab-pane>
         <el-tab-pane label="上传图片" name="image">
-          <label for="capture-image-input" class="el-button el-button--primary">
-            <el-icon v-if="analyzing" class="is-loading"><Loading /></el-icon>
-            选择题目图片
-          </label>
+          <div class="capture-actions">
+            <label for="capture-image-input" class="el-button el-button--primary">
+              <el-icon v-if="analyzing" class="is-loading"><Loading /></el-icon>
+              选择/粘贴题目图片
+            </label>
+            <el-button v-if="previewImage" @click="removeMainImage">
+              移除图片
+            </el-button>
+            <el-button @click="useManualImage">
+              手动整理
+            </el-button>
+          </div>
           <input
             id="capture-image-input"
             type="file"
@@ -224,12 +317,49 @@ onUnmounted(() => {
             class="visually-hidden"
             @change="onFileChange"
           >
-          <el-button @click="useManualImage">
-            手动整理
-          </el-button>
-          <span class="paste-hint">或直接 Ctrl+V 粘贴截图，粘贴后自动分析</span>
+          <span class="paste-hint">先 Ctrl+V 粘贴或选择题目图片，可补充文字要求或参考图片，再点击「开始识别并解析」</span>
+
           <div v-if="previewImage" class="image-preview">
             <img :src="previewImage" alt="题目图片">
+          </div>
+
+          <el-input
+            v-if="previewImage"
+            v-model="imageInstruction"
+            type="textarea"
+            :rows="3"
+            class="capture-instruction"
+            placeholder="可选：补充解题要求或思路，例如「按配方法求解，正交变换步骤写详细」「这题用数形结合讲解」"
+          />
+
+          <div v-if="previewImage" class="reference-section">
+            <label for="capture-reference-input" class="el-button">
+              添加参考图片（按图中思路解题）
+            </label>
+            <input
+              id="capture-reference-input"
+              type="file"
+              accept="image/*"
+              class="visually-hidden"
+              @change="onReferenceFileChange"
+            >
+            <span v-if="referenceImage" class="reference-preview">
+              <img :src="referenceImage" alt="参考图片">
+              <el-button size="small" text type="danger" @click="removeReference">
+                移除参考图
+              </el-button>
+            </span>
+          </div>
+
+          <div v-if="previewImage" class="capture-actions">
+            <el-button
+              type="primary"
+              :loading="analyzing"
+              :disabled="!imageBase64"
+              @click="analyzeImage"
+            >
+              开始识别并解析
+            </el-button>
           </div>
         </el-tab-pane>
       </el-tabs>

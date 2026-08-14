@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from app.database import get_connection
 from app.models.tables import TABLES_DDL
 from app.services import answer_service, mistake_service, review_service
+from app.services import ai_service
 
 
 def make_conn() -> sqlite3.Connection:
@@ -164,6 +165,63 @@ class TestSourceValidation(unittest.TestCase):
                 "mock", "2026", "李林六套卷(一)"
             )
         )
+
+
+class TestCapturePrompt(unittest.TestCase):
+    """智能录入：补充要求/参考图片是否进入发给模型的 prompt。"""
+
+    def _capture_chat(self, fn, *args, **kwargs):
+        captured = {}
+
+        def fake_chat(messages, **kw):
+            captured["messages"] = messages
+            return '{"question": "q"}'
+
+        original = ai_service._chat
+        ai_service._chat = fake_chat
+        try:
+            fn(*args, **kwargs)
+        finally:
+            ai_service._chat = original
+        return captured["messages"]
+
+    def test_analyze_text_includes_instruction(self):
+        messages = self._capture_chat(
+            ai_service.analyze_text, "题目", instruction="按配方法求解"
+        )
+        user = messages[1]["content"]
+        self.assertIn("按配方法求解", user)
+        self.assertIn("【补充要求】", user)
+
+    def test_analyze_text_without_instruction(self):
+        messages = self._capture_chat(ai_service.analyze_text, "题目")
+        self.assertEqual(messages[1]["content"], "题目")
+
+    def test_ocr_includes_instruction_and_reference_image(self):
+        messages = self._capture_chat(
+            ai_service.ocr_image,
+            "AAAA",
+            model="m",
+            base_url="u",
+            api_key="k",
+            instruction="正交变换步骤写详细",
+            reference_image_base64="BBBB",
+        )
+        content = messages[1]["content"]
+        texts = [p["text"] for p in content if p["type"] == "text"]
+        images = [p for p in content if p["type"] == "image_url"]
+        self.assertEqual(len(images), 2)
+        self.assertTrue(any("正交变换步骤写详细" in t for t in texts))
+        self.assertTrue(any("【参考图片】" in t for t in texts))
+        self.assertTrue(images[1]["image_url"]["url"].startswith("data:image/png;base64,BBBB"))
+
+    def test_ocr_without_instruction_and_reference(self):
+        messages = self._capture_chat(ai_service.ocr_image, "AAAA")
+        content = messages[1]["content"]
+        images = [p for p in content if p["type"] == "image_url"]
+        texts = [p["text"] for p in content if p["type"] == "text"]
+        self.assertEqual(len(images), 1)
+        self.assertFalse(any("【补充要求】" in t for t in texts))
 
 
 class TestMigrationIdempotent(unittest.TestCase):

@@ -59,10 +59,16 @@ class ReviewCreate(BaseModel):
 
 class AiAnalyzeRequest(BaseModel):
     text: str = Field(min_length=1, max_length=50000)
+    # 可选：补充解题要求/思路（例如"按配方法求解，正交变换步骤写详细"）
+    instruction: str = Field(default="", max_length=5000)
 
 
 class AiOcrRequest(BaseModel):
     image_base64: str = Field(min_length=1, max_length=20000000)
+    # 可选：补充解题要求/思路，AI 解析时须遵循
+    instruction: str = Field(default="", max_length=5000)
+    # 可选：参考图片（按图中思路/方法解题）
+    reference_image_base64: str = Field(default="", max_length=20000000)
 
 
 class AiSummarizeRequest(BaseModel):

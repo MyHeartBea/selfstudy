@@ -373,11 +373,19 @@ def analyze_text(
     text: str,
     standard_tags: List[str] | None = None,
     timeout: int | None = None,
+    instruction: str = "",
 ) -> dict:
-    """根据粘贴的题干文本生成结构化错题数据。"""
+    """根据粘贴的题干文本生成结构化错题数据；instruction 为可选补充解题要求。"""
+    user_text = text.strip()
+    if instruction and instruction.strip():
+        user_text += (
+            "\n\n【补充要求】"
+            + instruction.strip()
+            + "（请严格遵循该思路/方向解题，要求写详细的部分展开写，其余按正常规范）"
+        )
     messages = [
         {"role": "system", "content": _parse_prompt(standard_tags)},
-        {"role": "user", "content": text},
+        {"role": "user", "content": user_text},
     ]
     return normalize_parsed(
         _extract_json(_chat(messages, timeout=timeout)),
@@ -392,22 +400,47 @@ def ocr_image(
     base_url: str | None = None,
     api_key: str | None = None,
     timeout: int | None = None,
+    instruction: str = "",
+    reference_image_base64: str = "",
 ) -> dict:
-    """识别图片中的题目并生成结构化错题数据。"""
+    """识别图片中的题目并生成结构化错题数据。
+
+    instruction 为可选文字要求（如按某思路解题、某步骤写详细）；
+    reference_image_base64 为可选参考图片（要求按图中思路/方法解题）。
+    """
     image_base64 = image_base64.strip()
     if image_base64.startswith("data:"):
         data_url = image_base64
     else:
         data_url = "data:image/png;base64," + image_base64
+
+    text_part = "请识别图片中的题目，并按要求输出 JSON。"
+    if instruction and instruction.strip():
+        text_part += (
+            "\n\n【补充要求】"
+            + instruction.strip()
+            + "（请严格遵循该思路/方向解题，要求写详细的部分展开写）"
+        )
+    content = [
+        {"type": "text", "text": text_part},
+        {"type": "image_url", "image_url": {"url": data_url}},
+    ]
+    if reference_image_base64 and reference_image_base64.strip():
+        ref = reference_image_base64.strip()
+        if ref.startswith("data:"):
+            ref_data_url = ref
+        else:
+            ref_data_url = "data:image/png;base64," + ref
+        content.append(
+            {"type": "text", "text": "【参考图片】请按此图中的思路/方法解题。"}
+        )
+        content.append(
+            {"type": "image_url", "image_url": {"url": ref_data_url}}
+        )
+
     messages = [
         {"role": "system", "content": _parse_prompt(standard_tags)},
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "请识别图片中的题目，并按要求输出 JSON。"},
-                {"type": "image_url", "image_url": {"url": data_url}},
-            ],
-        },
+        {"role": "user", "content": content},
     ]
     if model:
         return normalize_parsed(
