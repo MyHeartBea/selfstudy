@@ -141,6 +141,10 @@ function removeMainImage() {
 function onReferenceFileChange(event) {
   const file = event.target.files[0]
   event.target.value = ''
+  stageReferenceFile(file)
+}
+
+function stageReferenceFile(file) {
   if (!file || !file.type.startsWith('image/')) {
     ElMessage.warning('参考图片格式不正确，请重新选择')
     return
@@ -177,7 +181,13 @@ function onPaste(event) {
   if (!file) return
   event.preventDefault()
   activeTab.value = 'image'
-  handleImageFile(file)
+  // 主图已就绪时，再次粘贴的图片自动作为参考图（按图中思路解题）
+  if (previewImage.value) {
+    stageReferenceFile(file)
+    ElMessage.success('已添加为参考图片（按图中思路解题）')
+  } else {
+    handleImageFile(file)
+  }
 }
 
 async function analyzeImage() {
@@ -261,7 +271,7 @@ onUnmounted(() => {
     </div>
 
     <el-alert
-      title="支持粘贴题干或上传题目图片；粘贴图片后可补充文字解题要求（如「按配方法求解、某步写详细」）或添加参考图片（按图中思路解题），再点击「开始识别并解析」，保存前可再核对修改。"
+      title="支持粘贴题干或上传题目图片；粘贴主图后可补充文字解题要求（如「按配方法求解、某步写详细」），再 Ctrl+V 粘贴第二张图作为参考（按图中思路解题），最后点击「开始识别并解析」，保存前可再核对修改。"
       type="info"
       :closable="false"
       show-icon
@@ -317,7 +327,7 @@ onUnmounted(() => {
             class="visually-hidden"
             @change="onFileChange"
           >
-          <span class="paste-hint">先 Ctrl+V 粘贴或选择题目图片，可补充文字要求或参考图片，再点击「开始识别并解析」</span>
+          <span class="paste-hint">先 Ctrl+V 粘贴或选择题目图片；主图就绪后再 Ctrl+V，第二张图自动作为参考图片</span>
 
           <div v-if="previewImage" class="image-preview">
             <img :src="previewImage" alt="题目图片">
@@ -334,7 +344,7 @@ onUnmounted(() => {
 
           <div v-if="previewImage" class="reference-section">
             <label for="capture-reference-input" class="el-button">
-              添加参考图片（按图中思路解题）
+              选择参考图片（按图中思路解题）
             </label>
             <input
               id="capture-reference-input"
