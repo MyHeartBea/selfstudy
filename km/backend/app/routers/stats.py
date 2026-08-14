@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from app.database import get_connection
-from app.responses import error, ok
+from app.responses import error, ok, server_error
 from app.services import stats_service
 
 router = APIRouter(prefix="/api", tags=["统计"])
@@ -16,6 +16,6 @@ def get_stats():
     try:
         return ok(stats_service.get_stats(conn))
     except Exception as exc:
-        return error(500, f"获取统计失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()

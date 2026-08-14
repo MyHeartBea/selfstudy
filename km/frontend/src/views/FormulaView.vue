@@ -330,6 +330,7 @@ onMounted(loadFormulas)
       :title="editingId ? '编辑公式' : '新增公式'"
       width="760px"
       top="5vh"
+      :close-on-click-modal="false"
     >
       <el-form label-width="80px">
         <el-form-item label="分类">

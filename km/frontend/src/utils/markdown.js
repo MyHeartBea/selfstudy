@@ -8,13 +8,24 @@ export function escapeHtml(value) {
     .replace(/"/g, '&quot;')
 }
 
+/**
+ * KaTeX 渲染结果缓存：同一公式字符串（含展示模式区分）只渲染一次，
+ * 避免大列表 / 弹窗中重复 renderToString 的 CPU 开销。
+ */
+export const katexCache = new Map()
+
 export function renderMath(expr, displayMode) {
+  const key = `${displayMode ? 'b' : 'i'}:${expr}`
+  if (katexCache.has(key)) return katexCache.get(key)
   try {
-    return katex.renderToString(expr, {
+    const html = katex.renderToString(expr, {
       throwOnError: false,
       displayMode,
       strict: false,
     })
+    if (katexCache.size > 500) katexCache.clear()
+    katexCache.set(key, html)
+    return html
   } catch (err) {
     return escapeHtml(expr)
   }

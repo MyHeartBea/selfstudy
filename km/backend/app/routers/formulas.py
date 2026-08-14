@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from app.database import get_connection
-from app.responses import error, ok
+from app.responses import error, ok, server_error
 from app.schemas import FormulaCreate, FormulaUpdate
 from app.services import formula_service
 
@@ -23,7 +23,7 @@ def list_formulas(
     try:
         return ok(formula_service.list_formulas(conn, category, search))
     except Exception as exc:
-        return error(500, f"查询公式库失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -43,7 +43,7 @@ def create_formula(body: FormulaCreate):
     except sqlite3.IntegrityError:
         return error(400, "公式标题已存在")
     except Exception as exc:
-        return error(500, f"添加公式失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -66,7 +66,7 @@ def update_formula(formula_id: int, body: FormulaUpdate):
     except sqlite3.IntegrityError:
         return error(400, "公式标题已存在")
     except Exception as exc:
-        return error(500, f"更新公式失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -80,6 +80,6 @@ def delete_formula(formula_id: int):
             return error(404, "公式不存在")
         return ok({"id": formula_id}, "公式已删除")
     except Exception as exc:
-        return error(500, f"删除公式失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()

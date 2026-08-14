@@ -66,6 +66,22 @@ def init_database() -> None:
         conn.close()
 
 
+# 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描
+MIGRATION_VERSION = 2
+
+
+def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+        (key, value),
+    )
+
+
 def migrate_database(conn: sqlite3.Connection) -> None:
     """为旧数据库补充新字段，避免删库。"""
     existing_columns = {
@@ -106,6 +122,15 @@ def migrate_database(conn: sqlite3.Connection) -> None:
 
     _ensure_math_categories(conn)
     _ensure_english_categories(conn)
+
+    # 以下全表扫描式迁移仅在版本升级时执行一次
+    try:
+        migrated_version = int(_get_meta(conn, "migration_version") or 0)
+    except (TypeError, ValueError):
+        migrated_version = 0
+    if migrated_version >= MIGRATION_VERSION:
+        return
+
     _classify_existing_sources(conn)
 
     # 统一已有数据的知识点标签命名，保证检索一致
@@ -137,6 +162,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
                 (canonical, row["id"]),
             )
     _normalize_existing_math(conn)
+    _set_meta(conn, "migration_version", str(MIGRATION_VERSION))
 
 
 MATH_FIELDS = (
@@ -173,6 +199,10 @@ def _normalize_existing_math(conn: sqlite3.Connection) -> None:
 
 def _ensure_math_categories(conn: sqlite3.Connection) -> None:
     """为旧数据库补充数学二级科目：高等数学、线性代数。"""
+    # 全新数据库此时 subjects 尚未播种（seed 在 migrate 之后执行），跳过避免外键失败
+    subject_count = conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
+    if subject_count == 0:
+        return
     existing = {
         row["name"]
         for row in conn.execute(
@@ -210,6 +240,10 @@ def _ensure_math_categories(conn: sqlite3.Connection) -> None:
 
 def _ensure_english_categories(conn: sqlite3.Connection) -> None:
     """为旧数据库补充英语二二级科目：完形/阅读/新题型/翻译/写作/词汇语法。"""
+    # 全新数据库此时 subjects 尚未播种（seed 在 migrate 之后执行），跳过避免外键失败
+    subject_count = conn.execute("SELECT COUNT(*) FROM subjects").fetchone()[0]
+    if subject_count == 0:
+        return
     existing = {
         row["name"]
         for row in conn.execute(

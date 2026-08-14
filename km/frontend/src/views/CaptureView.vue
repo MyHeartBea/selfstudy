@@ -6,6 +6,7 @@ import { ElMessage } from 'element-plus'
 import request from '../api/request'
 import MistakeForm from '../components/MistakeForm.vue'
 import { getClipboardImage } from '../utils/clipboard'
+import { createMistakeDraft } from '../composables/mistakeDraft'
 
 const router = useRouter()
 const activeTab = ref('text')
@@ -17,28 +18,9 @@ const formKey = ref(0)
 const previewImage = ref('')
 const imageBase64 = ref('')
 const ocrRawText = ref('')
+const aiWarning = ref('')
+const readerRef = ref(null)
 let analysisRequestId = 0
-
-function buildManualDraft(question = '') {
-  return {
-    question,
-    option_a: '',
-    option_b: '',
-    option_c: '',
-    option_d: '',
-    correct_answer: 'A',
-    answer_aliases: [],
-    analysis: '',
-    difficulty: 3,
-    difficulty_points: '',
-    knowledge_tags: [],
-    approach: '',
-    source: '',
-    source_type: 'other',
-    source_year: '',
-    source_name: '',
-  }
-}
 
 async function analyze() {
   if (!text.value.trim()) {
@@ -53,12 +35,17 @@ async function analyze() {
     if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
     ocrRawText.value = ''
+    aiWarning.value = ''
     formKey.value += 1
     ElMessage.success('AI 解析完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
     // 未配置 AI 时提示后，用户可手动整理
     if (requestId !== analysisRequestId) return
-    parsed.value = buildManualDraft(text.value)
+    aiWarning.value =
+      err?.status === 502
+        ? 'AI 服务暂不可用（未配置或上游失败），已切换到手动整理模式，可稍后重试。'
+        : ''
+    parsed.value = createMistakeDraft(text.value)
     ocrRawText.value = ''
     formKey.value += 1
   } finally {
@@ -73,7 +60,7 @@ function useManual() {
   analysisRequestId += 1
   analyzing.value = false
   analyzingText.value = ''
-  parsed.value = buildManualDraft(text.value)
+  parsed.value = createMistakeDraft(text.value)
   ocrRawText.value = ''
   formKey.value += 1
 }
@@ -82,7 +69,7 @@ function useManualImage() {
   analysisRequestId += 1
   analyzing.value = false
   analyzingText.value = ''
-  parsed.value = buildManualDraft('')
+  parsed.value = createMistakeDraft('')
   ocrRawText.value = ''
   formKey.value += 1
 }
@@ -105,6 +92,7 @@ function handleImageFile(file) {
   parsed.value = null
   ocrRawText.value = ''
   const reader = new FileReader()
+  readerRef.value = reader
   reader.onload = async () => {
     if (requestId !== analysisRequestId) return
     previewImage.value = String(reader.result)
@@ -140,12 +128,17 @@ async function runOcr(requestId) {
     parsed.value = res.data.data
     ocrRawText.value =
       parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
+    aiWarning.value = ''
     formKey.value += 1
     ElMessage.success('图片识别完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
     // 错误提示由请求拦截器统一处理
     if (requestId !== analysisRequestId) return
-    parsed.value = buildManualDraft('')
+    aiWarning.value =
+      err?.status === 502
+        ? 'AI 服务暂不可用（未配置或上游失败），已切换到手动整理模式，可稍后重试。'
+        : ''
+    parsed.value = createMistakeDraft('')
     ocrRawText.value = ''
     formKey.value += 1
   } finally {
@@ -166,6 +159,15 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('paste', onPaste, true)
+  analysisRequestId += 1
+  if (readerRef.value) {
+    try {
+      readerRef.value.abort()
+    } catch (err) {
+      // 忽略中止异常
+    }
+    readerRef.value = null
+  }
 })
 
 </script>
@@ -211,20 +213,17 @@ onUnmounted(() => {
           </div>
         </el-tab-pane>
         <el-tab-pane label="上传图片" name="image">
+          <label for="capture-image-input" class="el-button el-button--primary">
+            <el-icon v-if="analyzing" class="is-loading"><Loading /></el-icon>
+            选择题目图片
+          </label>
           <input
-            ref="imageInput"
+            id="capture-image-input"
             type="file"
             accept="image/*"
-            style="display: none"
+            class="visually-hidden"
             @change="onFileChange"
           >
-          <el-button
-            type="primary"
-            :loading="analyzing"
-            @click="$refs.imageInput.click()"
-          >
-            选择题目图片
-          </el-button>
           <el-button @click="useManualImage">
             手动整理
           </el-button>
@@ -255,6 +254,15 @@ onUnmounted(() => {
     >
       <pre class="ocr-raw">{{ ocrRawText }}</pre>
     </el-alert>
+
+    <el-alert
+      v-if="aiWarning"
+      type="warning"
+      :closable="true"
+      class="capture-alert"
+      :title="aiWarning"
+      @close="aiWarning = ''"
+    />
 
     <el-card v-if="parsed" shadow="never" class="form-card">
       <template #header>

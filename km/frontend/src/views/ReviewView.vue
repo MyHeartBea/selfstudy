@@ -4,16 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import request from '../api/request'
+import ChoiceAnswer from '../components/ChoiceAnswer.vue'
+import FillAnswer from '../components/FillAnswer.vue'
+import SolutionAnswer from '../components/SolutionAnswer.vue'
 import MathText from '../components/MathText.vue'
-import {
-  questionTypeColor,
-  questionTypeName,
-  subjectColor,
-  subjectName,
-  subSubjectName,
-  sourceTypeColor,
-  sourceTypeName,
-} from '../composables/useBaseData'
+import MistakeMeta from '../components/MistakeMeta.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -59,23 +54,6 @@ const isSolution = computed(() => questionType.value === 'solution')
 const progress = computed(() =>
   queue.value.length ? Math.round((index.value / queue.value.length) * 100) : 0,
 )
-const optionList = computed(() => {
-  if (!current.value) return []
-  return ['A', 'B', 'C', 'D'].map((key) => ({
-    key,
-    text: current.value['option_' + key.toLowerCase()],
-  }))
-})
-const isCorrect = computed(
-  () => answered.value && selected.value === current.value?.correct_answer,
-)
-const gradeVerdictText = computed(() => {
-  return {
-    correct: '回答正确',
-    partial: '部分得分',
-    wrong: '回答错误',
-  }[gradeResult.value?.verdict] || ''
-})
 
 async function loadQueue() {
   loading.value = true
@@ -105,10 +83,6 @@ async function loadQueue() {
   } finally {
     loading.value = false
   }
-}
-
-function choose(key) {
-  if (!answered.value) selected.value = key
 }
 
 function confirmAnswer() {
@@ -162,6 +136,11 @@ async function next() {
   if (!current.value) return
   const result = selected.value === current.value.correct_answer
   await submitReview(result, true)
+}
+
+function nextFill() {
+  if (!judgeResult.value) return
+  submitReview(judgeResult.value.correct, true)
 }
 
 async function submitReview(result, advance = true) {
@@ -244,31 +223,7 @@ onMounted(loadQueue)
 
       <el-card shadow="never" class="review-card">
         <div class="detail-meta">
-          <el-tag
-            :color="questionTypeColor(current.question_type)"
-            effect="dark"
-            style="color: #fff; border-color: transparent"
-          >
-            {{ questionTypeName(current.question_type) }}
-          </el-tag>
-          <el-tag
-            :color="subjectColor(current.subject_id)"
-            effect="dark"
-            style="color: #fff; border-color: transparent"
-          >
-            {{ subjectName(current.subject_id) }}
-          </el-tag>
-          <el-tag v-if="current.sub_subject_id" type="info" effect="plain">
-            {{ subSubjectName(current.sub_subject_id) }}
-          </el-tag>
-          <el-tag
-            v-if="current.source_type"
-            :color="sourceTypeColor(current.source_type)"
-            effect="dark"
-            style="color: #fff; border-color: transparent"
-          >
-            {{ sourceTypeName(current.source_type) }}{{ current.source_year ? ' ' + current.source_year : '' }}
-          </el-tag>
+          <MistakeMeta :mistake="current" />
           <span v-if="current.days_since_wrong != null" class="count-tip">
             错于 {{ current.days_since_wrong === 0 ? '今天' : current.days_since_wrong + ' 天前' }}
           </span>
@@ -288,217 +243,43 @@ onMounted(loadQueue)
         </div>
 
         <template v-if="isChoice">
-          <div
-            v-for="opt in optionList"
-            :key="opt.key"
-            class="option-row review-option"
-            :class="{
-              correct: answered && opt.key === current.correct_answer,
-              wrong: answered && opt.key === selected && opt.key !== current.correct_answer,
-              selected: opt.key === selected,
-            }"
-            @click="choose(opt.key)"
-          >
-            <span class="option-key">{{ opt.key }}</span>
-            <MathText :text="opt.text || '（未填写）'" />
-            <el-tag v-if="answered && opt.key === current.correct_answer" type="success" size="small">
-              正确答案
-            </el-tag>
-            <el-tag v-else-if="answered && opt.key === selected" type="danger" size="small">
-              你的选择
-            </el-tag>
-          </div>
-
-          <div v-if="answered && current.analysis" class="analysis-block">
-            <div class="block-label">
-              {{ isCorrect ? '回答正确' : '回答错误' }} · 解析
-            </div>
-            <MathText :text="current.analysis" />
-          </div>
-
-          <div v-if="!answered" class="review-footer">
-            <el-button
-              type="primary"
-              size="large"
-              :disabled="!selected"
-              @click="confirmAnswer"
-            >
-              确认答案
-            </el-button>
-          </div>
-          <div v-else class="review-footer">
-            <el-button
-              :type="isCorrect ? 'success' : 'warning'"
-              size="large"
-              :loading="submitting"
-              @click="next"
-            >
-              {{ reviewSaved ? '已保存，下一题' : '保存并下一题' }}
-            </el-button>
-          </div>
+          <ChoiceAnswer
+            :current="current"
+            :selected="selected"
+            :answered="answered"
+            :submitting="submitting"
+            :review-saved="reviewSaved"
+            @select="selected = $event"
+            @confirm="confirmAnswer"
+            @next="next"
+          />
         </template>
 
         <template v-else-if="isFill">
-          <template v-if="!judgeResult">
-            <el-input
-              v-model="userInput"
-              type="textarea"
-              :rows="3"
-              placeholder="输入你的答案，例如 2-ln2"
-            />
-            <div class="review-footer">
-              <el-button
-                type="primary"
-                size="large"
-                :loading="judging"
-                @click="submitFill"
-              >
-                提交答案，自动判断
-              </el-button>
-            </div>
-          </template>
-          <template v-else>
-            <div
-              class="answer-block"
-              :style="judgeResult.correct ? '' : 'background:#fdf0f0;border-color:#e87474'"
-            >
-              <div class="block-label">
-                {{ judgeResult.correct ? '回答正确' : '回答错误' }}
-              </div>
-              <p style="margin: 0">
-                参考答案：
-                <MathText :text="judgeResult.expected || '暂无'" />
-              </p>
-              <p v-if="judgeResult.aliases.length" class="muted" style="margin: 6px 0 0">
-                可接受答案：{{ judgeResult.aliases.join('；') }}
-              </p>
-            </div>
-            <div v-if="current.analysis" class="analysis-block">
-              <div class="block-label">解析</div>
-              <MathText :text="current.analysis" />
-            </div>
-            <div class="review-footer">
-              <el-button
-                :type="judgeResult.correct ? 'success' : 'warning'"
-                size="large"
-                :loading="submitting"
-                @click="submitReview(judgeResult.correct, true)"
-              >
-                {{ reviewSaved ? '已保存，下一题' : '保存并下一题' }}
-              </el-button>
-            </div>
-          </template>
+          <FillAnswer
+            v-model:user-input="userInput"
+            :current="current"
+            :judge-result="judgeResult"
+            :judging="judging"
+            :submitting="submitting"
+            :review-saved="reviewSaved"
+            @submit="submitFill"
+            @next="nextFill"
+          />
         </template>
 
         <template v-else-if="isSolution">
-          <template v-if="!gradeResult">
-            <el-input
-              v-model="userInput"
-              type="textarea"
-              :rows="7"
-              placeholder="写下你的完整解答过程，AI 会按步骤批改并给出过程分"
-            />
-            <div class="review-footer">
-              <el-button
-                type="primary"
-                size="large"
-                :loading="grading"
-                @click="submitSolution"
-              >
-                AI 批改我的解答
-              </el-button>
-              <el-button
-                type="success"
-                plain
-                size="large"
-                :disabled="grading"
-                :loading="submitting"
-                @click="submitReview(true)"
-              >
-                直接标记：记住了
-              </el-button>
-              <el-button
-                type="warning"
-                plain
-                size="large"
-                :disabled="grading"
-                :loading="submitting"
-                @click="submitReview(false)"
-              >
-                直接标记：没记住
-              </el-button>
-            </div>
-          </template>
-          <template v-else>
-            <div class="grade-card">
-              <div class="grade-score">{{ gradeResult.score }}</div>
-              <div class="grade-meta">
-                <el-tag
-                  :type="gradeResult.verdict === 'correct' ? 'success' : (gradeResult.verdict === 'partial' ? 'warning' : 'danger')"
-                  effect="dark"
-                >
-                  {{ gradeVerdictText }}
-                </el-tag>
-                <span class="grade-tip">满分 100，按过程给分</span>
-              </div>
-            </div>
-
-            <div v-if="gradeResult.errors.length" class="analysis-block">
-              <div class="block-label">错在哪里</div>
-              <ul style="margin: 0; padding-left: 18px">
-                <li v-for="(item, i) in gradeResult.errors" :key="i">
-                  <MathText :text="item" />
-                </li>
-              </ul>
-            </div>
-
-            <div v-if="gradeResult.strengths.length" class="answer-block">
-              <div class="block-label">做对的部分</div>
-              <ul style="margin: 0; padding-left: 18px">
-                <li v-for="(item, i) in gradeResult.strengths" :key="i">
-                  <MathText :text="item" />
-                </li>
-              </ul>
-            </div>
-
-            <div v-if="gradeResult.feedback" class="analysis-block">
-              <div class="block-label">批改评语</div>
-              <MathText :text="gradeResult.feedback" />
-            </div>
-
-            <div v-if="gradeResult.solution" class="answer-block">
-              <div class="block-label">标准解答（思路 + 推导）</div>
-              <MathText :text="gradeResult.solution" />
-            </div>
-
-            <div v-if="gradeResult.alternate_methods.length" class="analysis-block">
-              <div class="block-label">其他解法</div>
-              <ol style="margin: 0; padding-left: 18px">
-                <li v-for="(item, i) in gradeResult.alternate_methods" :key="i">
-                  <MathText :text="item" />
-                </li>
-              </ol>
-            </div>
-
-            <div class="review-footer">
-              <el-button
-                type="success"
-                size="large"
-                :loading="submitting"
-                @click="submitReview(gradeResult.score >= 60)"
-              >
-                {{ gradeResult.score >= 60 ? '记住了，保存并下一题' : '没掌握，保存并下一题' }}
-              </el-button>
-              <el-button
-                type="warning"
-                size="large"
-                :loading="submitting"
-                @click="submitReview(gradeResult.score < 60)"
-              >
-                {{ gradeResult.score >= 60 ? '其实还没懂，保存为错误' : '其实已经会了，保存为正确' }}
-              </el-button>
-            </div>
-          </template>
+          <SolutionAnswer
+            v-model:user-input="userInput"
+            :current="current"
+            :grade-result="gradeResult"
+            :grading="grading"
+            :submitting="submitting"
+            :review-saved="reviewSaved"
+            @grade="submitSolution"
+            @mark="(result) => submitReview(result, true)"
+            @save-result="(result) => submitReview(result, true)"
+          />
         </template>
 
         <template v-else>

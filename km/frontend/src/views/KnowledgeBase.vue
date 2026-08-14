@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, toRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -10,6 +10,7 @@ import {
   subjectName,
   subSubjectName,
 } from '../composables/useBaseData'
+import { useSubSubject } from '../composables/useSubSubject'
 import KnowledgeEditDialog from '../components/KnowledgeEditDialog.vue'
 
 const loading = ref(false)
@@ -28,10 +29,7 @@ const editVisible = ref(false)
 const editing = ref(null)
 const summarizingId = ref(null)
 
-const subSubjectOptions = computed(() => {
-  if (!filters.subjectId) return []
-  return baseData.subSubjects.filter((item) => item.subject_id === filters.subjectId)
-})
+const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
 
 async function loadKnowledge() {
   loading.value = true

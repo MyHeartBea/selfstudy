@@ -1,9 +1,18 @@
+<script>
+// 模块级缓存：/mistakes/approaches 结果按会话缓存，避免每次挂载重复请求
+let approachCache = null
+let approachPromise = null
+</script>
+
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, reactive, ref, toRef, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import request from '../api/request'
 import { baseData, sourceTypes } from '../composables/useBaseData'
+import { createMistakeDraft } from '../composables/mistakeDraft'
+import { useSubSubject } from '../composables/useSubSubject'
+import { useTagInput } from '../composables/useTagInput'
 
 const props = defineProps({
   initial: { type: Object, default: null },
@@ -14,32 +23,10 @@ const emit = defineEmits(['submitted'])
 
 const formRef = ref(null)
 const submitting = ref(false)
-const tagInput = ref('')
-const aliasInput = ref('')
 const approachOptions = ref([])
 
 function emptyForm() {
-  return {
-    subject_id: null,
-    sub_subject_id: null,
-    question_type: 'choice',
-    question: '',
-    option_a: '',
-    option_b: '',
-    option_c: '',
-    option_d: '',
-    correct_answer: 'A',
-    answer_aliases: [],
-    analysis: '',
-    difficulty: 3,
-    difficulty_points: '',
-    knowledge_tags: [],
-    approach: '',
-    source: '',
-    source_type: 'other',
-    source_year: '',
-    source_name: '',
-  }
+  return createMistakeDraft()
 }
 
 const form = reactive(emptyForm())
@@ -50,10 +37,19 @@ const rules = {
   difficulty: [{ required: true, message: '请选择难度', trigger: 'change' }],
 }
 
-const subSubjectOptions = computed(() => {
-  if (!form.subject_id) return []
-  return baseData.subSubjects.filter((item) => item.subject_id === form.subject_id)
-})
+const { subSubjectOptions } = useSubSubject(toRef(form, 'subject_id'))
+const {
+  input: tagInput,
+  add: addTag,
+  flush: flushTag,
+  remove: removeTag,
+} = useTagInput(form, 'knowledge_tags')
+const {
+  input: aliasInput,
+  add: addAlias,
+  flush: flushAlias,
+  remove: removeAlias,
+} = useTagInput(form, 'answer_aliases')
 
 function fillForm(initial) {
   if (!initial) {
@@ -94,38 +90,6 @@ function onSourceTypeChange() {
   }
 }
 
-function addTag() {
-  const tag = tagInput.value.trim()
-  if (tag && !form.knowledge_tags.includes(tag)) {
-    form.knowledge_tags.push(tag)
-  }
-  tagInput.value = ''
-}
-
-function flushTag() {
-  if (tagInput.value.trim()) addTag()
-}
-
-function removeTag(tag) {
-  form.knowledge_tags = form.knowledge_tags.filter((item) => item !== tag)
-}
-
-function addAlias() {
-  const alias = aliasInput.value.trim()
-  if (alias && !form.answer_aliases.includes(alias)) {
-    form.answer_aliases.push(alias)
-  }
-  aliasInput.value = ''
-}
-
-function flushAlias() {
-  if (aliasInput.value.trim()) addAlias()
-}
-
-function removeAlias(alias) {
-  form.answer_aliases = form.answer_aliases.filter((item) => item !== alias)
-}
-
 function roundDifficulty(value) {
   form.difficulty = Math.round(value || 0)
 }
@@ -149,14 +113,6 @@ async function submitForm() {
     (!form.source_year.trim() || !form.source_name.trim())
   ) {
     ElMessage.warning('模拟题请填写年份和试卷名称')
-    return
-  }
-  if (!form.difficulty_points.trim()) {
-    ElMessage.warning('请填写主要难点简析')
-    return
-  }
-  if (!form.analysis.trim()) {
-    ElMessage.warning('请填写解析内容')
     return
   }
   try {
@@ -203,12 +159,23 @@ async function submitForm() {
 }
 
 async function loadApproachOptions() {
-  try {
-    const res = await request.get('/mistakes/approaches')
-    approachOptions.value = res.data.data || []
-  } catch (err) {
-    approachOptions.value = []
+  if (approachCache) {
+    approachOptions.value = approachCache
+    return
   }
+  if (!approachPromise) {
+    approachPromise = request
+      .get('/mistakes/approaches')
+      .then((res) => {
+        approachCache = res.data.data || []
+        approachOptions.value = approachCache
+      })
+      .catch(() => {
+        approachOptions.value = []
+        approachPromise = null
+      })
+  }
+  await approachPromise
 }
 
 onMounted(loadApproachOptions)

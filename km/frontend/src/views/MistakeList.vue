@@ -1,9 +1,7 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { onMounted, onUnmounted, ref, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 
-import request from '../api/request'
 import {
   baseData,
   questionTypeName,
@@ -12,114 +10,59 @@ import {
   subjectName,
   truncate,
 } from '../composables/useBaseData'
+import { useMistakeFilters } from '../composables/useMistakeFilters'
+import { useBulkActions } from '../composables/useBulkActions'
+import { useImportExport } from '../composables/useImportExport'
+import { useSubSubject } from '../composables/useSubSubject'
 import MistakeCard from '../components/MistakeCard.vue'
 import MistakeDetailDialog from '../components/MistakeDetailDialog.vue'
 import MistakeForm from '../components/MistakeForm.vue'
 
-const loading = ref(false)
 const router = useRouter()
-const items = ref([])
-const total = ref(0)
-const filters = reactive({
-  questionType: '',
-  subjectId: null,
-  subSubjectId: null,
-  sourceType: '',
-  sourceYear: '',
-  difficulties: [],
-  tag: '',
-  approach: '',
-  search: '',
+
+const selectedIds = ref([])
+
+const {
+  loading,
+  items,
+  total,
+  filters,
+  sortBy,
+  page,
+  pageSize,
+  activeFilterCount,
+  totalPages,
+  buildParams,
+  loadMistakes,
+  searchMistakes,
+  resetFilters,
+  onSubjectChange,
+} = useMistakeFilters({
+  onBeforeLoad: () => {
+    selectedIds.value = []
+  },
 })
-const sortBy = ref('created_desc')
-const page = ref(1)
-const pageSize = ref(8)
+
+const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
 
 const detailVisible = ref(false)
 const detailId = ref(null)
 const detailKey = ref(0)
 const editVisible = ref(false)
 const editTarget = ref(null)
-const fileInput = ref(null)
-const selectedIds = ref([])
-const batchRunning = ref(false)
-const importDialogVisible = ref(false)
-const pendingImport = ref([])
-const importing = ref(false)
 
-const subSubjectOptions = computed(() => {
-  if (!filters.subjectId) return []
-  return baseData.subSubjects.filter((item) => item.subject_id === filters.subjectId)
-})
+const { batchRunning, bulkPause, bulkResume, bulkSetRealExam, bulkSetOther, bulkDelete } =
+  useBulkActions({ selectedIds, onDone: loadMistakes })
 
-const activeFilterCount = computed(
-  () =>
-    [
-      filters.questionType,
-      filters.subjectId,
-      filters.subSubjectId,
-      filters.sourceType,
-      filters.sourceYear,
-      filters.difficulties.length,
-      filters.tag,
-      filters.approach,
-      filters.search,
-    ].filter(Boolean).length,
-)
-
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
-
-async function loadMistakes() {
-  loading.value = true
-  selectedIds.value = []
-  try {
-    const params = {}
-    if (filters.questionType) params.question_type = filters.questionType
-    if (filters.subjectId) params.subject_id = filters.subjectId
-    if (filters.subSubjectId) params.sub_subject_id = filters.subSubjectId
-    if (filters.sourceType) params.source_type = filters.sourceType
-    if (filters.sourceYear) params.source_year = filters.sourceYear
-    if (filters.difficulties.length) params.difficulty = filters.difficulties
-    if (filters.tag) params.tag = filters.tag
-    if (filters.approach) params.approach = filters.approach
-    if (filters.search) params.search = filters.search
-    params.sort = sortBy.value
-    params.page = page.value
-    params.page_size = pageSize.value
-    const res = await request.get('/mistakes', { params })
-    const data = res.data.data || {}
-    items.value = data.items || []
-    total.value = data.total || 0
-    if (data.page) page.value = data.page
-  } catch (err) {
-    // 错误提示由请求拦截器统一处理
-  } finally {
-    loading.value = false
-  }
-}
-
-function searchMistakes() {
-  page.value = 1
-  loadMistakes()
-}
-
-function resetFilters() {
-  filters.questionType = ''
-  filters.subjectId = null
-  filters.subSubjectId = null
-  filters.sourceType = ''
-  filters.sourceYear = ''
-  filters.difficulties = []
-  filters.tag = ''
-  filters.approach = ''
-  filters.search = ''
-  searchMistakes()
-}
-
-function onSubjectChange() {
-  filters.subSubjectId = null
-  searchMistakes()
-}
+const {
+  fileInput,
+  importDialogVisible,
+  pendingImport,
+  importing,
+  exportJson,
+  onImportFile,
+  confirmImport,
+} = useImportExport({ buildParams, onImported: loadMistakes })
 
 function openDetail(id) {
   detailId.value = id
@@ -145,40 +88,6 @@ function onEditSubmitted() {
   }
 }
 
-async function exportJson() {
-  try {
-    const params = {}
-    if (filters.questionType) params.question_type = filters.questionType
-    if (filters.subjectId) params.subject_id = filters.subjectId
-    if (filters.subSubjectId) params.sub_subject_id = filters.subSubjectId
-    if (filters.sourceType) params.source_type = filters.sourceType
-    if (filters.sourceYear) params.source_year = filters.sourceYear
-    if (filters.difficulties.length) params.difficulty = filters.difficulties
-    if (filters.tag) params.tag = filters.tag
-    if (filters.approach) params.approach = filters.approach
-    if (filters.search) params.search = filters.search
-    params.sort = sortBy.value
-    params.page_size = 1000
-    const [exportRes, listRes] = await Promise.all([
-      request.get('/export'),
-      request.get('/mistakes', { params }),
-    ])
-    const payload = exportRes.data.data
-    payload.mistakes = listRes.data.data.items || []
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `考研错题本_${new Date().toISOString().slice(0, 10)}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-  } catch (err) {
-    ElMessage.error('导出失败')
-  }
-}
-
 function startPractice() {
   router.push('/practice')
 }
@@ -190,10 +99,6 @@ function startRandom(count) {
   })
 }
 
-function triggerImport() {
-  if (fileInput.value) fileInput.value.click()
-}
-
 function toggleSelect(id) {
   if (selectedIds.value.includes(id)) {
     selectedIds.value = selectedIds.value.filter((item) => item !== id)
@@ -202,112 +107,23 @@ function toggleSelect(id) {
   }
 }
 
-async function bulkAction(action, extra = {}) {
-  if (!selectedIds.value.length) return
-  batchRunning.value = true
-  try {
-    await request.post('/mistakes/batch', {
-      ids: selectedIds.value,
-      action,
-      ...extra,
-    })
-    ElMessage.success('批量操作完成')
-    selectedIds.value = []
-    loadMistakes()
-  } catch (err) {
-    // 错误提示由请求拦截器统一处理
-  } finally {
-    batchRunning.value = false
-  }
+function onSizeChange() {
+  page.value = 1
+  loadMistakes()
 }
 
-function bulkPause() {
-  bulkAction('pause')
-}
-
-function bulkResume() {
-  bulkAction('resume')
-}
-
-async function bulkSetRealExam() {
-  try {
-    const promptResult = await ElMessageBox.prompt(
-      '请输入真题年份，如 2025',
-      '批量设为真题',
-      {
-        inputPattern: /^(19|20)\d{2}$/,
-        inputErrorMessage: '请输入四位数年份，如 2025',
-      },
-    )
-    await bulkAction('source_type', {
-      source_type: 'real_exam',
-      source_year: String(promptResult.value || '').trim(),
-    })
-  } catch (err) {
-    // 用户取消
-  }
-}
-
-function bulkSetOther() {
-  bulkAction('source_type', { source_type: 'other' })
-}
-
-async function bulkDelete() {
-  try {
-    await ElMessageBox.confirm(
-      `确定删除选中的 ${selectedIds.value.length} 道错题吗？删除后不可恢复。`,
-      '批量删除确认',
-      {
-        type: 'warning',
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-      },
-    )
-  } catch (err) {
-    return
-  }
-  bulkAction('delete')
-}
-
-async function onImportFile(event) {
-  const file = event.target.files[0]
-  event.target.value = ''
-  if (!file) return
-  let parsed
-  try {
-    parsed = JSON.parse(await file.text())
-  } catch (err) {
-    ElMessage.error('JSON 文件解析失败')
-    return
-  }
-  const mistakes = Array.isArray(parsed) ? parsed : parsed.mistakes || []
-  if (!mistakes.length) {
-    ElMessage.warning('文件中没有可导入的错题')
-    return
-  }
-  pendingImport.value = mistakes
-  importDialogVisible.value = true
-}
-
-async function confirmImport() {
-  importing.value = true
-  try {
-    const res = await request.post('/import', { mistakes: pendingImport.value })
-    const result = res.data.data
-    ElMessage.success(
-      `导入完成：成功 ${result.created} 条${result.failed.length ? `，失败 ${result.failed.length} 条` : ''}`,
-    )
-    importDialogVisible.value = false
-    pendingImport.value = []
-    loadMistakes()
-  } catch (err) {
-    // 错误提示由请求拦截器统一处理
-  } finally {
-    importing.value = false
-  }
+let searchTimer = null
+function debouncedSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    searchMistakes()
+  }, 300)
 }
 
 onMounted(loadMistakes)
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+})
 </script>
 
 <template>
@@ -340,15 +156,16 @@ onMounted(loadMistakes)
           <el-icon class="btn-icon"><Download /></el-icon>
           导出当前结果
         </el-button>
-        <el-button @click="triggerImport">
+        <label for="import-file-input" class="el-button">
           <el-icon class="btn-icon"><Upload /></el-icon>
           导入 JSON
-        </el-button>
+        </label>
         <input
+          id="import-file-input"
           ref="fileInput"
           type="file"
           accept=".json,application/json"
-          style="display: none"
+          class="visually-hidden"
           @change="onImportFile"
         >
       </div>
@@ -448,6 +265,7 @@ onMounted(loadMistakes)
             collapse-tags
             placeholder="全部难度"
             style="width: 170px"
+            @change="searchMistakes"
           >
             <el-option
               v-for="n in [1, 2, 3, 4, 5]"
@@ -463,6 +281,7 @@ onMounted(loadMistakes)
             clearable
             placeholder="如：二叉树遍历"
             style="width: 150px"
+            @input="debouncedSearch"
           />
         </el-form-item>
         <el-form-item label="思路">
@@ -471,6 +290,7 @@ onMounted(loadMistakes)
             clearable
             placeholder="如：递归"
             style="width: 140px"
+            @input="debouncedSearch"
           />
         </el-form-item>
         <el-form-item label="搜索">
@@ -479,6 +299,7 @@ onMounted(loadMistakes)
             clearable
             placeholder="搜索题干"
             style="width: 170px"
+            @input="debouncedSearch"
             @keyup.enter="searchMistakes"
           />
         </el-form-item>
@@ -554,11 +375,13 @@ onMounted(loadMistakes)
     <div v-if="total" class="pagination-wrap">
       <el-pagination
         background
-        layout="total, prev, pager, next"
+        layout="total, sizes, prev, pager, next"
         :total="total"
+        :page-sizes="[12, 20, 50]"
         v-model:current-page="page"
         v-model:page-size="pageSize"
         @current-change="loadMistakes"
+        @size-change="onSizeChange"
       />
     </div>
 
@@ -575,6 +398,7 @@ onMounted(loadMistakes)
       title="导入预览"
       width="860px"
       top="5vh"
+      :close-on-click-modal="false"
     >
       <p class="count-tip" style="margin: 0 0 10px">
         共 {{ pendingImport.length }} 条，请确认后导入
@@ -612,7 +436,7 @@ onMounted(loadMistakes)
       </template>
     </el-dialog>
 
-    <el-dialog v-model="editVisible" title="编辑错题" width="780px" top="4vh">
+    <el-dialog v-model="editVisible" title="编辑错题" width="780px" top="4vh" :close-on-click-modal="false">
       <MistakeForm
         v-if="editVisible"
         :initial="editTarget"

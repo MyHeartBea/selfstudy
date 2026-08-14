@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from app.database import get_connection, mistake_field, mistake_to_dict
 from app.models.tables import MISTAKE_COLUMNS
-from app.responses import error, ok
+from app.responses import error, ok, server_error
 from app.schemas import ImportPayload
 from app.services import mistake_service
 
@@ -26,15 +26,25 @@ def export_data():
             dict(row)
             for row in conn.execute("SELECT * FROM knowledge_base ORDER BY id").fetchall()
         ]
+        subjects = [
+            dict(row)
+            for row in conn.execute("SELECT * FROM subjects ORDER BY id").fetchall()
+        ]
+        sub_subjects = [
+            dict(row)
+            for row in conn.execute("SELECT * FROM sub_subjects ORDER BY id").fetchall()
+        ]
         return ok(
             {
                 "mistakes": mistakes,
                 "knowledge": knowledge,
+                "subjects": subjects,
+                "sub_subjects": sub_subjects,
                 "exported_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             }
         )
     except Exception as exc:
-        return error(500, f"导出失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -73,6 +83,6 @@ def import_mistakes(body: ImportPayload):
             f"成功导入 {created} 条错题",
         )
     except Exception as exc:
-        return error(500, f"导入失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()

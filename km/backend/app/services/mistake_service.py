@@ -15,6 +15,34 @@ from app.services.knowledge_service import (
 SOURCE_TYPES = {"real_exam", "mock", "other"}
 
 
+def validate_source_type(source_type: str) -> str:
+    """归一并校验来源分类，返回归一后的值；非法时抛 ValueError。"""
+    source_type = str(source_type or "other").strip().lower()
+    if source_type == "self":
+        source_type = "other"
+    if source_type not in SOURCE_TYPES:
+        raise ValueError("来源分类只能是真题/模拟题/自编/其他")
+    return source_type
+
+
+def validate_source_requirements(
+    source_type: str,
+    source_year: str,
+    source_name: str,
+) -> Optional[str]:
+    """校验来源必填项，返回错误信息；合法时返回 None。"""
+    source_type = str(source_type or "other").strip().lower()
+    if source_type == "self":
+        source_type = "other"
+    if source_type == "real_exam" and not str(source_year or "").strip():
+        return "真题必须填写年份"
+    if source_type == "mock" and (
+        not str(source_year or "").strip() or not str(source_name or "").strip()
+    ):
+        return "模拟题必须填写年份和试卷名称"
+    return None
+
+
 def build_mistake_fields(
     body: Dict[str, Any],
     conn: sqlite3.Connection,
@@ -111,17 +139,12 @@ def build_mistake_fields(
         errors.append("解析不能为空")
     approach = str(body.get("approach") or "").strip()
     source = str(body.get("source") or "").strip()
-    source_type = str(body.get("source_type") or "other").strip().lower()
-    if source_type == "self":
-        source_type = "other"
-    if source_type not in SOURCE_TYPES:
-        source_type = "other"
+    source_type = validate_source_type(body.get("source_type") or "other")
     source_year = str(body.get("source_year") or "").strip()
     source_name = str(body.get("source_name") or "").strip()
-    if source_type == "real_exam" and not source_year:
-        errors.append("真题必须填写年份")
-    if source_type == "mock" and (not source_year or not source_name):
-        errors.append("模拟题必须填写年份和试卷名称")
+    source_issue = validate_source_requirements(source_type, source_year, source_name)
+    if source_issue:
+        errors.append(source_issue)
 
     if errors:
         return None, errors
@@ -362,11 +385,20 @@ def batch_mistakes(
     placeholders = ", ".join("?" for _ in ids)
 
     if action == "delete":
-        count = 0
-        for mistake_id in ids:
-            if delete_mistake(conn, mistake_id):
-                count += 1
-        return count
+        conn.execute(
+            f"DELETE FROM solution_grades WHERE mistake_id IN ({placeholders})",
+            ids,
+        )
+        conn.execute(
+            f"DELETE FROM review_records WHERE mistake_id IN ({placeholders})",
+            ids,
+        )
+        cur = conn.execute(
+            f"DELETE FROM mistakes WHERE id IN ({placeholders})",
+            ids,
+        )
+        conn.commit()
+        return cur.rowcount
 
     if action in ("pause", "resume"):
         conn.execute(
@@ -377,17 +409,16 @@ def batch_mistakes(
         return len(ids)
 
     if action == "source_type":
-        source_type = source_type.strip().lower()
-        if source_type == "self":
-            source_type = "other"
-        if source_type not in SOURCE_TYPES:
-            raise ValueError("来源分类只能是真题/模拟题/自编/其他")
+        source_type = validate_source_type(source_type)
         source_year = source_year.strip()
         source_name = source_name.strip()
-        if source_type == "real_exam" and not source_year:
-            raise ValueError("真题必须填写年份")
-        if source_type == "mock" and (not source_year or not source_name):
-            raise ValueError("模拟题必须填写年份和试卷名称")
+        source_issue = validate_source_requirements(
+            source_type,
+            source_year,
+            source_name,
+        )
+        if source_issue:
+            raise ValueError(source_issue)
         conn.execute(
             f"UPDATE mistakes SET source_type = ?, source_year = ?, source_name = ? "
             f"WHERE id IN ({placeholders})",

@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from app.database import get_connection
-from app.responses import error, ok
+from app.responses import error, ok, server_error
 from app.schemas import ReviewCreate
 from app.services import review_service
 
@@ -19,7 +19,7 @@ def get_today_reviews(limit: int = Query(50, ge=1, le=200)):
     try:
         return ok(review_service.get_due_mistakes(conn, limit))
     except Exception as exc:
-        return error(500, f"获取今日复习失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -55,7 +55,7 @@ def get_practice_reviews(
         )
         return ok(data)
     except Exception as exc:
-        return error(500, f"获取自主练习失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -76,7 +76,7 @@ def review_mistake(mistake_id: int, body: ReviewCreate):
             return error(404, "错题不存在")
         return ok(data, "复习记录已保存")
     except Exception as exc:
-        return error(500, f"保存复习记录失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -88,6 +88,6 @@ def get_review_stats():
     try:
         return ok(review_service.get_review_stats(conn))
     except Exception as exc:
-        return error(500, f"获取复习统计失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()

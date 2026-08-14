@@ -14,8 +14,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vue: ['vue', 'vue-router', 'axios'],
-          element: ['element-plus'],
+          // element-plus 不整包分包：让 rollup 按手动注册的组件 tree-shaking
+          vue: ['vue', 'vue-router', 'axios', 'gsap'],
           katex: ['katex'],
         },
       },

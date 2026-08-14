@@ -1,15 +1,7 @@
 <script setup>
-import {
-  formatTime,
-  questionTypeColor,
-  questionTypeName,
-  subjectColor,
-  subjectName,
-  subSubjectName,
-  sourceTypeColor,
-  sourceTypeName,
-} from '../composables/useBaseData'
+import { formatTime } from '../composables/useBaseData'
 import MathText from './MathText.vue'
+import MistakeMeta from './MistakeMeta.vue'
 
 defineProps({
   mistake: { type: Object, required: true },
@@ -20,36 +12,17 @@ defineEmits(['open'])
 </script>
 
 <template>
-  <el-card shadow="hover" class="mistake-card" @click="$emit('open', mistake.id)">
+  <el-card
+    shadow="hover"
+    class="mistake-card"
+    tabindex="0"
+    role="button"
+    @click="$emit('open', mistake.id)"
+    @keydown.enter="$emit('open', mistake.id)"
+  >
     <div class="card-top">
       <span class="card-index">{{ String(index).padStart(4, '0') }}</span>
-      <el-tag
-        :color="questionTypeColor(mistake.question_type)"
-        effect="dark"
-        size="small"
-        style="color: #fff; border-color: transparent"
-      >
-        {{ questionTypeName(mistake.question_type) }}
-      </el-tag>
-      <el-tag
-        :color="subjectColor(mistake.subject_id)"
-        effect="dark"
-        style="color: #fff; border-color: transparent"
-      >
-        {{ subjectName(mistake.subject_id) }}
-      </el-tag>
-      <el-tag v-if="mistake.sub_subject_id" type="info" effect="plain">
-        {{ subSubjectName(mistake.sub_subject_id) }}
-      </el-tag>
-      <el-tag
-        v-if="mistake.source_type"
-        :color="sourceTypeColor(mistake.source_type)"
-        effect="dark"
-        size="small"
-        style="color: #fff; border-color: transparent"
-      >
-        {{ sourceTypeName(mistake.source_type) }}{{ mistake.source_year ? ' ' + mistake.source_year : '' }}
-      </el-tag>
+      <MistakeMeta :mistake="mistake" compact />
       <el-rate
         :model-value="mistake.difficulty"
         disabled
@@ -111,5 +84,10 @@ defineEmits(['open'])
   color: var(--teal);
   font-size: 12px;
   font-weight: 700;
+}
+
+.mistake-card:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
 }
 </style>

@@ -1,31 +1,12 @@
 <script setup>
 import { computed } from 'vue'
-import katex from 'katex'
+
 import 'katex/dist/katex.min.css'
+import { escapeHtml, renderMath } from '../utils/markdown'
 
 const props = defineProps({
   text: { type: String, default: '' },
 })
-
-function escapeHtml(value) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-function renderMath(expr, displayMode) {
-  try {
-    return katex.renderToString(expr, {
-      throwOnError: false,
-      displayMode,
-      strict: false,
-    })
-  } catch (err) {
-    return escapeHtml(expr)
-  }
-}
 
 const html = computed(() => {
   const parts = String(props.text || '').split(

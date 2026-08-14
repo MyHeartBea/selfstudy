@@ -1,8 +1,9 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { baseData, loadBaseData, sourceTypes } from '../composables/useBaseData'
+import { useSubSubject } from '../composables/useSubSubject'
 
 const router = useRouter()
 const mode = ref('curve')
@@ -41,10 +42,7 @@ const modes = [
   },
 ]
 
-const subSubjectOptions = computed(() => {
-  if (!filters.subjectId) return []
-  return baseData.subSubjects.filter((item) => item.subject_id === filters.subjectId)
-})
+const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
 
 function onSubjectChange() {
   filters.subSubjectId = null

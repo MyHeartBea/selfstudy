@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from app.database import get_connection
-from app.responses import error, ok
+from app.responses import error, ok, server_error
 from app.schemas import KnowledgeUpdate
 from app.services import ai_service, knowledge_service
 from app.services.ai_service import AiNotConfigured, AiRequestError
@@ -34,7 +34,7 @@ def list_knowledge(
         )
         return ok(data)
     except Exception as exc:
-        return error(500, f"查询知识点失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -49,7 +49,7 @@ def get_knowledge_by_tag(tag: str = Query(..., min_length=1)):
             return error(404, "知识点不存在")
         return ok(data)
     except Exception as exc:
-        return error(500, f"查询知识点失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -73,7 +73,7 @@ def update_knowledge(knowledge_id: int, body: KnowledgeUpdate):
     except ValueError as exc:
         return error(400, str(exc))
     except Exception as exc:
-        return error(500, f"更新知识点失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -87,7 +87,7 @@ def delete_knowledge(knowledge_id: int):
             return error(404, "知识点不存在")
         return ok({"id": knowledge_id}, "知识点删除成功")
     except Exception as exc:
-        return error(500, f"删除知识点失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -104,7 +104,8 @@ def auto_summarize(knowledge_id: int):
             return error(404, "知识点不存在")
         tag_name = row["tag_name"]
         mistake_rows = conn.execute(
-            "SELECT * FROM mistakes WHERE instr(',' || knowledge_tags || ',', ?) > 0",
+            "SELECT question, correct_answer, analysis FROM mistakes "
+            "WHERE instr(',' || knowledge_tags || ',', ?) > 0 LIMIT 8",
             (f",{tag_name},",),
         ).fetchall()
         if not mistake_rows:
@@ -124,6 +125,6 @@ def auto_summarize(knowledge_id: int):
     except AiRequestError as exc:
         return error(502, str(exc))
     except Exception as exc:
-        return error(500, f"自动总结失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()

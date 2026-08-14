@@ -222,7 +222,11 @@ def get_review_history(
 
 def _compute_streak(conn: sqlite3.Connection) -> int:
     """计算连续复习天数：今天有记录则从今天算，否则从昨天算。"""
-    rows = conn.execute("SELECT reviewed_at FROM review_records").fetchall()
+    # 只取最近 400 天内的去重时间戳，避免全表扫描无限增长
+    rows = conn.execute(
+        "SELECT DISTINCT reviewed_at FROM review_records "
+        "WHERE reviewed_at >= datetime('now', '-400 days')"
+    ).fetchall()
     days = []
     for row in rows:
         local = _utc_to_local_datetime(row["reviewed_at"])
@@ -254,22 +258,24 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
         "WHERE COALESCE(review_paused, 0) = 0 "
         "AND (next_review_at IS NULL OR next_review_at <= datetime('now'))"
     ).fetchone()[0]
-    reviewed_today = conn.execute(
-        "SELECT COUNT(*) FROM review_records WHERE reviewed_at >= ? AND reviewed_at < ?",
+    today_row = conn.execute(
+        "SELECT COUNT(*) AS total, "
+        "COALESCE(SUM(CASE WHEN result = 'correct' THEN 1 ELSE 0 END), 0) AS correct "
+        "FROM review_records WHERE reviewed_at >= ? AND reviewed_at < ?",
         (day_start_utc, day_end_utc),
-    ).fetchone()[0]
-    correct_today = conn.execute(
-        "SELECT COUNT(*) FROM review_records "
-        "WHERE reviewed_at >= ? AND reviewed_at < ? AND result = 'correct'",
-        (day_start_utc, day_end_utc),
-    ).fetchone()[0]
-    total_correct = conn.execute(
-        "SELECT COUNT(*) FROM review_records WHERE result = 'correct'"
-    ).fetchone()[0]
+    ).fetchone()
+    reviewed_today = today_row["total"]
+    correct_today = today_row["correct"]
+    totals = conn.execute(
+        "SELECT COUNT(*) AS total, "
+        "COALESCE(SUM(CASE WHEN result = 'correct' THEN 1 ELSE 0 END), 0) AS correct "
+        "FROM review_records"
+    ).fetchone()
+    total_correct = totals["correct"]
+    total_reviews = totals["total"]
     avg_mastery = conn.execute(
         "SELECT ROUND(COALESCE(AVG(mastery_level), 0), 2) FROM mistakes"
     ).fetchone()[0]
-    total_reviews = conn.execute("SELECT COUNT(*) FROM review_records").fetchone()[0]
     mastery_rows = conn.execute(
         "SELECT mastery_level, COUNT(*) AS count FROM mistakes GROUP BY mastery_level"
     ).fetchall()

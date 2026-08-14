@@ -34,6 +34,9 @@ class MistakeCreate(BaseModel):
 
 
 class MistakeUpdate(MistakeCreate):
+    """更新错题。注意：PUT 为全量覆盖语义（所有必填字段须同时提交），
+    前端 MistakeForm 提交完整表单；如需局部更新请改用 PATCH。"""
+
     pass
 
 

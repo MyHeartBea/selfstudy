@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Query
 
 from app.database import get_connection, mistake_to_dict
-from app.responses import error, ok
+from app.responses import error, ok, server_error
 from app.schemas import BatchMistakeRequest, GradeRequest, JudgeRequest, MistakeCreate, MistakeUpdate, SourceTypeUpdate
 from app.services import ai_service, answer_service, mistake_service, review_service
 from app.services.ai_service import AiNotConfigured, AiRequestError
@@ -54,7 +54,7 @@ def list_mistakes(
         )
         return ok(data)
     except Exception as exc:
-        return error(500, f"查询错题失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -66,7 +66,7 @@ def list_approaches(limit: int = Query(200, ge=1, le=1000)):
     try:
         return ok(mistake_service.list_approaches(conn, limit))
     except Exception as exc:
-        return error(500, f"查询解题思路失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -81,7 +81,7 @@ def get_mistake(mistake_id: int):
             return error(404, "错题不存在")
         return ok(data)
     except Exception as exc:
-        return error(500, f"查询错题详情失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -98,7 +98,7 @@ def list_mistake_reviews(mistake_id: int):
             return error(404, "错题不存在")
         return ok(review_service.get_review_history(conn, mistake_id))
     except Exception as exc:
-        return error(500, f"获取复习记录失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -133,7 +133,7 @@ def judge_mistake(mistake_id: int, body: JudgeRequest):
             return ok(result)
         return error(400, "解答题请使用 AI 批改接口")
     except Exception as exc:
-        return error(500, f"判断答案失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -176,7 +176,7 @@ def grade_mistake(mistake_id: int, body: GradeRequest):
     except AiRequestError as exc:
         return error(502, str(exc))
     except Exception as exc:
-        return error(500, f"AI 批改失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -191,7 +191,7 @@ def create_mistake(body: MistakeCreate):
             return error(400, "；".join(errors))
         return ok(created, "错题创建成功")
     except Exception as exc:
-        return error(500, f"创建错题失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -213,7 +213,7 @@ def batch_mistakes(body: BatchMistakeRequest):
     except ValueError as exc:
         return error(400, str(exc))
     except Exception as exc:
-        return error(500, f"批量操作失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -229,7 +229,7 @@ def update_mistake(mistake_id: int, body: MistakeUpdate):
             return error(404 if message == "错题不存在" else 400, "；".join(errors))
         return ok(updated, "错题更新成功")
     except Exception as exc:
-        return error(500, f"更新错题失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -251,7 +251,7 @@ def pause_mistake(mistake_id: int):
         conn.commit()
         return ok({"id": mistake_id, "review_paused": True}, "已暂停复习")
     except Exception as exc:
-        return error(500, f"暂停复习失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -273,7 +273,7 @@ def resume_mistake(mistake_id: int):
         conn.commit()
         return ok({"id": mistake_id, "review_paused": False}, "已恢复复习")
     except Exception as exc:
-        return error(500, f"恢复复习失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -281,18 +281,19 @@ def resume_mistake(mistake_id: int):
 @router.post("/{mistake_id}/source-type")
 def update_source_type(mistake_id: int, body: SourceTypeUpdate):
     """快速修改错题的来源分类（真题/模拟题/自编/其他）。"""
-    allowed = {"real_exam", "mock", "self", "other"}
-    source_type = body.source_type
-    if source_type == "self":
-        source_type = "other"
-    if source_type not in allowed:
-        return error(400, "来源分类只能是真题/模拟题/自编/其他")
+    try:
+        source_type = mistake_service.validate_source_type(body.source_type)
+    except ValueError as exc:
+        return error(400, str(exc))
     source_year = (body.source_year or "").strip()
     source_name = (body.source_name or "").strip()
-    if source_type == "real_exam" and not source_year:
-        return error(400, "真题必须填写年份")
-    if source_type == "mock" and (not source_year or not source_name):
-        return error(400, "模拟题必须填写年份和试卷名称")
+    source_issue = mistake_service.validate_source_requirements(
+        source_type,
+        source_year,
+        source_name,
+    )
+    if source_issue:
+        return error(400, source_issue)
     conn = get_connection()
     try:
         exists = conn.execute(
@@ -321,7 +322,7 @@ def update_source_type(mistake_id: int, body: SourceTypeUpdate):
             "来源分类已更新",
         )
     except Exception as exc:
-        return error(500, f"更新来源分类失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -335,6 +336,6 @@ def delete_mistake(mistake_id: int):
             return error(404, "错题不存在")
         return ok({"id": mistake_id}, "错题删除成功")
     except Exception as exc:
-        return error(500, f"删除错题失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()

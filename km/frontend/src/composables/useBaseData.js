@@ -9,25 +9,34 @@ export const baseData = reactive({
   subSubjectMap: {},
 })
 
-export async function loadBaseData() {
-  try {
-    const [subjectRes, subSubjectRes] = await Promise.all([
-      request.get('/subjects'),
-      request.get('/sub_subjects'),
-    ])
-    baseData.subjects = subjectRes.data.data || []
-    baseData.subSubjects = subSubjectRes.data.data || []
-    baseData.subjectMap = {}
-    baseData.subSubjectMap = {}
-    baseData.subjects.forEach((item) => {
-      baseData.subjectMap[item.id] = item.name
-    })
-    baseData.subSubjects.forEach((item) => {
-      baseData.subSubjectMap[item.id] = item.name
-    })
-  } catch (err) {
-    // 错误提示由请求拦截器统一处理
+// 模块级加载缓存：Layout 与 PracticeView 等重复调用时只发一次请求
+let loadPromise = null
+
+export function loadBaseData() {
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      try {
+        const [subjectRes, subSubjectRes] = await Promise.all([
+          request.get('/subjects'),
+          request.get('/sub_subjects'),
+        ])
+        baseData.subjects = subjectRes.data.data || []
+        baseData.subSubjects = subSubjectRes.data.data || []
+        baseData.subjectMap = {}
+        baseData.subSubjectMap = {}
+        baseData.subjects.forEach((item) => {
+          baseData.subjectMap[item.id] = item.name
+        })
+        baseData.subSubjects.forEach((item) => {
+          baseData.subSubjectMap[item.id] = item.name
+        })
+      } catch (err) {
+        // 错误提示由请求拦截器统一处理；失败后允许下次重试
+        loadPromise = null
+      }
+    })()
   }
+  return loadPromise
 }
 
 export function subjectName(id) {

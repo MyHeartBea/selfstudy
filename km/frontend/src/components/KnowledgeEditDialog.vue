@@ -1,9 +1,11 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, toRef, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import request from '../api/request'
 import { baseData } from '../composables/useBaseData'
+import { useSubSubject } from '../composables/useSubSubject'
+import { useTagInput } from '../composables/useTagInput'
 import RichText from './RichText.vue'
 
 const props = defineProps({
@@ -19,7 +21,6 @@ const visible = computed({
 })
 
 const saving = ref(false)
-const relatedTagInput = ref('')
 const form = reactive({
   id: null,
   tag_name: '',
@@ -29,10 +30,13 @@ const form = reactive({
   related_tags: [],
 })
 
-const subSubjectOptions = computed(() => {
-  if (!form.subject_id) return []
-  return baseData.subSubjects.filter((item) => item.subject_id === form.subject_id)
-})
+const { subSubjectOptions } = useSubSubject(toRef(form, 'subject_id'))
+const {
+  input: relatedTagInput,
+  add: addRelatedTag,
+  flush: flushRelatedTag,
+  remove: removeRelatedTag,
+} = useTagInput(form, 'related_tags')
 
 watch(
   () => props.row,
@@ -51,22 +55,6 @@ watch(
 
 function onSubjectChange() {
   form.sub_subject_id = null
-}
-
-function addRelatedTag() {
-  const tag = relatedTagInput.value.trim()
-  if (tag && !form.related_tags.includes(tag)) {
-    form.related_tags.push(tag)
-  }
-  relatedTagInput.value = ''
-}
-
-function flushRelatedTag() {
-  if (relatedTagInput.value.trim()) addRelatedTag()
-}
-
-function removeRelatedTag(tag) {
-  form.related_tags = form.related_tags.filter((item) => item !== tag)
 }
 
 async function save() {
@@ -89,7 +77,7 @@ async function save() {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="编辑知识点摘要" width="600px">
+  <el-dialog v-model="visible" title="编辑知识点摘要" width="600px" :close-on-click-modal="false">
     <el-form label-width="90px">
       <el-form-item label="标签名">
         <el-input :model-value="form.tag_name" disabled />

@@ -4,18 +4,26 @@ import { ElMessage } from 'element-plus'
 
 import request from '../api/request'
 import { subjectColor } from '../composables/useBaseData'
+import { useTagInput } from '../composables/useTagInput'
 
 const loading = ref(false)
+const saving = ref(false)
 const profiles = ref([])
 const subSubjects = ref([])
 const editVisible = ref(false)
-const tagInput = ref('')
 const form = reactive({
   subject_id: null,
   subject_name: '',
   focus_areas: [],
   review_tips: '',
 })
+
+const {
+  input: tagInput,
+  add: addTag,
+  flush: flushTag,
+  remove: removeTag,
+} = useTagInput(form, 'focus_areas')
 
 async function loadProfiles() {
   loading.value = true
@@ -26,15 +34,16 @@ async function loadProfiles() {
     ])
     const subjects = subjectRes.data.data || []
     subSubjects.value = subSubjectRes.data.data || []
-    const items = []
-    for (const subject of subjects) {
-      try {
-        const profileRes = await request.get(`/subjects/${subject.id}/profile`)
-        items.push({ ...subject, ...profileRes.data.data })
-      } catch (err) {
-        items.push({ ...subject, focus_areas: [], review_tips: '' })
-      }
-    }
+    const items = await Promise.all(
+      subjects.map(async (subject) => {
+        try {
+          const profileRes = await request.get(`/subjects/${subject.id}/profile`)
+          return { ...subject, ...profileRes.data.data }
+        } catch (err) {
+          return { ...subject, focus_areas: [], review_tips: '' }
+        }
+      }),
+    )
     profiles.value = items
   } catch (err) {
     // 错误提示由请求拦截器统一处理
@@ -58,19 +67,9 @@ function openEdit(row) {
   editVisible.value = true
 }
 
-function addTag() {
-  const tag = tagInput.value.trim()
-  if (tag && !form.focus_areas.includes(tag)) {
-    form.focus_areas.push(tag)
-  }
-  tagInput.value = ''
-}
-
-function removeTag(tag) {
-  form.focus_areas = form.focus_areas.filter((item) => item !== tag)
-}
-
 async function save() {
+  if (saving.value) return
+  saving.value = true
   try {
     await request.put(`/subjects/${form.subject_id}/profile`, {
       focus_areas: form.focus_areas,
@@ -81,6 +80,8 @@ async function save() {
     loadProfiles()
   } catch (err) {
     // 错误提示由请求拦截器统一处理
+  } finally {
+    saving.value = false
   }
 }
 
@@ -153,7 +154,7 @@ onMounted(loadProfiles)
       </el-table>
     </el-card>
 
-    <el-dialog v-model="editVisible" title="编辑科目档案" width="640px">
+    <el-dialog v-model="editVisible" title="编辑科目档案" width="640px" :close-on-click-modal="false">
       <el-form label-width="90px">
         <el-form-item label="科目">
           <el-input :model-value="form.subject_name" disabled />
@@ -175,6 +176,7 @@ onMounted(loadProfiles)
               size="small"
               style="width: 220px"
               @keyup.enter="addTag"
+              @blur="flushTag"
             />
           </div>
         </el-form-item>
@@ -189,7 +191,7 @@ onMounted(loadProfiles)
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
   </div>

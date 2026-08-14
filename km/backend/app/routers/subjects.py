@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from app.database import get_connection
-from app.responses import error, ok
+from app.responses import error, ok, server_error
 from app.schemas import SubjectProfileUpdate
 
 router = APIRouter(prefix="/api", tags=["基础数据"])
@@ -20,7 +20,7 @@ def list_subjects():
         rows = conn.execute("SELECT * FROM subjects ORDER BY id").fetchall()
         return ok([dict(row) for row in rows])
     except Exception as exc:
-        return error(500, f"查询科目失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -39,7 +39,7 @@ def list_sub_subjects(subject_id: Optional[int] = Query(None)):
             ).fetchall()
         return ok([dict(row) for row in rows])
     except Exception as exc:
-        return error(500, f"查询二级科目失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -66,7 +66,7 @@ def get_subject_profile(subject_id: int):
             return ok({"subject_id": subject_id, "focus_areas": [], "review_tips": ""})
         return ok(_profile_to_dict(row))
     except Exception as exc:
-        return error(500, f"查询科目档案失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
 
@@ -98,6 +98,6 @@ def update_subject_profile(subject_id: int, body: SubjectProfileUpdate):
         ).fetchone()
         return ok(_profile_to_dict(row), "科目档案已更新")
     except Exception as exc:
-        return error(500, f"更新科目档案失败：{exc}")
+        return server_error(exc)
     finally:
         conn.close()
