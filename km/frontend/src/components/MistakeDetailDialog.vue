@@ -30,6 +30,8 @@ const currentId = ref(props.mistakeId)
 const detail = ref(null)
 const reviewHistory = ref([])
 
+let detailRequestId = 0
+
 watch(
   [visible, () => props.mistakeId],
   ([value, id]) => {
@@ -42,8 +44,6 @@ watch(
   },
   { immediate: true },
 )
-
-let detailRequestId = 0
 
 async function loadDetail(id) {
   const requestId = ++detailRequestId
@@ -276,9 +276,9 @@ async function deleteCurrent() {
       </template>
     </div>
     <template #footer>
-      <el-button @click="visible = false">关闭</el-button>
       <el-button type="primary" @click="openEdit">编辑</el-button>
       <el-button type="danger" @click="deleteCurrent">删除</el-button>
+      <el-button @click="visible = false">关闭</el-button>
     </template>
   </el-dialog>
 </template>

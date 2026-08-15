@@ -1,6 +1,4 @@
 @echo off
-chcp 65001 >nul
-cd /d %~dp0
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start_system.ps1"
-timeout /t 2 /nobreak >nul
-start http://localhost:5173
+rem Launch backend + frontend hidden (no console windows). Pure ASCII.
+rem Delegates to start_system_hidden.vbs which starts services detached.
+start "" wscript.exe "%~dp0start_system_hidden.vbs"

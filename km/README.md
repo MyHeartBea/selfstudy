@@ -46,7 +46,12 @@ kaoyan-mistakes/            # 仓库内项目目录（git 仓库根为 work/，�
 │   └── vite.config.js
 ├── docs/                    # 架构与 API 文档
 ├── data/                    # SQLite 数据文件（自动生成）
-├── start_system.bat         # 一键启动
+├── scripts/                 # 辅助脚本（vision_request.py 三通道视觉识别等）
+├── start_system.bat         # 一键启动（无窗口，调 vbs）
+├── start_system_hidden.vbs  # 无窗口启动器（bat 与开机自启共用）
+├── start_backend_hidden.cmd # 后端隐藏启动
+├── start_frontend_hidden.cmd# 前端隐藏启动
+├── start_system.ps1         # 旧版启动脚本（已弃用，保留参考）
 ├── main.py                  # 根目录后端启动入口
 └── requirements.txt
 ```
@@ -73,14 +78,19 @@ npm run dev
 
 浏览器访问 `http://localhost:5173`。
 
-### 一键启动（幂等，可重复执行）
+### 一键启动（无窗口后台，幂等可重复执行）
 
-双击 `start_system.bat`，会自动启动后端（8000）与前端（5173）并打开浏览器；
-服务已在运行时重复执行会自动跳过，不会启动出第二个实例。
+双击 `start_system.bat`，会自动无窗口后台启动后端（8000）与前端（5173），
+等约 10 秒后自动打开浏览器；服务已在运行时重复执行会自动跳过，不会启动出第二个实例。
 
-- 无窗口启动：双击 `start_system_hidden.vbs`（后台隐藏运行，不弹窗）
-- 开机自启：已配置 Windows 启动项 `开始菜单\启动\考研错题本自启.vbs`，
-  登录后自动拉起前后端；若已手动运行过，会自动跳过。
+- 启动链路：`start_system.bat` → `start_system_hidden.vbs`（隐藏窗口）→
+  `start_backend_hidden.cmd` / `start_frontend_hidden.cmd`（`cmd /c start "" /b` 无窗口）
+- 无窗口启动：双击 `start_system_hidden.vbs`（与 bat 等效，后台隐藏运行）
+- 开机自启：Windows 启动项 `开始菜单\启动\考研错题本自启.vbs` 已同步为无窗口方案，
+  登录后自动拉起前后端；若已手动运行过，会自动跳过
+- 启动日志：`D:\temp\km-launch.log`（vbs 每步记录，排查启动问题用）
+- 后台服务停止：任务管理器结束 `python.exe main.py` 与 vite/node 进程，
+  或 `taskkill /F /PID <pid>`（无终端窗口可误关）
 
 ### 生产模式（单端口）
 
@@ -210,6 +220,21 @@ pip install winsdk
 - `API_TOKEN`：设置后所有 `/api` 请求需携带 `X-API-Token` 头或
   `Authorization: Bearer <token>`，防止误对外暴露时刷 AI 额度/导出数据。
 - `AI_RATE_LIMIT`：AI 端点每分钟请求上限（默认 30）。
+
+### 视觉识别脚本（三通道，供 DSH/Codex agent 复用）
+
+`scripts/vision_request.py` 并发调用三个视觉模型通道，首个成功即返回：
+
+```bash
+python scripts/vision_request.py --image <图片路径> --json
+# 可选：--prompt "自定义提示" --timeout 30 --total-timeout 90
+```
+
+- 通道：GLM-4.6V-Flash → Agnes-2.0-Flash → Agnes-2.5-Flash（含各自备用）
+- 密钥从 `backend/.env` 的 `AI_VISION_*` 读取，脚本永不打印密钥
+- 视觉模型只负责识图/提取，解题交给 DeepSeek 文本模型；识别结果只作草稿，
+  涉及题目/答案/公式必须人工复核
+- DSH 会话中已配置 `vision` 技能（`D:\dsh-home\skills\vision\SKILL.md`）自动调用本脚本
 
 ## 长期记忆（agentmemory）
 
