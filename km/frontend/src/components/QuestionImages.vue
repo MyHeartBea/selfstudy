@@ -13,13 +13,13 @@
       v-if="viewerVisible"
       :url-list="previewList"
       :initial-index="viewerIndex"
-      @close="viewerVisible = false"
+      @close="closePreview"
     />
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 
 const props = defineProps({
   images: { type: Array, default: () => [] },
@@ -28,6 +28,7 @@ const props = defineProps({
 
 const viewerVisible = ref(false)
 const viewerIndex = ref(0)
+const savedOverflow = ref('')
 
 const previewList = computed(() =>
   (props.images || []).map((item) => imageSrc(item)),
@@ -36,7 +37,21 @@ const previewList = computed(() =>
 function openPreview(index) {
   viewerIndex.value = index
   viewerVisible.value = true
+  // 锁定页面滚动，避免图片预览时滚轮同时滚动页面
+  savedOverflow.value = document.body.style.overflow
+  document.body.style.overflow = 'hidden'
 }
+
+function closePreview() {
+  viewerVisible.value = false
+  document.body.style.overflow = savedOverflow.value
+}
+
+onUnmounted(() => {
+  if (viewerVisible.value) {
+    document.body.style.overflow = savedOverflow.value
+  }
+})
 
 function imageSrc(item) {
   if (!item) return ''
