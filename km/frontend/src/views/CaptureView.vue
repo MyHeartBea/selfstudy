@@ -216,7 +216,13 @@ async function analyzeImage() {
     parsed.value = res.data.data
     ocrRawText.value =
       parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
-    aiWarning.value = ''
+    // 后端降级消息（如“本地 OCR 识别完成（视觉模型失败：…）”或纯“本地 OCR 识别完成”）：
+    // 走到本地 OCR 时展示后端返回的具体原因，方便定位是哪个视觉通道失败。
+    const ocrMessage = String(res.data?.message || '')
+    aiWarning.value =
+      parsed.value.method === 'local' && ocrMessage
+        ? ocrMessage
+        : ''
     formKey.value += 1
     ElMessage.success('图片识别完成，请核对后点击提交；保存后才会出现在错题列表')
   } catch (err) {
