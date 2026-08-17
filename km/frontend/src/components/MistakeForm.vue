@@ -103,7 +103,9 @@ function resetForm() {
 // —— 题干图片 ——
 function imageSrc(item) {
   // 新上传的是 data URL；已保存的是相对路径 images/xxx
-  return item && item.startsWith('data:') ? item : '/images/' + item
+  if (item && item.startsWith('data:')) return item
+  const name = item && item.startsWith('images/') ? item.slice('images/'.length) : item
+  return '/images/' + name
 }
 
 function readFileAsDataUrl(file) {

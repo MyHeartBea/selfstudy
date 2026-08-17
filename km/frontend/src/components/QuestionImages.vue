@@ -18,8 +18,10 @@ const props = defineProps({
 
 function imageSrc(item) {
   if (!item) return ''
-  // 新上传的 data URL 直接可用；已保存的是相对路径 images/xxx
-  return item.startsWith('data:') ? item : '/images/' + item
+  // 新上传的 data URL 直接可用；已保存的是相对路径 images/xxx.png
+  if (item.startsWith('data:')) return item
+  const name = item.startsWith('images/') ? item.slice('images/'.length) : item
+  return '/images/' + name
 }
 </script>
 
