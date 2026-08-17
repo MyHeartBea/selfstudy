@@ -1,0 +1,1 @@
+import{m as r}from"./vue-DaniKSbI.js";function m(n,i){const f=r("");function o(){const u=f.value.trim();u&&!n[i].includes(u)&&n[i].push(u),f.value=""}function t(){f.value.trim()&&o()}function s(u){n[i]=n[i].filter(c=>c!==u)}return{input:f,add:o,flush:t,remove:s}}export{m as u};

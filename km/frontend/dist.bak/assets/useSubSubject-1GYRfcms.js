@@ -1,0 +1,1 @@
+import{b as s}from"./index-DGwjvlaa.js";import{k as b}from"./vue-DaniKSbI.js";function n(u){return{subSubjectOptions:b(()=>{const t=u.value;return t?s.subSubjects.filter(e=>e.subject_id===t):[]})}}export{n as u};

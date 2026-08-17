@@ -164,12 +164,16 @@ class TestApiSmoke(unittest.TestCase):
         self.assertEqual(r.json()["data"]["page_size"], 20)
 
     def test_unknown_api_returns_uniform_json(self):
-        """未知 API 路径返回统一 JSON 结构而非 FastAPI 默认格式。"""
+        """未知 API 路径返回统一 JSON 结构而非 FastAPI 默认格式。
+
+        注意：本地开发目录存在 frontend/dist 时会注册 SPA 通配路由 → 405；
+        CI 没有 dist → 404。两种都应返回统一 {code,data,message}，不得有 detail。
+        """
         r = self.client.post("/api/definitely-not-exist")
-        self.assertEqual(r.status_code, 405)
+        self.assertIn(r.status_code, (404, 405))
         body = r.json()
         self.assertNotIn("detail", body)
-        self.assertEqual(body["code"], 405)
+        self.assertEqual(body["code"], r.status_code)
 
 
 if __name__ == "__main__":

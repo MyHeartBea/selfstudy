@@ -33,3 +33,9 @@ effective-html/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Test coverage
+.coverage
+.coverage.*
+htmlcov/
+
