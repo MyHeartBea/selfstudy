@@ -75,6 +75,7 @@ function fillForm(initial) {
   form.source_type = initial.source_type || 'other'
   form.source_year = initial.source_year || ''
   form.source_name = initial.source_name || ''
+  form.images = (initial.images || []).slice()
 }
 
 watch(() => props.initial, fillForm, { immediate: true })
@@ -97,6 +98,38 @@ function roundDifficulty(value) {
 function resetForm() {
   Object.assign(form, emptyForm())
   if (formRef.value) formRef.value.clearValidate()
+}
+
+// —— 题干图片 ——
+function imageSrc(item) {
+  // 新上传的是 data URL；已保存的是相对路径 images/xxx
+  return item && item.startsWith('data:') ? item : '/images/' + item
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
+async function handleImageUpload(uploadFile) {
+  try {
+    const dataUrl = await readFileAsDataUrl(uploadFile.raw)
+    if (dataUrl.length > 11 * 1024 * 1024) {
+      ElMessage.warning('图片过大，请压缩到 8MB 以内再上传')
+      return
+    }
+    form.images.push(dataUrl)
+  } catch (err) {
+    ElMessage.error(err.message || '图片上传失败')
+  }
+}
+
+function handleImageRemove(index) {
+  form.images.splice(index, 1)
 }
 
 async function submitForm() {
@@ -141,6 +174,7 @@ async function submitForm() {
     source_type: form.source_type,
     source_year: form.source_year,
     source_name: form.source_name,
+    images: form.images,
   }
   try {
     let res
@@ -237,6 +271,36 @@ onMounted(loadApproachOptions)
           :rows="4"
           placeholder="请输入错题题干"
         />
+      </el-form-item>
+
+      <el-form-item label="题干图片">
+        <div class="question-images">
+          <div
+            v-for="(img, index) in form.images"
+            :key="index"
+            class="question-image-item"
+          >
+            <img :src="imageSrc(img)" alt="题干图片" />
+            <button
+              type="button"
+              class="question-image-remove"
+              @click="handleImageRemove(index)"
+            >
+              ×
+            </button>
+          </div>
+          <el-upload
+            v-if="form.images.length < 5"
+            :show-file-list="false"
+            :auto-upload="false"
+            accept="image/*"
+            :on-change="handleImageUpload"
+            class="question-image-upload"
+          >
+            <el-button size="small">+ 添加图片</el-button>
+          </el-upload>
+        </div>
+        <div class="question-images-hint">支持粘贴/上传原题截图（如电路图、拓扑图），最多 5 张</div>
       </el-form-item>
 
       <el-row v-if="form.question_type === 'choice'" :gutter="16">
@@ -426,3 +490,47 @@ onMounted(loadApproachOptions)
     </el-form>
   </div>
 </template>
+
+<style scoped>
+.question-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+.question-image-item {
+  position: relative;
+  border: 1px solid var(--el-border-color, #dcdfe6);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.question-image-item img {
+  display: block;
+  max-width: 180px;
+  max-height: 140px;
+  object-fit: contain;
+}
+.question-image-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  line-height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+.question-image-upload {
+  align-self: center;
+}
+.question-images-hint {
+  width: 100%;
+  font-size: 12px;
+  color: var(--el-text-color-secondary, #909399);
+}
+</style>

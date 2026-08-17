@@ -2,6 +2,7 @@
 import { formatTime } from '../composables/useBaseData'
 import MathText from './MathText.vue'
 import MistakeMeta from './MistakeMeta.vue'
+import QuestionImages from './QuestionImages.vue'
 
 defineProps({
   mistake: { type: Object, required: true },
@@ -31,6 +32,7 @@ defineEmits(['open'])
         class="card-rate"
       />
     </div>
+    <QuestionImages :images="mistake.images" :max-width="280" />
     <div class="question-text">
       <MathText :text="mistake.question" />
     </div>

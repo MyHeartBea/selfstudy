@@ -26,5 +26,6 @@ export function createMistakeDraft(question = '') {
     source_type: 'other',
     source_year: '',
     source_name: '',
+    images: [],
   }
 }

@@ -9,6 +9,7 @@ import FillAnswer from '../components/FillAnswer.vue'
 import SolutionAnswer from '../components/SolutionAnswer.vue'
 import MathText from '../components/MathText.vue'
 import MistakeMeta from '../components/MistakeMeta.vue'
+import QuestionImages from '../components/QuestionImages.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -234,6 +235,7 @@ onMounted(loadQueue)
         </div>
 
         <div class="question-block">
+          <QuestionImages :images="current.images" />
           <MathText :text="current.question" />
         </div>
 

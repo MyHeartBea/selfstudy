@@ -1,5 +1,6 @@
 """导出与导入接口。"""
 
+import base64
 from datetime import datetime
 
 from fastapi import APIRouter
@@ -9,8 +10,36 @@ from app.models.tables import MISTAKE_COLUMNS
 from app.responses import error, ok, server_error
 from app.schemas import ImportPayload
 from app.services import mistake_service
+from app.services.mistake_service import _images_dir
 
 router = APIRouter(prefix="/api", tags=["导入导出"])
+
+_MIME_BY_EXT = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+}
+
+
+def _export_images(paths) -> list:
+    """把图片相对路径转成 base64 data URL，保证导出文件携带图片内容。"""
+    out = []
+    for path in paths or []:
+        rel = str(path)
+        try:
+            if not rel.startswith("images/"):
+                continue
+            name = rel.split("/", 1)[1]
+            data = (_images_dir() / name).read_bytes()
+        except OSError:
+            continue
+        ext = "." + (name.rsplit(".", 1)[-1].lower() if "." in name else "png")
+        mime = _MIME_BY_EXT.get(ext, "image/png")
+        out.append(f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}")
+    return out
 
 
 @router.get("/export")
@@ -18,10 +47,11 @@ def export_data():
     """导出全部错题与知识点，便于备份和迁移。"""
     conn = get_connection()
     try:
-        mistakes = [
-            mistake_to_dict(row)
-            for row in conn.execute("SELECT * FROM mistakes ORDER BY id").fetchall()
-        ]
+        mistakes = []
+        for row in conn.execute("SELECT * FROM mistakes ORDER BY id").fetchall():
+            item = mistake_to_dict(row)
+            item["images"] = _export_images(item.get("images"))
+            mistakes.append(item)
         knowledge = [
             dict(row)
             for row in conn.execute("SELECT * FROM knowledge_base ORDER BY id").fetchall()

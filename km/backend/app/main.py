@@ -104,6 +104,12 @@ app.include_router(transfer.router, dependencies=[Depends(verify_api_token)])
 app.include_router(reviews.router, dependencies=[Depends(verify_api_token)])
 app.include_router(ai.router, dependencies=[Depends(verify_api_token)])
 
+# 错题题干配图静态访问（data/images/）
+from app.services.mistake_service import _images_dir  # noqa: E402
+
+_images_dir().mkdir(parents=True, exist_ok=True)
+app.mount("/images", StaticFiles(directory=str(_images_dir())), name="images")
+
 
 if settings.FRONTEND_DIST.is_dir():
     assets_dir = settings.FRONTEND_DIST / "assets"

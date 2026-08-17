@@ -214,6 +214,13 @@ async function analyzeImage() {
     )
     if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
+    // 识别成功后保留原图（拓扑图/电路图等图形题题干需要展示原图）
+    if (
+      previewImage.value &&
+      !(parsed.value.images && parsed.value.images.length)
+    ) {
+      parsed.value.images = [previewImage.value]
+    }
     ocrRawText.value =
       parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
     // 后端降级消息（如“本地 OCR 识别完成（视觉模型失败：…）”或纯“本地 OCR 识别完成”）：

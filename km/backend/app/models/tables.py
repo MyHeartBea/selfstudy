@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS mistakes (
     last_reviewed_at DATETIME,
     next_review_at DATETIME,
     review_paused INTEGER DEFAULT 0,
+    images TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -142,9 +143,11 @@ MISTAKE_COLUMNS = (
     "source_type",
     "source_year",
     "source_name",
+    "images",
 )
 
 MISTAKE_FIELD_KEYS = {
     "knowledge_tags": "knowledge_tags_text",
     "answer_aliases": "answer_aliases_text",
+    "images": "images_text",
 }

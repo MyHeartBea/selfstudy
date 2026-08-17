@@ -3,6 +3,7 @@ import { computed } from 'vue'
 
 import MathText from './MathText.vue'
 import MistakeMeta from './MistakeMeta.vue'
+import QuestionImages from './QuestionImages.vue'
 import { formatTime } from '../composables/useBaseData'
 
 const props = defineProps({
@@ -26,6 +27,7 @@ const optionList = computed(() => {
     </div>
 
     <div class="question-block">
+      <QuestionImages :images="detail.images" />
       <MathText :text="detail.question" />
     </div>
 

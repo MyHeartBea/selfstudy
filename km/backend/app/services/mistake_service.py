@@ -1,8 +1,14 @@
 """错题相关业务逻辑。"""
 
+import base64
+import json
+import re
 import sqlite3
+import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from app.config import PROJECT_ROOT, settings
 from app.database import (
     mistake_field,
     mistake_tag_condition,
@@ -19,6 +25,89 @@ from app.services.knowledge_service import (
 )
 
 SOURCE_TYPES = {"real_exam", "mock", "other"}
+
+IMAGE_DIR: Path = PROJECT_ROOT / "data" / "images"
+IMAGE_MAX_BYTES = 8 * 1024 * 1024  # 单张图片 base64 解码后上限 8MB
+IMAGE_MAX_COUNT = 5
+
+
+def _images_dir() -> Path:
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    return IMAGE_DIR
+
+
+def _save_image_data(data: bytes, mime: str = "") -> str:
+    """把图片字节存到 data/images/，返回相对路径 images/<name>。<name> 为 uuid + 扩展名。"""
+    ext_map = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "image/bmp": ".bmp",
+    }
+    ext = ext_map.get(mime.strip().lower(), ".png")
+    name = f"{uuid.uuid4().hex}{ext}"
+    (_images_dir() / name).write_bytes(data)
+    return f"images/{name}"
+
+
+def process_images(images: Optional[List[Any]]) -> List[str]:
+    """把请求里的 images 列表归一为相对路径列表。
+
+    元素可为：
+    - data URL（data:image/...;base64,...）→ 解码存文件，返回新路径
+    - 裸 base64 → 按 PNG 解码存文件
+    - 已有相对路径（images/xxx.png）→ 原样保留（编辑时不重复上传）
+    单张超过 IMAGE_MAX_BYTES 时抛出 ValueError。
+    """
+    if not images:
+        return []
+    if not isinstance(images, list):
+        raise ValueError("images 必须是数组")
+    if len(images) > IMAGE_MAX_COUNT:
+        raise ValueError(f"最多上传 {IMAGE_MAX_COUNT} 张图片")
+
+    result: List[str] = []
+    data_url_re = re.compile(r"^data:(image/[a-zA-Z0-9.+-]+)?(;base64)?,(.*)$", re.S)
+    for item in images:
+        if item is None:
+            continue
+        text = str(item).strip()
+        if not text:
+            continue
+        # 已有相对路径（编辑保留）
+        if text.startswith("images/") and not text.startswith("images/.."):
+            result.append(text)
+            continue
+        # data URL 或裸 base64
+        mime = ""
+        match = data_url_re.match(text)
+        if match:
+            mime = match.group(1) or ""
+            payload = match.group(3)
+        else:
+            payload = text
+        try:
+            data = base64.b64decode(payload)
+        except (ValueError, TypeError):
+            raise ValueError("图片数据不是有效的 base64")
+        if not data:
+            continue
+        if len(data) > IMAGE_MAX_BYTES:
+            raise ValueError("单张图片不能超过 8MB")
+        result.append(_save_image_data(data, mime))
+    return result
+
+
+def remove_image_files(paths: Optional[List[str]]) -> None:
+    """删除不再引用的图片文件（吞掉 IO 错误，避免影响主流程）。"""
+    for path in paths or []:
+        try:
+            rel = str(path)
+            if rel.startswith("images/") and ".." not in rel.replace("\\", "/").split("/"):
+                (_images_dir() / Path(rel).name).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def validate_source_type(source_type: str) -> str:
@@ -165,6 +254,14 @@ def build_mistake_fields(
     if errors:
         return None, errors
 
+    try:
+        images = process_images(body.get("images"))
+    except ValueError as exc:
+        errors.append(str(exc))
+        images = []
+    if errors:
+        return None, errors
+
     return {
         "subject_id": subject_id,
         "sub_subject_id": sub_subject_id,
@@ -187,6 +284,8 @@ def build_mistake_fields(
         "source_type": source_type,
         "source_year": source_year,
         "source_name": source_name,
+        "images": images,
+        "images_text": json.dumps(images, ensure_ascii=False),
     }, []
 
 
@@ -366,9 +465,15 @@ def update_mistake(
     body: Dict[str, Any],
 ) -> Tuple[Optional[dict], List[str]]:
     """更新指定错题，同时补全缺失的知识点词条。"""
-    row = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
+    row = conn.execute("SELECT images FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
     if row is None:
         return None, ["NOT_FOUND"]
+    old_images = []
+    if row["images"]:
+        try:
+            old_images = json.loads(row["images"])
+        except (TypeError, ValueError):
+            old_images = []
 
     fields, errors = build_mistake_fields(body, conn)
     if errors:
@@ -387,20 +492,33 @@ def update_mistake(
     )
     sync_mistake_tags(conn, mistake_id, fields["knowledge_tags"])
     conn.commit()
+    # 清理被替换掉的旧图片文件（新集合不再引用的）
+    new_images = fields.get("images") or []
+    removed = [path for path in old_images if path not in new_images]
+    if removed:
+        remove_image_files(removed)
     updated = conn.execute("SELECT * FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
     return mistake_to_dict(updated), []
 
 
 def delete_mistake(conn: sqlite3.Connection, mistake_id: int) -> bool:
     """删除指定错题，返回是否删除成功。"""
-    row = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
+    row = conn.execute("SELECT images FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
     if row is None:
         return False
+    old_images = []
+    if row["images"]:
+        try:
+            old_images = json.loads(row["images"])
+        except (TypeError, ValueError):
+            old_images = []
     conn.execute("DELETE FROM solution_grades WHERE mistake_id = ?", (mistake_id,))
     conn.execute("DELETE FROM review_records WHERE mistake_id = ?", (mistake_id,))
     conn.execute("DELETE FROM mistake_tag_map WHERE mistake_id = ?", (mistake_id,))
     conn.execute("DELETE FROM mistakes WHERE id = ?", (mistake_id,))
     conn.commit()
+    if old_images:
+        remove_image_files(old_images)
     return True
 
 

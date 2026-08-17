@@ -78,7 +78,7 @@ def init_database() -> None:
 
 
 # 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描
-MIGRATION_VERSION = 3
+MIGRATION_VERSION = 4
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
@@ -112,6 +112,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         "source_type": "TEXT DEFAULT ''",
         "source_year": "TEXT DEFAULT ''",
         "source_name": "TEXT DEFAULT ''",
+        "images": "TEXT",
     }
     for column, ddl in additions.items():
         if column not in existing_columns:
@@ -368,11 +369,21 @@ def normalize_tags(value) -> List[str]:
 
 def mistake_to_dict(row: sqlite3.Row) -> dict:
     """将错题行转为字典，并把标签字符串还原为数组。"""
+    import json as _json
+
     data = dict(row)
     tags = data.get("knowledge_tags") or ""
     data["knowledge_tags"] = [t.strip() for t in tags.split(",") if t.strip()]
     aliases = data.get("answer_aliases") or ""
     data["answer_aliases"] = [a.strip() for a in aliases.split(";;") if a.strip()]
+    raw_images = data.get("images") or ""
+    if raw_images:
+        try:
+            data["images"] = _json.loads(raw_images)
+        except (TypeError, ValueError):
+            data["images"] = []
+    else:
+        data["images"] = []
     return data
 
 
