@@ -5,31 +5,38 @@
       :key="index"
       class="question-image"
       :title="'点击放大（' + (index + 1) + '/' + images.length + '）'"
+      @click="openPreview(index)"
     >
-      <el-image
-        :src="imageSrc(img)"
-        :preview-src-list="previewList"
-        :initial-index="index"
-        fit="contain"
-        preview-teleported
-        loading="lazy"
-        class="question-image-el"
-      />
+      <img :src="imageSrc(img)" alt="题干配图" loading="lazy" />
     </figure>
+    <el-image-viewer
+      v-if="viewerVisible"
+      :url-list="previewList"
+      :initial-index="viewerIndex"
+      @close="viewerVisible = false"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
   images: { type: Array, default: () => [] },
   maxWidth: { type: Number, default: 520 },
 })
 
+const viewerVisible = ref(false)
+const viewerIndex = ref(0)
+
 const previewList = computed(() =>
   (props.images || []).map((item) => imageSrc(item)),
 )
+
+function openPreview(index) {
+  viewerIndex.value = index
+  viewerVisible.value = true
+}
 
 function imageSrc(item) {
   if (!item) return ''
@@ -55,15 +62,10 @@ function imageSrc(item) {
   background: var(--el-bg-color, #fff);
   cursor: zoom-in;
 }
-.question-image-el {
+.question-image img {
   display: block;
   max-width: v-bind(maxWidth + 'px');
-  max-height: 300px;
-}
-.question-image-el :deep(img) {
-  width: auto;
-  max-width: 100%;
-  max-height: 300px;
+  max-height: 280px;
   object-fit: contain;
 }
 </style>
