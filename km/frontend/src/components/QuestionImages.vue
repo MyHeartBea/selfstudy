@@ -4,17 +4,32 @@
       v-for="(img, index) in images"
       :key="index"
       class="question-image"
+      :title="'点击放大（' + (index + 1) + '/' + images.length + '）'"
     >
-      <img :src="imageSrc(img)" alt="题干配图" loading="lazy" />
+      <el-image
+        :src="imageSrc(img)"
+        :preview-src-list="previewList"
+        :initial-index="index"
+        fit="contain"
+        preview-teleported
+        loading="lazy"
+        class="question-image-el"
+      />
     </figure>
   </div>
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   images: { type: Array, default: () => [] },
-  maxWidth: { type: Number, default: 360 },
+  maxWidth: { type: Number, default: 520 },
 })
+
+const previewList = computed(() =>
+  (props.images || []).map((item) => imageSrc(item)),
+)
 
 function imageSrc(item) {
   if (!item) return ''
@@ -38,11 +53,17 @@ function imageSrc(item) {
   border: 1px solid var(--el-border-color, #dcdfe6);
   border-radius: 6px;
   background: var(--el-bg-color, #fff);
+  cursor: zoom-in;
 }
-.question-image img {
+.question-image-el {
   display: block;
   max-width: v-bind(maxWidth + 'px');
-  max-height: 240px;
+  max-height: 300px;
+}
+.question-image-el :deep(img) {
+  width: auto;
+  max-width: 100%;
+  max-height: 300px;
   object-fit: contain;
 }
 </style>

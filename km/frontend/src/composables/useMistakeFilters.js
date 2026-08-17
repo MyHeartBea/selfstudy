@@ -25,7 +25,7 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
   })
   const sortBy = ref('created_desc')
   const page = ref(1)
-  const pageSize = ref(12)
+  const pageSize = ref(8)
 
   const activeFilterCount = computed(
     () =>

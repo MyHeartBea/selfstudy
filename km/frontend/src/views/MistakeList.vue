@@ -387,7 +387,7 @@ onUnmounted(() => {
         background
         layout="total, sizes, prev, pager, next"
         :total="total"
-        :page-sizes="[12, 20, 50]"
+        :page-sizes="[8, 20, 50]"
         v-model:current-page="page"
         v-model:page-size="pageSize"
         @current-change="loadMistakes"
