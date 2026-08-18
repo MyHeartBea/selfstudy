@@ -240,10 +240,26 @@ def _normalize_math_delimiters(text: str) -> str:
     return "".join(out)
 
 
+def _normalize_latex_delimiters(text: str) -> str:
+    """把 AI 常见的 \\(...\\) 与 \\[...\\] 数学定界符统一为 $...$ / $$...$$。
+
+    DeepSeek 等模型常输出标准 LaTeX 显示语法 \\( \\), 而本项目 KaTeX 渲染
+    约定使用 $...$ / $$...$$；此转换在 _wrap_math 之前执行，保证所有
+    AI 文本（错题解析、知识点总结、批改解答）公式都能渲染。
+    """
+    if not text:
+        return text
+    text = text.replace("\\[", "$$").replace("\\]", "$$")
+    text = text.replace("\\(", "$").replace("\\)", "$")
+    return text
+
+
 def _wrap_math(text: str) -> str:
     """把裸露的公式片段包成 $...$，已存在的 $...$ / $$...$$ 保持不变。"""
     if not text:
         return text
+    # 先统一 AI 输出的 \\(...\\) / \\[...\\] 定界符为 $...$ / $$...$$
+    text = _normalize_latex_delimiters(text)
     # 修复模型偶尔输出的字面 \n。
     text = text.replace("\\n", "\n")
     # 修复 $' 这类被 AI 拆坏的撇号写法。
@@ -546,10 +562,11 @@ def summarize_knowledge(tag_name: str, mistakes: List[dict]) -> str:
     )
     prompt = (
         f"请根据以下与知识点“{tag_name}”相关的错题材料，写一段适合复习的知识点总结，"
-        "包含核心概念、常见易错点、记忆要点，300 字以内，直接输出正文，不要 Markdown。\n\n"
+        "包含核心概念、常见易错点、记忆要点，300 字以内，直接输出正文，不要 Markdown。"
+        "数学公式一律用 $...$ 包裹（行内）或 $$...$$（独立行），不要用 \\(...\\) 或 \\[...\\] 写法。\n\n"
         + material
     )
-    return _chat([{"role": "user", "content": prompt}]).strip()
+    return _wrap_math(_chat([{"role": "user", "content": prompt}]).strip())
 
 
 def _grade_prompt() -> str:
