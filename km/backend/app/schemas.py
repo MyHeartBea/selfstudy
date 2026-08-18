@@ -45,6 +45,16 @@ class KnowledgeUpdate(BaseModel):
     related_tags: Optional[List[str]] = None
 
 
+class KnowledgeCreate(BaseModel):
+    """手动创建知识点词条。"""
+
+    tag_name: str = Field(min_length=1, max_length=100)
+    subject_id: Optional[int] = None
+    sub_subject_id: Optional[int] = None
+    summary: str = ""
+    related_tags: List[str] = []
+
+
 class ImportPayload(BaseModel):
     mistakes: List[MistakeCreate] = Field(min_length=1, max_length=5000)
 

@@ -26,6 +26,7 @@ const filters = reactive({
   tag: '',
 })
 const editVisible = ref(false)
+const createVisible = ref(false)
 const editing = ref(null)
 const summarizingId = ref(null)
 
@@ -99,11 +100,19 @@ function onSubSubjectChange() {
 
 function openEdit(row) {
   editing.value = row
+  createVisible.value = false
   editVisible.value = true
+}
+
+function openCreate() {
+  editing.value = null
+  editVisible.value = false
+  createVisible.value = true
 }
 
 function onSaved() {
   editVisible.value = false
+  createVisible.value = false
   loadKnowledge()
 }
 
@@ -214,6 +223,9 @@ onMounted(() => {
             搜索
           </el-button>
           <el-button @click="resetFilters">重置</el-button>
+          <el-button type="success" @click="openCreate">
+            + 添加知识点
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -287,6 +299,7 @@ onMounted(() => {
     </el-card>
 
     <KnowledgeEditDialog v-model="editVisible" :row="editing" @saved="onSaved" />
+    <KnowledgeEditDialog v-model="createVisible" :row="null" is-create @saved="onSaved" />
   </div>
 </template>
 

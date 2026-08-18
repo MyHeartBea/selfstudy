@@ -212,3 +212,114 @@ def ocr_image(body: AiOcrRequest):
                     "当前 AI 模型也不支持图片，请配置支持图片的模型"
                 )
         return error(502, message)
+
+
+def _vision_providers() -> List[tuple]:
+    """构建三通道视觉 provider 列表 (model, base_url, api_key)。"""
+    providers = []
+    for model in (
+        settings.AI_VISION_MODEL,
+        settings.AI_VISION_MODEL_FALLBACK,
+    ):
+        if model:
+            providers.append(
+                (model, settings.AI_VISION_BASE_URL or None, settings.AI_VISION_API_KEY or None)
+            )
+    for model in (
+        settings.AI_VISION_2_MODEL,
+        settings.AI_VISION_2_MODEL_FALLBACK,
+    ):
+        if model:
+            providers.append(
+                (model, settings.AI_VISION_2_BASE_URL or None, settings.AI_VISION_2_API_KEY or None)
+            )
+    if settings.AI_VISION_3_MODEL:
+        providers.append(
+            (
+                settings.AI_VISION_3_MODEL,
+                settings.AI_VISION_3_BASE_URL or None,
+                settings.AI_VISION_3_API_KEY or None,
+            )
+        )
+    return providers
+
+
+@router.post("/knowledge-from-image", dependencies=[Depends(ai_rate_limit)])
+def knowledge_from_image(body: AiOcrRequest):
+    """粘贴图片 → 视觉识别提取文字 → AI 整理为知识点草稿（可带重点关注指令）。"""
+    last_vision_error = ""
+    providers = _vision_providers()
+    started = time.monotonic()
+
+    def remaining() -> float:
+        return max(0.0, settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started))
+
+    def call_provider(vision_model, vision_base_url, vision_api_key):
+        budget = remaining()
+        if budget <= 2:
+            raise RuntimeError("整体识别预算耗尽")
+        return ai_service.vision_extract_text(
+            body.image_base64,
+            timeout=min(settings.AI_VISION_TIMEOUT, int(budget)),
+            instruction=body.instruction,
+            model=vision_model,
+            base_url=vision_base_url,
+            api_key=vision_api_key,
+        )
+
+    raw_text = ""
+    if providers:
+        futures = {
+            _VISION_EXECUTOR.submit(call_provider, model, base_url, api_key): (
+                model,
+                base_url,
+                api_key,
+            )
+            for model, base_url, api_key in providers
+        }
+        pending = set(futures)
+        while pending:
+            wait_timeout = max(0.1, min(2.0, remaining()))
+            done, _ = wait(
+                pending,
+                timeout=wait_timeout,
+                return_when=FIRST_COMPLETED,
+            )
+            if not done:
+                if remaining() <= 2:
+                    break
+                continue
+            for future in done:
+                pending.discard(future)
+                try:
+                    text = future.result()
+                    if text and text.strip():
+                        raw_text = text.strip()
+                        break
+                except Exception as exc:
+                    last_vision_error = str(exc)
+            if raw_text:
+                for f in pending:
+                    f.cancel()
+                break
+
+    # 视觉失败降级本地 OCR
+    if not raw_text and local_ocr.is_available():
+        try:
+            raw_text = local_ocr.recognize_base64(body.image_base64).strip()
+        except Exception as exc:
+            last_vision_error = f"{last_vision_error or '视觉失败'}; 本地 OCR: {exc}"
+
+    if not raw_text:
+        return error(502, f"图片识别失败：{last_vision_error or '未能提取到文字'}")
+
+    try:
+        draft = ai_service.analyze_knowledge(
+            raw_text,
+            instruction=body.instruction,
+        )
+    except Exception as exc:
+        return error(502, _ai_error_message(exc))
+
+    draft["method"] = "vision" if not last_vision_error else "local"
+    return ok(draft, "知识点草稿已生成，请核对后保存")

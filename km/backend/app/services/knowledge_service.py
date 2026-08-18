@@ -1,7 +1,7 @@
 """知识点相关业务逻辑。"""
 
 import sqlite3
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # 知识点标签统一规范：变体一律归一到标准名，保证检索一致。
 TAG_SYNONYMS = {
@@ -227,3 +227,74 @@ def delete_knowledge(conn: sqlite3.Connection, knowledge_id: int) -> bool:
     conn.execute("DELETE FROM knowledge_base WHERE id = ?", (knowledge_id,))
     conn.commit()
     return True
+
+
+def create_knowledge(
+    conn: sqlite3.Connection,
+    body: Dict[str, Any],
+) -> Tuple[Optional[dict], List[str]]:
+    """手动创建知识点词条（标签名唯一，重名报错）。"""
+    errors: List[str] = []
+    raw_tag = str(body.get("tag_name") or "").strip()
+    if not raw_tag:
+        errors.append("知识点名称不能为空")
+        return None, errors
+    tag_name = canonical_tags([raw_tag])[0]
+
+    subject_id = body.get("subject_id")
+    if subject_id in (None, ""):
+        subject_id = None
+    else:
+        try:
+            subject_id = int(subject_id)
+        except (TypeError, ValueError):
+            errors.append("科目参数无效")
+            subject_id = None
+        else:
+            exists = conn.execute(
+                "SELECT 1 FROM subjects WHERE id = ?", (subject_id,)
+            ).fetchone()
+            if exists is None:
+                errors.append("所选科目不存在")
+
+    sub_subject_id = body.get("sub_subject_id")
+    if sub_subject_id in (None, ""):
+        sub_subject_id = None
+    elif subject_id is not None:
+        try:
+            sub_subject_id = int(sub_subject_id)
+        except (TypeError, ValueError):
+            errors.append("二级科目参数无效")
+            sub_subject_id = None
+        else:
+            sub_exists = conn.execute(
+                "SELECT 1 FROM sub_subjects WHERE id = ? AND subject_id = ?",
+                (sub_subject_id, subject_id),
+            ).fetchone()
+            if sub_exists is None:
+                errors.append("二级科目不存在或与科目不匹配")
+                sub_subject_id = None
+
+    summary = str(body.get("summary") or "").strip()
+    related = canonical_tags(body.get("related_tags") or [])
+
+    if errors:
+        return None, errors
+
+    exists = conn.execute(
+        "SELECT id FROM knowledge_base WHERE tag_name = ? COLLATE NOCASE",
+        (tag_name,),
+    ).fetchone()
+    if exists is not None:
+        return None, [f"知识点「{tag_name}」已存在，请直接编辑其摘要"]
+
+    cur = conn.execute(
+        "INSERT INTO knowledge_base (tag_name, subject_id, sub_subject_id, summary, related_tags) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (tag_name, subject_id, sub_subject_id, summary, ",".join(related)),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM knowledge_base WHERE id = ?", (cur.lastrowid,)
+    ).fetchone()
+    return knowledge_to_dict(row), []

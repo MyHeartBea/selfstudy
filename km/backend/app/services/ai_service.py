@@ -457,6 +457,85 @@ def ocr_image(
     return normalize_parsed(_extract_json(_chat(messages, timeout=timeout)))
 
 
+def vision_extract_text(
+    image_base64: str,
+    timeout: int | None = None,
+    instruction: str = "",
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
+) -> str:
+    """视觉模型直接提取图片中的文字内容（不解析为错题结构），返回原始文本。"""
+    image_base64 = image_base64.strip()
+    if image_base64.startswith("data:"):
+        data_url = image_base64
+    else:
+        data_url = "data:image/png;base64," + image_base64
+
+    text_part = (
+        "请完整、准确地提取图片中的文字内容，包括题干、选项、公式、图表标注等。"
+        "数学公式用 LaTeX 表示。只输出提取到的文字本身，不要解释或补充。"
+    )
+    if instruction and instruction.strip():
+        text_part += "\n\n【重点关注】" + instruction.strip()
+
+    content = [
+        {"type": "text", "text": text_part},
+        {"type": "image_url", "image_url": {"url": data_url}},
+    ]
+    messages = [{"role": "user", "content": content}]
+    return _chat(
+        messages,
+        model=model,
+        base_url=base_url or settings.AI_VISION_BASE_URL or None,
+        api_key=api_key or settings.AI_VISION_API_KEY or None,
+        timeout=timeout,
+    )
+
+
+_KNOWLEDGE_PROMPT = """你是一名知识点整理助手。请根据用户提供的学习材料，提炼为一个结构化的知识点，输出严格的 JSON（不要 Markdown），字段如下：
+{"tag_name": "知识点标准名称（简短，3-12 字，如：等价无穷小、地址转换、长难句结构）",
+"summary": "知识点总结：讲清核心概念、关键公式（数学公式用 $...$ LaTeX）、怎么用、常见易错点，300-500 字，可用 Markdown 列表/表格",
+"related_tags": ["关联知识点标签", "最多5个"]}
+要求：tag_name 用学习材料中出现的关键概念命名；summary 让学习者看完就能懂并会用；related_tags 尽量用常见标准标签，不要生造。"""
+
+
+def analyze_knowledge(
+    text: str,
+    instruction: str = "",
+) -> dict:
+    """把学习材料文本解析为知识点草稿（tag_name/summary/related_tags）。"""
+    user_text = text.strip()
+    if instruction and instruction.strip():
+        user_text += "\n\n【重点关注/分析要求】" + instruction.strip()
+    parsed = _extract_json(
+        _chat(
+            [
+                {"role": "system", "content": _KNOWLEDGE_PROMPT},
+                {"role": "user", "content": user_text},
+            ]
+        )
+    )
+    if not isinstance(parsed, dict):
+        parsed = {}
+
+    raw_tags = parsed.get("related_tags") or []
+    if isinstance(raw_tags, str):
+        raw_tags = raw_tags.split(",")
+    tags: List[str] = []
+    for tag in raw_tags:
+        tag = str(tag or "").strip()
+        if tag and tag not in tags:
+            tags.append(tag)
+
+    return {
+        "tag_name": str(parsed.get("tag_name") or "").strip(),
+        "summary": _wrap_math(str(parsed.get("summary") or "").strip()),
+        "related_tags": tags[:5],
+        "source_text": user_text[:2000],
+    }
+
+
 def summarize_knowledge(tag_name: str, mistakes: List[dict]) -> str:
     """根据同知识点错题生成复习总结。"""
     material = "\n\n".join(

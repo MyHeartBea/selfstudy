@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.database import get_connection
 from app.responses import error, ok, server_error
-from app.schemas import KnowledgeUpdate
+from app.schemas import KnowledgeCreate, KnowledgeUpdate
 from app.security import ai_rate_limit
 from app.services import ai_service, knowledge_service
 from app.services.ai_service import AiNotConfigured, AiRequestError
@@ -49,6 +49,21 @@ def get_knowledge_by_tag(tag: str = Query(..., min_length=1)):
         if data is None:
             return error(404, "知识点不存在")
         return ok(data)
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.post("")
+def create_knowledge(body: KnowledgeCreate):
+    """手动创建知识点词条（标签名唯一，重名返回 400）。"""
+    conn = get_connection()
+    try:
+        created, errors = knowledge_service.create_knowledge(conn, body.model_dump())
+        if errors:
+            return error(400, "；".join(errors))
+        return ok(created, "知识点创建成功")
     except Exception as exc:
         return server_error(exc)
     finally:
