@@ -51,6 +51,9 @@ class Settings:
     AI_VISION_3_MODEL = os.environ.get("AI_VISION_3_MODEL", "")
     AI_VISION_3_BASE_URL = os.environ.get("AI_VISION_3_BASE_URL", "")
     AI_VISION_3_API_KEY = os.environ.get("AI_VISION_3_API_KEY", "")
+    # DeepSeek 多模态视觉模型（DeepSeek-V4-Flash-Vision-Exp，走 AI_BASE_URL/AI_API_KEY，
+    # 不占用 AI_VISION_* 视觉密钥）：作为识图首选，便宜且精度高。
+    AI_VISION_DS_MODEL = os.environ.get("AI_VISION_DS_MODEL", "deepseek-v4-flash-vision-exp")
     AI_TIMEOUT = int(os.environ.get("AI_TIMEOUT", "90"))
     # 单个视觉通道的超时，避免第一个模型卡住导致后续通道没有机会。
     AI_VISION_TIMEOUT = int(os.environ.get("AI_VISION_TIMEOUT", "30"))

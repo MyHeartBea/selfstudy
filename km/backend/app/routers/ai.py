@@ -70,31 +70,7 @@ def ocr_image(body: AiOcrRequest):
     """
     last_vision_error = ""
     last_local_error = ""
-    vision_providers = []
-    for model in (
-        settings.AI_VISION_MODEL,
-        settings.AI_VISION_MODEL_FALLBACK,
-    ):
-        if model:
-            vision_providers.append(
-                (model, settings.AI_VISION_BASE_URL or None, settings.AI_VISION_API_KEY or None)
-            )
-    for model in (
-        settings.AI_VISION_2_MODEL,
-        settings.AI_VISION_2_MODEL_FALLBACK,
-    ):
-        if model:
-            vision_providers.append(
-                (model, settings.AI_VISION_2_BASE_URL or None, settings.AI_VISION_2_API_KEY or None)
-            )
-    if settings.AI_VISION_3_MODEL:
-        vision_providers.append(
-            (
-                settings.AI_VISION_3_MODEL,
-                settings.AI_VISION_3_BASE_URL or None,
-                settings.AI_VISION_3_API_KEY or None,
-            )
-        )
+    vision_providers = _vision_providers()
     started = time.monotonic()
     # 标准标签只查一次，避免每个并发通道重复查询数据库
     standard_tags = _standard_tags()
@@ -215,8 +191,17 @@ def ocr_image(body: AiOcrRequest):
 
 
 def _vision_providers() -> List[tuple]:
-    """构建三通道视觉 provider 列表 (model, base_url, api_key)。"""
+    """构建视觉 provider 列表 (model, base_url, api_key)。
+
+    DeepSeek-V4-Flash-Vision-Exp 作为首选（走 AI_BASE_URL/AI_API_KEY，便宜且精度高），
+    其后是 GLM/Agnes 三通道；全失败再降级本地 OCR。
+    """
     providers = []
+    # DeepSeek 多模态视觉模型（首选）：用文本模型的 base_url/api_key
+    if settings.AI_VISION_DS_MODEL and settings.AI_API_KEY:
+        providers.append(
+            (settings.AI_VISION_DS_MODEL, settings.AI_BASE_URL or None, settings.AI_API_KEY or None)
+        )
     for model in (
         settings.AI_VISION_MODEL,
         settings.AI_VISION_MODEL_FALLBACK,
