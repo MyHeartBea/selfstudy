@@ -1,7 +1,6 @@
 """AI 解析接口：题干解析、图片识别、知识点自动总结。"""
 
 import time
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from fastapi import APIRouter, Depends
 from typing import List
 
@@ -18,10 +17,6 @@ router = APIRouter(prefix="/api/ai", tags=["AI"])
 AI_NOT_CONFIGURED_MESSAGE = (
     "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL"
 )
-
-# 视觉模型并发池：常驻复用，避免每个 OCR 请求都新建/销毁线程池
-_VISION_EXECUTOR = ThreadPoolExecutor(max_workers=3, thread_name_prefix="vision")
-
 
 def _standard_tags() -> List[str]:
     conn = get_connection()
@@ -93,49 +88,20 @@ def ocr_image(body: AiOcrRequest):
             reference_image_base64=body.reference_image_base64,
         )
 
-    if vision_providers:
-        futures = {
-            _VISION_EXECUTOR.submit(call_provider, model, base_url, api_key): (
-                model,
-                base_url,
-                api_key,
-            )
-            for model, base_url, api_key in vision_providers
-        }
-        pending = set(futures)
-
-        def cancel_pending():
-            """首个通道成功或预算耗尽时，取消仍在运行的视觉请求，避免白耗 API 配额/占线程池。"""
-            for future in pending:
-                future.cancel()
-
-        while pending:
-            wait_timeout = max(0.1, min(2.0, remaining()))
-            done, _ = wait(
-                pending,
-                timeout=wait_timeout,
-                return_when=FIRST_COMPLETED,
-            )
-            if not done:
-                if remaining() <= 2:
-                    cancel_pending()
-                    break
-                continue
-            for future in done:
-                pending.discard(future)
-                provider = futures[future]
-                try:
-                    parsed = future.result()
-                    parsed["method"] = "vision"
-                    parsed["raw_text"] = ""
-                    parsed["vision_model"] = provider[0]
-                    cancel_pending()
-                    return ok(parsed, "视觉模型识别完成")
-                except Exception as exc:
-                    last_vision_error = str(exc)
-            if remaining() <= 2:
-                cancel_pending()
-                break
+    # Providers are ordered by reliability/cost preference. In particular,
+    # DeepSeek Vision must be given the first opportunity to answer instead
+    # of racing every configured provider and losing to a faster fallback.
+    for provider in vision_providers:
+        if remaining() <= 2:
+            break
+        try:
+            parsed = call_provider(*provider)
+            parsed["method"] = "vision"
+            parsed["raw_text"] = ""
+            parsed["vision_model"] = provider[0]
+            return ok(parsed, "视觉模型识别完成")
+        except Exception as exc:
+            last_vision_error = str(exc)
     try:
         if local_ocr.is_available():
             try:
