@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.database import get_connection
 from app.models.tables import TABLES_DDL
+from app.routers import ai as ai_router
 from app.services import answer_service, mistake_service, review_service
 from app.services import ai_service
 
@@ -253,6 +254,36 @@ class TestCapturePrompt(unittest.TestCase):
             ai_service._chat = original
 
         self.assertEqual(captured["response_format"], {"type": "json_object"})
+
+
+class TestVisionTimeoutBudget(unittest.TestCase):
+    def setUp(self):
+        self.primary_model = ai_router.settings.AI_VISION_DS_MODEL
+        self.primary_timeout = ai_router.settings.AI_VISION_PRIMARY_TIMEOUT
+        self.fallback_timeout = ai_router.settings.AI_VISION_TIMEOUT
+        ai_router.settings.AI_VISION_DS_MODEL = "deepseek-v4-flash-vision-exp"
+        ai_router.settings.AI_VISION_PRIMARY_TIMEOUT = 60
+        ai_router.settings.AI_VISION_TIMEOUT = 20
+
+    def tearDown(self):
+        ai_router.settings.AI_VISION_DS_MODEL = self.primary_model
+        ai_router.settings.AI_VISION_PRIMARY_TIMEOUT = self.primary_timeout
+        ai_router.settings.AI_VISION_TIMEOUT = self.fallback_timeout
+
+    def test_primary_vision_model_gets_extended_timeout(self):
+        self.assertEqual(
+            ai_router._vision_timeout_for("deepseek-v4-flash-vision-exp", 100),
+            60,
+        )
+
+    def test_fallback_vision_model_keeps_shorter_timeout(self):
+        self.assertEqual(ai_router._vision_timeout_for("glm-4.6v-flash", 100), 20)
+
+    def test_remaining_budget_caps_provider_timeout(self):
+        self.assertEqual(
+            ai_router._vision_timeout_for("deepseek-v4-flash-vision-exp", 12.8),
+            12,
+        )
 
 
 class TestMigrationIdempotent(unittest.TestCase):

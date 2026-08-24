@@ -18,6 +18,18 @@ AI_NOT_CONFIGURED_MESSAGE = (
     "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL"
 )
 
+
+def _vision_timeout_for(model: str, budget: float) -> int:
+    """为首选视觉模型保留足够时间，同时受全局请求预算约束。"""
+    is_primary = model.strip().lower() == settings.AI_VISION_DS_MODEL.strip().lower()
+    limit = (
+        settings.AI_VISION_PRIMARY_TIMEOUT
+        if is_primary
+        else settings.AI_VISION_TIMEOUT
+    )
+    return max(1, min(limit, int(budget)))
+
+
 def _standard_tags() -> List[str]:
     conn = get_connection()
     try:
@@ -83,7 +95,7 @@ def ocr_image(body: AiOcrRequest):
             model=vision_model,
             base_url=vision_base_url,
             api_key=vision_api_key,
-            timeout=min(settings.AI_VISION_TIMEOUT, int(budget)),
+            timeout=_vision_timeout_for(vision_model, budget),
             instruction=body.instruction,
             reference_image_base64=body.reference_image_base64,
         )
@@ -211,7 +223,7 @@ def knowledge_from_image(body: AiOcrRequest):
             raise RuntimeError("整体识别预算耗尽")
         return ai_service.vision_extract_text(
             body.image_base64,
-            timeout=min(settings.AI_VISION_TIMEOUT, int(budget)),
+            timeout=_vision_timeout_for(vision_model, budget),
             instruction=body.instruction,
             model=vision_model,
             base_url=vision_base_url,
