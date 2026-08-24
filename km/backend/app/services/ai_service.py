@@ -29,6 +29,7 @@ def _chat(
     model: str | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
+    response_format: dict | None = None,
 ) -> str:
     if not is_configured():
         raise AiNotConfigured()
@@ -38,6 +39,8 @@ def _chat(
         "messages": messages,
         "temperature": 0.2,
     }
+    if response_format is not None:
+        payload["response_format"] = response_format
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -459,6 +462,7 @@ def ocr_image(
         {"role": "user", "content": content},
     ]
     if model:
+        json_mode = model.lower().startswith("deepseek-")
         return normalize_parsed(
             _extract_json(
                 _chat(
@@ -467,6 +471,7 @@ def ocr_image(
                     base_url=base_url or settings.AI_VISION_BASE_URL or None,
                     api_key=api_key or settings.AI_VISION_API_KEY or None,
                     timeout=timeout,
+                    response_format={"type": "json_object"} if json_mode else None,
                 )
             )
         )

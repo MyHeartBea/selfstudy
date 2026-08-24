@@ -233,6 +233,27 @@ class TestCapturePrompt(unittest.TestCase):
         self.assertEqual(len(images), 1)
         self.assertFalse(any("【补充要求】" in t for t in texts))
 
+    def test_deepseek_ocr_requests_json_mode(self):
+        captured = {}
+
+        def fake_chat(messages, **kw):
+            captured.update(kw)
+            return '{"question":"q"}'
+
+        original = ai_service._chat
+        ai_service._chat = fake_chat
+        try:
+            ai_service.ocr_image(
+                "AAAA",
+                model="deepseek-v4-flash-vision-exp",
+                base_url="https://api.deepseek.com/v1",
+                api_key="test-key",
+            )
+        finally:
+            ai_service._chat = original
+
+        self.assertEqual(captured["response_format"], {"type": "json_object"})
+
 
 class TestMigrationIdempotent(unittest.TestCase):
     def test_migration_sets_version_and_is_idempotent(self):

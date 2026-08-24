@@ -53,10 +53,12 @@ async function analyze() {
   } catch (err) {
     // 请求已静默（silent），错误提示统一由下方 aiWarning 呈现，避免与全局 toast 重复
     if (requestId !== analysisRequestId) return
+    const apiMessage = err?.response?.data?.message
+    const isBadGateway = err?.status === 502 || err?.response?.status === 502
     aiWarning.value =
-      err?.status === 502
-        ? 'AI 服务暂不可用（未配置或上游失败），已切换到手动整理模式，可稍后重试。'
-        : `AI 解析失败：${err?.response?.data?.message || err?.message || '未知错误'}，已切换到手动整理模式。`
+      isBadGateway
+        ? `AI 服务暂不可用：${apiMessage || '上游请求失败'}，已切换到手动整理模式，可稍后重试。`
+        : `AI 解析失败：${apiMessage || err?.message || '未知错误'}，已切换到手动整理模式。`
     parsed.value = createMistakeDraft(text.value)
     ocrRawText.value = ''
     formKey.value += 1
@@ -235,10 +237,12 @@ async function analyzeImage() {
   } catch (err) {
     // 请求已静默（silent），错误提示统一由下方 aiWarning 呈现
     if (requestId !== analysisRequestId) return
+    const apiMessage = err?.response?.data?.message
+    const isBadGateway = err?.status === 502 || err?.response?.status === 502
     aiWarning.value =
-      err?.status === 502
-        ? 'AI 服务暂不可用（未配置或上游失败），已切换到手动整理模式，可稍后重试。'
-        : `图片识别失败：${err?.response?.data?.message || err?.message || '未知错误'}，已切换到手动整理模式。`
+      isBadGateway
+        ? `AI 服务暂不可用：${apiMessage || '上游请求失败'}，已切换到手动整理模式，可稍后重试。`
+        : `图片识别失败：${apiMessage || err?.message || '未知错误'}，已切换到手动整理模式。`
     parsed.value = createMistakeDraft('')
     ocrRawText.value = ''
     formKey.value += 1
