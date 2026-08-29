@@ -365,7 +365,7 @@ onUnmounted(() => {
         v-model:page="page"
         v-model:page-size="pageSize"
         :total="total"
-        :sizes="[8, 20, 50]"
+        :sizes="[6]"
         @change="loadMistakes"
       />
     </div>

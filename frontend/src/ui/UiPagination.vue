@@ -60,7 +60,9 @@ function onSizeChange() {
         <Icon name="chevron-right" :size="14" />
       </button>
     </div>
+    <!-- 仅一个尺寸档时无需选择器 -->
     <UiSelect
+      v-if="sizes.length > 1"
       compact
       :model-value="pageSize"
       :options="sizes"
