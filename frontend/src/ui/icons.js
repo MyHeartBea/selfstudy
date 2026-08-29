@@ -1,0 +1,45 @@
+/** 内联 SVG 图标注册表：线性图标，1.8 描边，随 currentColor 变色。 */
+export const ICONS = {
+  list: '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1" fill="currentColor" stroke="none"/>',
+  'plus-circle': '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.34 6.06"/><path d="M20 5v6h-6"/>',
+  pencil: '<path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>',
+  layers: '<path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4a2 2 0 0 0-2-2H6.5A2.5 2.5 0 0 0 4 4.5v15Z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
+  sigma: '<path d="M18 6V4H6l6.5 8L6 20h12v-2"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M8 16v-5M13 16V8M18 16v-8"/>',
+  compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  check: '<path d="m4 12.5 5 5L20 6.5"/>',
+  'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  'chevron-left': '<path d="m15 18-6-6 6-6"/>',
+  'chevron-right': '<path d="m9 6 6 6-6 6"/>',
+  download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/>',
+  upload: '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 19h16"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5.5-5.5 3 3L16 12l4 4"/>',
+  alert: '<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4M12 17.5v.5"/>',
+  trash: '<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 7 7 20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l.5-13"/><path d="M10 11v6M14 11v6"/>',
+  pause: '<rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/>',
+  play: '<path d="M7 5.5v13a.8.8 0 0 0 1.2.7l10-6.5a.8.8 0 0 0 0-1.4l-10-6.5A.8.8 0 0 0 7 5.5Z"/>',
+  tag: '<path d="m3 12 9-9h7a2 2 0 0 1 2 2v7l-9 9a2 2 0 0 1-2.8 0L3 14.8a2 2 0 0 1 0-2.8Z"/><circle cx="16.5" cy="7.5" r="1.2"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  flame: '<path d="M12 3s5.5 4.5 5.5 9.5a5.5 5.5 0 0 1-11 0c0-2 1-3.8 2-5 .3 1.2 1 2.3 2 2.5C10 8 10.5 5 12 3Z"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
+  sparkles: '<path d="M12 4 13.8 9.2 19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8L12 4Z"/><path d="M19 3.5v3M17.5 5h3M5.5 17v3M4 18.5h3"/>',
+  inbox: '<path d="M3 13.5 5.5 5A2 2 0 0 1 7.4 3.5h9.2A2 2 0 0 1 18.5 5L21 13.5V18a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18v-4.5Z"/><path d="M3 13.5h5l1.2 2.3a1 1 0 0 0 .9.5h3.8a1 1 0 0 0 .9-.5l1.2-2.3h5"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  notebook: '<rect x="5" y="3" width="15" height="18" rx="2"/><path d="M9 3v18M5 8h4M5 12h4M5 16h4"/>',
+  arrowLeft: '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
+  filter: '<path d="M4 5h16l-6.5 8v5.5L10 20v-7L4 5Z"/>',
+  copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  external: '<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/>',
+}
+
+export function iconSvg(name, size = 18) {
+  const body = ICONS[name] || ICONS.inbox
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`
+}

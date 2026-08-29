@@ -1,6 +1,6 @@
 # Node
 node_modules/
-dist/
+frontend/dist/
 
 # Python
 __pycache__/
@@ -13,20 +13,11 @@ venv/
 .env.*
 !.env.example
 
-# Runtime data
-*.db
-*.sqlite
-*.sqlite3
-km/data/
+# Runtime data (SQLite + backups + images)
+data/
 
 # Logs
 *.log
-
-# Local browser and automation artifacts
-clipboard/
-edge-profile/
-edge-profile-review/
-effective-html/
 
 # Editors and OS
 .idea/
@@ -39,5 +30,5 @@ Thumbs.db
 .coverage.*
 htmlcov/
 
-dist.bak/
-
+# Local temp
+temp/

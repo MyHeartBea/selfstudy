@@ -1,0 +1,108 @@
+/* ============================================================
+   研错本 v2 · 设计令牌
+   概念：纸面 + 红笔批改。暖纸底色、墨色正文、红笔强调。
+   ============================================================ */
+
+:root {
+  /* 纸面 */
+  --bg: #f6f3ee;
+  --bg-soft: #efebe3;
+  --surface: #fffdf8;
+  --surface-2: #f8f5ee;
+
+  /* 墨色 */
+  --ink: #211d18;
+  --ink-2: #5b544a;
+  --ink-3: #93897a;
+
+  /* 线 */
+  --line: #e6e0d4;
+  --line-strong: #d4ccbc;
+
+  /* 红笔 */
+  --accent: #c2402a;
+  --accent-hover: #a83520;
+  --accent-soft: #f9e9e4;
+  --accent-ink: #9a3120;
+
+  /* 辅助色 */
+  --teal: #0e7568;
+  --teal-soft: #e2f1ee;
+  --gold: #a16207;
+  --gold-soft: #f7edd8;
+  --green: #1a7f42;
+  --green-soft: #e3f2e8;
+  --violet: #6d5bd0;
+  --violet-soft: #ebe7fa;
+  --blue: #2f6db3;
+  --blue-soft: #e5eef8;
+  --red: #c2402a;
+  --red-soft: #f9e9e4;
+
+  /* 阴影：纸片叠放感 */
+  --shadow-1: 0 0 0 0.5px color-mix(in srgb, var(--ink) 6%, transparent), 0 1px 2px rgba(33, 29, 24, 0.06);
+  --shadow-2: 0 0 0 0.5px color-mix(in srgb, var(--ink) 8%, transparent), 0 2px 4px rgba(33, 29, 24, 0.06), 0 16px 32px -20px rgba(33, 29, 24, 0.28);
+  --shadow-3: 0 0 0 0.5px color-mix(in srgb, var(--ink) 10%, transparent), 0 8px 16px rgba(33, 29, 24, 0.1), 0 32px 72px -28px rgba(33, 29, 24, 0.4);
+
+  /* 圆角：纸片更利落 */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+
+  /* 纸面格线（笔记本横线） */
+  --paper-line: rgba(33, 29, 24, 0.045);
+  --masthead-h: 62px;
+
+  /* 字体 */
+  --font-body: 'Inter', 'Segoe UI', system-ui, -apple-system, 'PingFang SC',
+    'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Georgia', 'Times New Roman', 'Source Han Serif SC',
+    'Noto Serif CJK SC', 'Songti SC', 'SimSun', serif;
+
+  /* 布局 */
+  --sidebar-w: 248px;
+  --topbar-h: 64px;
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --bg: #16130f;
+  --bg-soft: #1c1915;
+  --surface: #211d18;
+  --surface-2: #292420;
+
+  --ink: #ece6da;
+  --ink-2: #b3aa9a;
+  --ink-3: #7f766a;
+
+  --line: #34302a;
+  --line-strong: #453f36;
+
+  --accent: #e0604a;
+  --accent-hover: #ea7460;
+  --accent-soft: #38211c;
+  --accent-ink: #f0907e;
+
+  --teal: #4cb3a4;
+  --teal-soft: #173029;
+  --gold: #d0a03f;
+  --gold-soft: #332a17;
+  --green: #55ae74;
+  --green-soft: #1a2e20;
+  --violet: #9a8ae8;
+  --violet-soft: #272242;
+  --blue: #6b9fd4;
+  --blue-soft: #1c2a3a;
+  --red: #e0604a;
+  --red-soft: #38211c;
+
+  --shadow-1: 0 0 0 0.5px rgba(236, 230, 218, 0.07), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 0 0 0.5px rgba(236, 230, 218, 0.09), 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 36px -20px rgba(0, 0, 0, 0.7);
+  --shadow-3: 0 0 0 0.5px rgba(236, 230, 218, 0.12), 0 8px 16px rgba(0, 0, 0, 0.5), 0 32px 72px -28px rgba(0, 0, 0, 0.8);
+
+  --paper-line: rgba(236, 230, 218, 0.035);
+
+  color-scheme: dark;
+}
