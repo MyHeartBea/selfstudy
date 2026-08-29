@@ -96,10 +96,9 @@ const typeDonut = computed(() => {
 })
 const donutGrown = ref(false)
 
-function percentOf(count, items) {
-  // 预算每列表的最大值，避免每行重复扫描（O(n²) → O(n)）
-  const max = Math.max(1, ...(items || []).map((item) => item.count))
-  return Math.round((count / max) * 100)
+function percentOf(count, max) {
+  // max 为该列表预计算的最大值（见 subjectMax 等 computed）
+  return Math.round((count / Math.max(1, max)) * 100)
 }
 
 // 各分布列表的最大值只算一次
