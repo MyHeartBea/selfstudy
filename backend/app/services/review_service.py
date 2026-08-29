@@ -278,20 +278,14 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
         for level in range(6)
     ]
 
-    # 薄弱知识点：用递归 CTE 把 knowledge_tags 拆行后全量按标签聚合，
-    # 不再只统计 wrong_count 前 30 行错题，结果完整准确。
+    # 薄弱知识点：走 mistake_tag_map 索引联表聚合（该表由写入路径同步维护、
+    # 迁移时全量重建），替代对全表 knowledge_tags 的递归拆行。
     weak_rows = conn.execute(
-        "WITH RECURSIVE split(mistake_id, wrong_count, tag, rest) AS ("
-        "  SELECT id, wrong_count, '', knowledge_tags || ',' FROM mistakes WHERE wrong_count > 0"
-        "  UNION ALL"
-        "  SELECT mistake_id, wrong_count,"
-        "         substr(rest, 1, instr(rest, ',') - 1),"
-        "         substr(rest, instr(rest, ',') + 1)"
-        "  FROM split WHERE rest != ''"
-        ") "
-        "SELECT tag, COUNT(*) AS mistake_count, SUM(wrong_count) AS wrong_count "
-        "FROM split WHERE tag != '' GROUP BY tag "
-        "ORDER BY wrong_count DESC LIMIT 10"
+        "SELECT t.tag AS tag, COUNT(*) AS mistake_count, "
+        "COALESCE(SUM(m.wrong_count), 0) AS wrong_count "
+        "FROM mistake_tag_map t JOIN mistakes m ON m.id = t.mistake_id "
+        "WHERE m.wrong_count > 0 "
+        "GROUP BY t.tag ORDER BY wrong_count DESC LIMIT 10"
     ).fetchall()
     weakest_tags = [
         {"tag_name": row["tag"], "wrong_count": row["wrong_count"], "mistake_count": row["mistake_count"]}

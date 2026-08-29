@@ -97,9 +97,15 @@ const typeDonut = computed(() => {
 const donutGrown = ref(false)
 
 function percentOf(count, items) {
+  // 预算每列表的最大值，避免每行重复扫描（O(n²) → O(n)）
   const max = Math.max(1, ...(items || []).map((item) => item.count))
   return Math.round((count / max) * 100)
 }
+
+// 各分布列表的最大值只算一次
+const subjectMax = computed(() => Math.max(1, ...stats.value.by_subject.map((s) => s.count)))
+const subSubjectMax = computed(() => Math.max(1, ...stats.value.by_sub_subject.map((s) => s.count)))
+const sourceMax = computed(() => Math.max(1, ...(stats.value.by_source_type || []).map((s) => s.count)))
 
 async function loadStats() {
   loading.value = true
@@ -251,7 +257,7 @@ onMounted(loadStats)
         <div v-if="stats.by_source_type && stats.by_source_type.length">
           <div v-for="s in stats.by_source_type" :key="s.source_type" class="bar-row">
             <div class="bar-name">{{ s.name }}</div>
-            <UiProgress :percentage="percentOf(s.count, stats.by_source_type)" :color="sourceTypeColor(s.source_type)" />
+            <UiProgress :percentage="percentOf(s.count, sourceMax)" :color="sourceTypeColor(s.source_type)" />
             <div class="bar-nums">{{ s.count }} 题</div>
           </div>
         </div>
@@ -263,7 +269,7 @@ onMounted(loadStats)
       <h3 class="panel-title">各科目统计</h3>
       <div v-for="s in stats.by_subject" :key="s.subject_id" class="bar-row">
         <div class="bar-name">{{ s.name }}</div>
-        <UiProgress :percentage="percentOf(s.count, stats.by_subject)" :color="subjectColor(s.subject_id)" />
+        <UiProgress :percentage="percentOf(s.count, subjectMax)" :color="subjectColor(s.subject_id)" />
         <div class="bar-nums">
           {{ s.count }} 题 <span class="avg">均难 {{ Number(s.avg_difficulty).toFixed(1) }}</span>
         </div>
@@ -326,7 +332,7 @@ onMounted(loadStats)
       <h3 class="panel-title">各二级科目统计</h3>
       <div v-for="s in stats.by_sub_subject" :key="s.sub_subject_id" class="bar-row">
         <div class="bar-name">{{ s.subject_name }} · {{ s.name }}</div>
-        <UiProgress :percentage="percentOf(s.count, stats.by_sub_subject)" :color="subjectColor(s.subject_id)" />
+        <UiProgress :percentage="percentOf(s.count, subSubjectMax)" :color="subjectColor(s.subject_id)" />
         <div class="bar-nums">
           {{ s.count }} 题 <span class="avg">均难 {{ Number(s.avg_difficulty).toFixed(1) }}</span>
         </div>

@@ -9,7 +9,6 @@ import request from '../api/request'
 import { useCountUp } from '../utils/useCountUp'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
-import { iconSvg } from '../ui/icons'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
@@ -65,6 +64,11 @@ function debouncedSearch() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(searchList, 300)
 }
+
+onUnmounted(() => {
+  // 组件卸载后不再触发搜索请求，避免定时器泄漏
+  if (searchTimer) clearTimeout(searchTimer)
+})
 
 // —— 新增/编辑 ——
 const editVisible = ref(false)

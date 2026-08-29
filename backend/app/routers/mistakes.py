@@ -118,12 +118,10 @@ def judge_mistake(mistake_id: int, body: JudgeRequest):
         question_type = mistake.get("question_type") or "choice"
         if question_type == "choice":
             # 与填空题同一套归一化口径：全角/空白/大小写变体都能正确判对
-            from app.services.answer_service import normalize_answer
-
             correct = (
-                normalize_answer(body.user_answer)
-                == normalize_answer(mistake.get("correct_answer") or "")
-                and normalize_answer(body.user_answer) != ""
+                answer_service.normalize_answer(body.user_answer)
+                == answer_service.normalize_answer(mistake.get("correct_answer") or "")
+                and answer_service.normalize_answer(body.user_answer) != ""
             )
             return ok(
                 {
@@ -133,25 +131,11 @@ def judge_mistake(mistake_id: int, body: JudgeRequest):
                 }
             )
         if question_type == "multi":
-            # 多选题：提取 A-D 字母，排序后比对（全对才得分，与考研评分规则一致）
-            import re as _re
-
-            def letters(value: str) -> List[str]:
-                return sorted(set(_re.findall(r"[A-Da-d]", value or "")))
-
-            user_letters = letters(body.user_answer)
-            expected_letters = letters(mistake.get("correct_answer") or "")
-            correct = (
-                bool(user_letters)
-                and [c.upper() for c in user_letters] == [c.upper() for c in expected_letters]
-            )
+            # 政治多选：全对才得分，与选项顺序无关（口径统一在 answer_service）
             return ok(
-                {
-                    "correct": correct,
-                    "user_answer": "".join(user_letters),
-                    "expected": "".join(expected_letters),
-                    "aliases": mistake.get("answer_aliases") or [],
-                }
+                answer_service.judge_multi(
+                    body.user_answer, mistake.get("correct_answer") or ""
+                )
             )
         if question_type == "fill":
             result = answer_service.judge_fill(

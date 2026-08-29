@@ -33,8 +33,6 @@ const dialogVisible = ref(false)
 const detailVisible = ref(false)
 const detailItem = ref(null)
 const memorizeVisible = ref(false)
-const memorizeIndex = ref(0)
-const memorizeRevealed = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
 const form = reactive({
@@ -123,13 +121,6 @@ function markRecite(known) {
     reciteQueue.value.push(reciteQueue.value.shift())
   }
   reciteRevealed.value = false
-}
-
-function moveMemorize(step) {
-  const total = filteredItems.value.length
-  if (!total) return
-  memorizeIndex.value = (memorizeIndex.value + step + total) % total
-  memorizeRevealed.value = false
 }
 
 function openEdit(item) {

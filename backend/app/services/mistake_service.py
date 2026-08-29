@@ -218,15 +218,15 @@ def build_mistake_fields(
             else:
                 correct_answer = upper
     elif question_type == "multi":
-        # 政治多选：正确答案是 1-4 个字母（去重排序后存库）
-        import re as _re
+        # 政治多选：正确答案是 1-4 个字母（去重排序后存库），口径与判分一致
+        from app.services.answer_service import normalize_multi_answer
 
-        letters = sorted(set(_re.findall(r"[A-Da-d]", correct_answer)))
-        if not letters:
+        normalized = normalize_multi_answer(correct_answer)
+        if not normalized:
             errors.append("多选题必须填写正确答案（如 ABD）")
             correct_answer = None
         else:
-            correct_answer = "".join(c.upper() for c in letters)
+            correct_answer = normalized
 
     aliases = normalize_tags(body.get("answer_aliases"))
 
@@ -424,7 +424,6 @@ def get_mistake_detail(conn: sqlite3.Connection, mistake_id: int) -> Optional[di
     data["knowledge_extra"] = knowledge_extra
     data["related_knowledge"] = related_knowledge
     data["related_mistakes"] = related_mistakes
-    import json as _json
 
     grade_row = conn.execute(
         "SELECT id, score, verdict, created_at, errors, strengths, "
@@ -437,7 +436,7 @@ def get_mistake_detail(conn: sqlite3.Connection, mistake_id: int) -> Optional[di
         for column in ("errors", "strengths", "alternate_methods"):
             raw = grade.get(column) or ""
             try:
-                grade[column] = _json.loads(raw) if raw else []
+                grade[column] = json.loads(raw) if raw else []
             except (TypeError, ValueError):
                 grade[column] = []
         data["last_grade"] = grade

@@ -43,7 +43,6 @@ const currentKind = computed(() => subjectKind(form.subject_id))
 const typeOptions = computed(() => questionTypesForKind(currentKind.value))
 const approachPresets = computed(() => approachPresetsForKind(currentKind.value))
 const isMulti = computed(() => form.question_type === 'multi')
-const isEnglishKind = computed(() => currentKind.value === 'english')
 
 // 科目切换后若当前题型不可用则回落到该科目第一项
 watch(currentKind, () => {

@@ -7,6 +7,7 @@ export const baseData = reactive({
   subSubjects: [],
   subjectMap: {},
   subSubjectMap: {},
+  kindMap: {},
 })
 
 // 模块级加载缓存：Layout 与 PracticeView 等重复调用时只发一次请求
@@ -24,8 +25,10 @@ export function loadBaseData() {
         baseData.subSubjects = subSubjectRes.data.data || []
         baseData.subjectMap = {}
         baseData.subSubjectMap = {}
+        baseData.kindMap = {}
         baseData.subjects.forEach((item) => {
           baseData.subjectMap[item.id] = item.name
+          baseData.kindMap[item.id] = item.kind || ''
         })
         baseData.subSubjects.forEach((item) => {
           baseData.subSubjectMap[item.id] = item.name
@@ -49,8 +52,8 @@ export function subSubjectName(id) {
 
 /** 科目类型（math/english/politics/cs/generic），驱动按科目定制的题型与交互。 */
 export function subjectKind(id) {
-  const subject = baseData.subjects.find((item) => item.id === id)
-  return subject?.kind || ''
+  // O(1) Map 查找；列表页每张卡片都会调用
+  return baseData.kindMap[id] || ''
 }
 
 export function subjectColor(id) {
@@ -134,6 +137,15 @@ export function approachPresetsForKind(kind) {
   }
   return []
 }
+
+/** 全局题型筛选项（跨科目筛选场景使用，录入表单请用 questionTypesForKind）。 */
+export const questionTypeFilterOptions = [
+  { label: '选择题', value: 'choice' },
+  { label: '多选题', value: 'multi' },
+  { label: '填空题', value: 'fill' },
+  { label: '翻译', value: 'translation' },
+  { label: '解答题', value: 'solution' },
+]
 
 export function formatTime(value) {
   if (!value) return ''

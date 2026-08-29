@@ -1,4 +1,4 @@
-"""填空题答案判断：规范化、别名匹配与数值容差。"""
+"""填空题/多选题答案判断：规范化、别名匹配与数值容差。"""
 
 import re
 import unicodedata
@@ -7,6 +7,8 @@ from typing import List, Optional
 
 PUNCTUATION = set("，。；：、！？“”‘’（）()【】[]《》〈〉·…—")
 NUMERIC_RE = re.compile(r"^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$")
+# 多选题答案只取 A-D 字母；模块级预编译，避免每次判分重复编译
+MULTI_LETTERS_RE = re.compile(r"[A-Da-d]")
 
 
 def normalize_answer(value: str) -> str:
@@ -69,4 +71,26 @@ def judge_fill(
         "expected": expected or "",
         "aliases": aliases or [],
         "normalized_user": normalize_answer(user_answer),
+    }
+
+
+def _multi_letters(value: str) -> List[str]:
+    """提取答案中的 A-D 字母，去重排序（多选判分的统一口径）。"""
+    return sorted({m.upper() for m in MULTI_LETTERS_RE.findall(value or "")})
+
+
+def normalize_multi_answer(value: str) -> str:
+    """把多选答案归一为排序后的字母串（如 "dba" → "ABD"），供入库校验共用。"""
+    return "".join(_multi_letters(value))
+
+
+def judge_multi(user_answer: str, expected: str) -> dict:
+    """返回政治多选题判断结果：少选、错选、多选均不得分，与选项顺序无关。"""
+    user_letters = _multi_letters(user_answer)
+    expected_letters = _multi_letters(expected)
+    return {
+        "correct": bool(user_letters) and user_letters == expected_letters,
+        "user_answer": "".join(user_letters),
+        "expected": "".join(expected_letters),
+        "aliases": [],
     }

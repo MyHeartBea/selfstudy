@@ -6,6 +6,8 @@
 - 不认识（unknown）：mastery 归 0，立即再进队列
 """
 
+import random
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -134,7 +136,7 @@ def delete_vocab(conn: sqlite3.Connection, vocab_id: int) -> bool:
 
 def get_due_vocab(conn: sqlite3.Connection, limit: int = 30) -> List[dict]:
     """今日到期（或从未安排）的生词，优先掌握度低的，随机顺序防位置记忆。"""
-    start, end = local_day_bounds_utc()
+    _, end = local_day_bounds_utc()
     rows = conn.execute(
         """
         SELECT * FROM vocab_items
@@ -146,8 +148,6 @@ def get_due_vocab(conn: sqlite3.Connection, limit: int = 30) -> List[dict]:
         (end, limit * 3),
     ).fetchall()
     items = [vocab_to_dict(row) for row in rows]
-    import random
-
     random.shuffle(items)
     return items[:limit]
 
@@ -197,15 +197,13 @@ def review_vocab(conn: sqlite3.Connection, vocab_id: int, result: str) -> Option
     elif result == "fuzzy":
         interval = 1
     else:
-        interval = 0  # 立即再进队列
+        interval = 0  # unknown：next_review 置空，立即再进队列
 
     next_review = None
     if interval > 0:
         next_review = (datetime.utcnow() + timedelta(days=interval)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-    elif interval == 0 and result != "unknown":
-        next_review = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
     conn.execute(
         """
@@ -241,8 +239,6 @@ def import_vocab(
         text = (raw or "").strip()
         if not text:
             continue
-        import re
-
         parts = (
             re.split(r"\s*[-—=]+\s*|\t|\s{2,}|,\s*", text, maxsplit=1)
             if len(text) > 1

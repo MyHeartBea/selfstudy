@@ -3,7 +3,7 @@
 import { onMounted, reactive, ref, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { baseData, loadBaseData, sourceTypes } from '../composables/useBaseData'
+import { baseData, loadBaseData, questionTypeFilterOptions, sourceTypes } from '../composables/useBaseData'
 import { useSubSubject } from '../composables/useSubSubject'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
@@ -159,13 +159,7 @@ onMounted(loadBaseData)
           <label class="f-label">题型</label>
           <UiSelect
             v-model="filters.questionType"
-            :options="[
-              { label: '选择题', value: 'choice' },
-              { label: '多选题', value: 'multi' },
-              { label: '填空题', value: 'fill' },
-              { label: '翻译', value: 'translation' },
-              { label: '解答题', value: 'solution' },
-            ]"
+            :options="questionTypeFilterOptions"
             placeholder="全部题型"
             clearable
           />

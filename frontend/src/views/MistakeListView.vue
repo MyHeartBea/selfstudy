@@ -6,11 +6,12 @@
  * - 筛选条件同步到 URL（刷新/分享不丢）
  * - 批量操作 / 导入导出 / 详情弹窗
  */
-import { onMounted, onUnmounted, reactive, ref, toRef, watch } from 'vue'
+import { onMounted, onUnmounted, ref, toRef, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 import {
   baseData,
+  questionTypeFilterOptions,
   questionTypeName,
   sourceTypeName,
   sourceTypes,
@@ -229,13 +230,7 @@ onUnmounted(() => {
           </div>
           <UiSelect
             v-model="filters.questionType"
-            :options="[
-              { label: '选择题', value: 'choice' },
-              { label: '多选题', value: 'multi' },
-              { label: '填空题', value: 'fill' },
-              { label: '翻译', value: 'translation' },
-              { label: '解答题', value: 'solution' },
-            ]"
+            :options="questionTypeFilterOptions"
             placeholder="全部题型"
             clearable
             compact

@@ -35,13 +35,20 @@ def get_stats(conn: sqlite3.Connection) -> dict:
         "SELECT question_type, COUNT(*) AS count FROM mistakes GROUP BY question_type"
     ).fetchall()
     type_map = {row["question_type"]: row["count"] for row in type_rows}
+    # 五类题型全部输出（含 0 值），新增题型时前端环形图自动跟随
     by_question_type = [
         {
             "question_type": key,
             "name": name,
             "count": type_map.get(key, 0),
         }
-        for key, name in (("choice", "选择题"), ("fill", "填空题"), ("solution", "解答题"))
+        for key, name in (
+            ("choice", "选择题"),
+            ("multi", "多选题"),
+            ("fill", "填空题"),
+            ("translation", "翻译"),
+            ("solution", "解答题"),
+        )
     ]
     source_rows = conn.execute(
         "SELECT source_type, COUNT(*) AS count FROM mistakes GROUP BY source_type"
