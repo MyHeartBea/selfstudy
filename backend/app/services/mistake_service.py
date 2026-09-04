@@ -296,6 +296,20 @@ def build_mistake_fields(
         "source_name": source_name,
         "images": images,
         "images_text": json.dumps(images, ensure_ascii=False),
+        "passage_text": str(body.get("passage_text") or "").strip(),
+        "passage_translation": str(body.get("passage_translation") or "").strip(),
+        "english_sentences_text": json.dumps(
+            body.get("english_sentences") or [], ensure_ascii=False
+        ),
+        "english_phrases_text": json.dumps(
+            body.get("english_phrases") or [], ensure_ascii=False
+        ),
+        "english_words_text": json.dumps(
+            body.get("english_words") or [], ensure_ascii=False
+        ),
+        "english_questions_text": json.dumps(
+            body.get("english_questions") or [], ensure_ascii=False
+        ),
     }, []
 
 

@@ -27,5 +27,12 @@ export function createMistakeDraft(question = '') {
     source_year: '',
     source_name: '',
     images: [],
+    // 英语整篇精读（可选）：挂在错题上的附加内容
+    passage_text: '',
+    passage_translation: '',
+    english_sentences: [],
+    english_phrases: [],
+    english_words: [],
+    english_questions: [],
   }
 }

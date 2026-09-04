@@ -3,6 +3,7 @@
 import { computed } from 'vue'
 
 import MathText from './MathText.vue'
+import RichText from './RichText.vue'
 import MistakeMeta from './MistakeMeta.vue'
 import QuestionImages from './QuestionImages.vue'
 import { formatTime } from '../composables/useBaseData'
@@ -33,7 +34,7 @@ const optionList = computed(() => {
 
     <div class="question-block">
       <QuestionImages :images="detail.images" />
-      <MathText :text="detail.question" />
+      <RichText :text="detail.question" />
     </div>
 
     <template v-if="detail.question_type === 'choice'">
@@ -66,7 +67,7 @@ const optionList = computed(() => {
 
     <div v-if="detail.analysis" class="analysis-block">
       <div class="block-label">解析</div>
-      <MathText :text="detail.analysis" />
+      <RichText :text="detail.analysis" />
     </div>
 
     <div class="info-grid">

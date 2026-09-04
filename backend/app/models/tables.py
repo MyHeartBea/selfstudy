@@ -40,6 +40,13 @@ CREATE TABLE IF NOT EXISTS mistakes (
     next_review_at DATETIME,
     review_paused INTEGER DEFAULT 0,
     images TEXT,
+    -- 英语整篇精读（可选）：解析后挂在一条错题上，供详情/复习回看
+    passage_text TEXT,
+    passage_translation TEXT,
+    english_sentences TEXT,
+    english_phrases TEXT,
+    english_words TEXT,
+    english_questions TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -102,6 +109,7 @@ CREATE TABLE IF NOT EXISTS vocab_items (
     example TEXT DEFAULT '',
     note TEXT DEFAULT '',
     source TEXT DEFAULT '',
+    kind TEXT DEFAULT 'word',
     mastery_level INTEGER DEFAULT 0,
     review_count INTEGER DEFAULT 0,
     wrong_count INTEGER DEFAULT 0,
@@ -165,10 +173,20 @@ MISTAKE_COLUMNS = (
     "source_year",
     "source_name",
     "images",
+    "passage_text",
+    "passage_translation",
+    "english_sentences",
+    "english_phrases",
+    "english_words",
+    "english_questions",
 )
 
 MISTAKE_FIELD_KEYS = {
     "knowledge_tags": "knowledge_tags_text",
     "answer_aliases": "answer_aliases_text",
     "images": "images_text",
+    "english_sentences": "english_sentences_text",
+    "english_phrases": "english_phrases_text",
+    "english_words": "english_words_text",
+    "english_questions": "english_questions_text",
 }

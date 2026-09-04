@@ -1,18 +1,57 @@
 """AI 解析接口：题干解析、图片识别、知识点自动总结。"""
 
 import time
-from fastapi import APIRouter, Depends
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from fastapi import APIRouter, Depends, Query
 from typing import List
 
 from app.config import settings
 from app.database import get_connection
 from app.responses import error, ok
-from app.schemas import AiAnalyzeRequest, AiOcrRequest
+from app.schemas import AiAnalyzeRequest, AiEnglishRequest, AiOcrRequest
 from app.security import ai_rate_limit
 from app.services import ai_service, local_ocr
 from app.services.ai_service import AiNotConfigured, AiRequestError
 
 router = APIRouter(prefix="/api/ai", tags=["AI"])
+
+# 视觉模型并发执行器：knowledge-from-image 会并行尝试多个视觉通道
+_VISION_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="km-vision")
+
+# 科目提示词 → (科目关键词, 缺省二级科目名)
+_SUBJECT_MAP = [
+    ("数学", "数学", "高等数学"),
+    ("英语", "英语", "阅读理解"),
+    ("政治", "政治", "马克思主义基本原理"),
+    ("408", 408, "计算机网络"),
+    ("计算机", "计算机", "计算机网络"),
+]
+
+
+def _auto_subject_ids(conn, hint: str):
+    """根据 subject_hint（如'数学'/'408'/'英语'）映射到 subject_id + 缺省二级科目 id。"""
+    hint = str(hint or "").strip().lower()
+    for kw, subj_kw, default_sub in _SUBJECT_MAP:
+        if kw.lower() in hint:
+            row = conn.execute(
+                "SELECT id FROM subjects WHERE name LIKE ? LIMIT 1", (f"%{subj_kw}%",)
+            ).fetchone()
+            if row is None:
+                return None, None
+            subject_id = row["id"]
+            sub = conn.execute(
+                "SELECT id FROM sub_subjects WHERE subject_id=? AND name=? LIMIT 1",
+                (subject_id, default_sub),
+            ).fetchone()
+            sub_id = sub["id"] if sub else None
+            if sub_id is None:
+                s = conn.execute(
+                    "SELECT id FROM sub_subjects WHERE subject_id=? ORDER BY id LIMIT 1",
+                    (subject_id,),
+                ).fetchone()
+                sub_id = s["id"] if s else None
+            return subject_id, sub_id
+    return None, None
 
 AI_NOT_CONFIGURED_MESSAGE = (
     "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL"
@@ -45,6 +84,19 @@ def _standard_tags() -> List[str]:
         conn.close()
 
 
+def _apply_auto_subject(result: dict) -> None:
+    """根据解析结果里的 subject_hint，自动填入 subject_id / sub_subject_id。"""
+    conn = get_connection()
+    try:
+        sid, sub_id = _auto_subject_ids(conn, result.get("subject_hint"))
+        if sid:
+            result["subject_id"] = sid
+            if sub_id:
+                result["sub_subject_id"] = sub_id
+    finally:
+        conn.close()
+
+
 def _ai_error_message(exc: Exception) -> str:
     if isinstance(exc, AiNotConfigured):
         return AI_NOT_CONFIGURED_MESSAGE
@@ -57,13 +109,21 @@ def _ai_error_message(exc: Exception) -> str:
 def analyze_text(body: AiAnalyzeRequest):
     """根据题干文本自动解析选项、答案、解析与知识点标签。"""
     try:
-        return ok(
-            ai_service.analyze_text(
-                body.text,
-                standard_tags=_standard_tags(),
-                instruction=body.instruction,
-            )
+        result = ai_service.analyze_text(
+            body.text,
+            standard_tags=_standard_tags(),
+            instruction=body.instruction,
         )
+        conn = get_connection()
+        try:
+            sid, sub_id = _auto_subject_ids(conn, result.get("subject_hint"))
+            if sid:
+                result["subject_id"] = sid
+                if sub_id:
+                    result["sub_subject_id"] = sub_id
+        finally:
+            conn.close()
+        return ok(result)
     except Exception as exc:
         return error(502, _ai_error_message(exc))
 
@@ -111,6 +171,7 @@ def ocr_image(body: AiOcrRequest):
             parsed["method"] = "vision"
             parsed["raw_text"] = ""
             parsed["vision_model"] = provider[0]
+            _apply_auto_subject(parsed)
             return ok(parsed, "视觉模型识别完成")
         except Exception as exc:
             last_vision_error = str(exc)
@@ -166,6 +227,61 @@ def ocr_image(body: AiOcrRequest):
                     "当前 AI 模型也不支持图片，请配置支持图片的模型"
                 )
         return error(502, message)
+
+
+@router.post("/english", dependencies=[Depends(ai_rate_limit)])
+def english_analysis(body: AiEnglishRequest):
+    """英语整篇精读：支持多张图片（原文段落 + 选项）或粘贴文本。
+
+    自动检测是否为英语阅读：是则返回英语整篇结构（原文/翻译/句子拆解/短语/生词 + 题目解析）；
+    否则返回通用错题结构（is_english=false），供前端降级到普通录入。
+    """
+    started = time.monotonic()
+    # 标准标签只查一次
+    standard_tags = _standard_tags()
+    budget = settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started)
+    timeout = max(5, int(min(settings.AI_TIMEOUT, budget)))
+    try:
+        parsed = ai_service.analyze_english(
+            body.images,
+            text=body.text,
+            standard_tags=standard_tags,
+            instruction=body.instruction,
+            timeout=timeout,
+        )
+        parsed["method"] = "vision" if body.images else "text"
+        # 自动识别并填入 科目/二级科目（英语→阅读、数学→高数、408→计网等）
+        if parsed.get("is_english") and not parsed.get("subject_hint"):
+            parsed["subject_hint"] = "英语"
+        conn = get_connection()
+        try:
+            sid, sub_id = _auto_subject_ids(conn, parsed.get("subject_hint"))
+            if sid:
+                parsed["subject_id"] = sid
+                if sub_id:
+                    parsed["sub_subject_id"] = sub_id
+        finally:
+            conn.close()
+        return ok(parsed, "英语整篇解析完成")
+    except AiNotConfigured:
+        return error(400, AI_NOT_CONFIGURED_MESSAGE)
+    except AiRequestError as exc:
+        return error(502, str(exc))
+    except Exception as exc:
+        return error(502, f"AI 服务调用失败：{exc}")
+
+
+@router.get("/sense")
+def word_sense(word: str = Query(..., min_length=1, max_length=60)):
+    """点词查义：用 AI 解释任意英语单词，返回多词性释义。"""
+    try:
+        return ok(ai_service.lookup_word(word))
+    except AiNotConfigured:
+        return error(400, AI_NOT_CONFIGURED_MESSAGE)
+    except AiRequestError as exc:
+        return error(502, str(exc))
+    except Exception as exc:
+        return error(502, f"AI 服务调用失败：{exc}")
 
 
 def _vision_providers() -> List[tuple]:

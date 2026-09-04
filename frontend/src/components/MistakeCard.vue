@@ -6,9 +6,11 @@
  * - 底部信息最多三项，逐项省略
  * - 保留 3D 倾斜 + 光泽 hover
  */
+import { computed } from 'vue'
 import { formatTime } from '../composables/useBaseData'
 import MistakeMeta from './MistakeMeta.vue'
 import MathText from './MathText.vue'
+import RichText from './RichText.vue'
 import QuestionImages from './QuestionImages.vue'
 import UiStars from '../ui/UiStars.vue'
 import UiTag from '../ui/UiTag.vue'
@@ -54,6 +56,21 @@ function onCardLeave(event) {
 function onCheckboxChange(checked) {
   emit('toggle-select', props.mistake.id, checked)
 }
+
+// 英语整篇：卡片预览用原文前 1-2 句，并显示该篇题目数量
+const englishQuestionCount = computed(() => {
+  const m = props.mistake
+  if (!m || m.passage_text === undefined) return 0
+  return 1 + ((m.english_questions || []).length)
+})
+const cardText = computed(() => {
+  const m = props.mistake
+  if (m.passage_text) {
+    const sents = String(m.passage_text).split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
+    return sents.slice(0, 2).join(' ') || m.passage_text
+  }
+  return m.question || ''
+})
 </script>
 
 <template>
@@ -86,7 +103,11 @@ function onCheckboxChange(checked) {
     <QuestionImages :images="mistake.images" :max-width="260" />
 
     <div class="question-text">
-      <MathText :text="mistake.question" />
+      <template v-if="mistake.passage_text">
+        <p class="passage-preview">{{ cardText }}</p>
+        <span v-if="englishQuestionCount > 1" class="passage-count">英语整篇 · 共 {{ englishQuestionCount }} 题</span>
+      </template>
+      <RichText v-else :text="mistake.question" />
     </div>
 
     <div
@@ -179,9 +200,19 @@ function onCheckboxChange(checked) {
   );
   border-radius: 2px;
 }
+.passage-preview { margin: 0; line-height: 1.8; }
+.passage-count {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
 
-.tag-row {
-  display: flex;
+.tag-row {  display: flex;
   flex-wrap: wrap;
   gap: 5px;
   align-items: center;

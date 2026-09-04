@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 
 import request from '../api/request'
 import MistakeForm from '../components/MistakeForm.vue'
+import EnglishAnalysisPanel from '../components/EnglishAnalysisPanel.vue'
 import { getClipboardImage } from '../utils/clipboard'
 import { createMistakeDraft } from '../composables/mistakeDraft'
 import { toast } from '../ui/toast'
@@ -25,6 +26,8 @@ const previewImage = ref('')
 const imageBase64 = ref('')
 const referenceImage = ref('')
 const referenceBase64 = ref('')
+const moreImages = ref([]) // 英语整篇多张原文/选项图（附加主图）
+const pasteTarget = ref('main') // 下张粘贴目标：main=继续加主图 / reference=参考图
 const ocrRawText = ref('')
 const aiWarning = ref('')
 const readerRef = ref(null)
@@ -89,6 +92,7 @@ function useManualImage() {
   analyzingText.value = ''
   parsed.value = createMistakeDraft('')
   ocrRawText.value = ''
+  moreImages.value = []
   formKey.value += 1
 }
 
@@ -102,6 +106,11 @@ function onFileChange(event) {
 function handleImageFile(file) {
   if (!file || !file.type.startsWith('image/')) {
     toast.warning('剪贴板内容不是图片，请重新截图后粘贴')
+    return
+  }
+  // 已有主图时，后续图片自动追加为英语整篇的原文/选项图
+  if (previewImage.value) {
+    addMoreImage(file)
     return
   }
   // 粘贴/选择后先暂存预览，等待用户补充要求或参考图片后再点击分析
@@ -128,12 +137,35 @@ function handleImageFile(file) {
   reader.readAsDataURL(file)
 }
 
+function addMoreImage(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    toast.warning('图片格式不正确，请重新选择')
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    const preview = String(reader.result)
+    moreImages.value.push({
+      preview,
+      base64: String(reader.result).split(',')[1] || String(reader.result),
+    })
+    toast.success('已添加图片，可继续追加或开始识别')
+  }
+  reader.onerror = () => toast.error('图片读取失败')
+  reader.readAsDataURL(file)
+}
+
+function removeMoreImage(index) {
+  moreImages.value.splice(index, 1)
+}
+
 function removeMainImage() {
   analysisRequestId += 1
   analyzing.value = false
   analyzingText.value = ''
   previewImage.value = ''
   imageBase64.value = ''
+  moreImages.value = []
   parsed.value = null
   ocrRawText.value = ''
   aiWarning.value = ''
@@ -191,13 +223,21 @@ function onPaste(event) {
   if (!file) return
   event.preventDefault()
   activeTab.value = 'image'
-  // 主图已就绪时，再次粘贴的图片自动作为参考图（按图中思路解题）
-  if (previewImage.value) {
+  // 主图未就绪 → 作为主图；已就绪时按当前「粘贴目标」分流：主图(继续追加)或参考图
+  if (!previewImage.value) {
+    handleImageFile(file)
+  } else if (pasteTarget.value === 'reference' && !referenceBase64.value) {
     stageReferenceFile(file)
     toast.success('已添加为参考图片（按图中思路解题）')
   } else {
-    handleImageFile(file)
+    addMoreImage(file)
+    toast.success('已添加为第 ' + (moreImages.value.length + 1) + ' 张图片，可继续追加')
   }
+}
+
+function setPasteTarget(target) {
+  pasteTarget.value = target
+  toast.info(target === 'reference' ? '下一张粘贴将作为参考图' : '下一张粘贴将作为主图')
 }
 
 async function analyzeImage() {
@@ -207,25 +247,40 @@ async function analyzeImage() {
   }
   const requestId = ++analysisRequestId
   analyzing.value = true
-  analyzingText.value = '正在调用视觉模型识别图片并生成解析，约需 30-60 秒，请稍候…'
+  analyzingText.value = '正在识别图片并解析，约需 30-90 秒，请稍候…'
   try {
-    const res = await request.post(
-      '/ai/ocr',
-      {
-        image_base64: imageBase64.value,
-        instruction: imageInstruction.value,
-        reference_image_base64: referenceBase64.value,
-      },
-      { silent: true },
-    )
+    let res
+    if (referenceBase64.value) {
+      // 有参考图：走通用 OCR（按图中思路解题）
+      res = await request.post(
+        '/ai/ocr',
+        {
+          image_base64: imageBase64.value,
+          instruction: imageInstruction.value,
+          reference_image_base64: referenceBase64.value,
+        },
+        { silent: true },
+      )
+    } else {
+      // 单图/多图都走自动检测：英语整篇→精读，数学等→回落标准
+      const images = [imageBase64.value, ...moreImages.value.map((m) => m.base64)]
+      res = await request.post(
+        '/ai/english',
+        {
+          images,
+          instruction: imageInstruction.value,
+        },
+        { silent: true },
+      )
+    }
     if (requestId !== analysisRequestId) return
     parsed.value = res.data.data
-    // 识别成功后保留原图（拓扑图/电路图等图形题题干需要展示原图）
-    if (
-      previewImage.value &&
-      !(parsed.value.images && parsed.value.images.length)
-    ) {
-      parsed.value.images = [previewImage.value]
+    // 识别成功后保留全部原图（长题多张截图都保留，列表/详情才能看到完整题目）
+    if (previewImage.value && !(parsed.value.images && parsed.value.images.length)) {
+      parsed.value.images = [
+        previewImage.value,
+        ...moreImages.value.map((m) => m.preview),
+      ]
     }
     ocrRawText.value =
       parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
@@ -237,7 +292,11 @@ async function analyzeImage() {
         ? ocrMessage
         : ''
     formKey.value += 1
-    toast.success('图片识别完成，请核对后点击提交；保存后才会出现在错题列表')
+    toast.success(
+      parsed.value.is_english
+        ? '英语整篇已解析：可点词查义、勾选生词入生词本，确认后保存'
+        : '图片识别完成，请核对后点击提交；保存后才会出现在错题列表',
+    )
   } catch (err) {
     // 请求已静默（silent），错误提示统一由下方 aiWarning 呈现
     if (requestId !== analysisRequestId) return
@@ -260,6 +319,31 @@ async function analyzeImage() {
 
 function onSubmitted() {
   router.push('/mistakes')
+}
+
+// 英语整篇录入成功后跳转错题列表
+function onEnglishSaved() {
+  router.push('/mistakes')
+}
+
+// 英语多题：把某一题移为当前保存题（从多题池移除，保留整篇附加内容）
+function onSaveQuestion(qIndex) {
+  const cur = parsed.value
+  if (!cur) return
+  const qs = cur.english_questions || []
+  // 面板 questions 里 index>=1 的来自 english_questions[qIndex-1]
+  const srcIndex = qIndex >= 1 ? qIndex - 1 : -1
+  if (srcIndex < 0 || srcIndex >= qs.length) return
+  const q = qs.splice(srcIndex, 1)[0]
+  const merged = {
+    ...cur,
+    ...q,
+    english_questions: qs,
+    is_english: true,
+  }
+  parsed.value = merged
+  formKey.value += 1
+  toast.success(`已切换到第 ${qIndex + 1} 题，请在下方核对后保存`)
 }
 
 onMounted(() => {
@@ -345,10 +429,30 @@ onUnmounted(() => {
           <UiButton v-if="previewImage" variant="outline" @click="removeMainImage">移除图片</UiButton>
           <UiButton variant="outline" @click="useManualImage">手动整理</UiButton>
         </div>
-        <p class="paste-hint">先 Ctrl+V 粘贴或选择题目图片；主图就绪后再 Ctrl+V，第二张图自动作为参考图片</p>
+        <p class="paste-hint">先 Ctrl+V 粘贴/选择第一张图；主图就绪后，用下面「粘贴目标」决定下一张是继续加主图，还是作为参考图</p>
+
+        <div v-if="previewImage" class="paste-target-row">
+          <span class="pt-label">下一张粘贴为：</span>
+          <button type="button" class="pt-btn" :class="{ active: pasteTarget === 'main' }" @click="setPasteTarget('main')">主图（英语整篇多图）</button>
+          <button type="button" class="pt-btn" :class="{ active: pasteTarget === 'reference' }" @click="setPasteTarget('reference')">参考图（按图中思路解）</button>
+        </div>
 
         <div v-if="previewImage" class="image-preview">
           <img :src="previewImage" alt="题目图片" />
+        </div>
+
+        <div v-if="moreImages.length" class="more-images">
+          <div v-for="(m, i) in moreImages" :key="i" class="more-image-item">
+            <img :src="m.preview" alt="附加图片" />
+            <button type="button" class="more-image-remove" aria-label="移除图片" @click="removeMoreImage(i)">
+              <Icon name="x" :size="12" />
+            </button>
+          </div>
+          <label class="pick-label btn btn-outline btn-md" style="align-self: center">
+            <Icon name="plus-circle" :size="14" />
+            继续添加图片
+            <input type="file" accept="image/*" class="visually-hidden" @change="onFileChange" />
+          </label>
         </div>
 
         <textarea
@@ -356,7 +460,7 @@ onUnmounted(() => {
           v-model="imageInstruction"
           class="field-input"
           rows="3"
-          placeholder="可选：补充解题要求或思路，例如「按配方法求解，正交变换步骤写详细」「这题用数形结合讲解」"
+          placeholder="可选：补充要求，如「逐句翻译」「重点讲解长难句」「按配方法求解」"
         ></textarea>
 
         <div v-if="previewImage" class="reference-section">
@@ -401,6 +505,11 @@ onUnmounted(() => {
     </div>
 
     <div v-if="parsed" class="card card-pad form-card">
+      <div v-if="parsed.is_english" class="card card-pad english-learn">
+        <h3 class="panel-title">英语整篇精读</h3>
+        <EnglishAnalysisPanel :parsed="parsed" @save-question="onSaveQuestion" @saved="onEnglishSaved" />
+      </div>
+
       <h3 class="panel-title">确认并完善题目信息</h3>
       <MistakeForm :key="formKey" :initial="parsed" @submitted="onSubmitted" />
     </div>
@@ -451,6 +560,23 @@ onUnmounted(() => {
 
 .paste-hint { font-size: 12.5px; color: var(--ink-3); margin: 0; }
 
+.paste-target-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pt-label { font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
+.pt-btn {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.pt-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.pt-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pt-btn.active[data] { color: #fff; }
+
 .image-preview {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -460,6 +586,24 @@ onUnmounted(() => {
   justify-content: center;
 }
 .image-preview img { max-width: 100%; max-height: 360px; object-fit: contain; }
+
+.more-images { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.more-image-item {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.more-image-item img { display: block; max-width: 150px; max-height: 100px; object-fit: contain; }
+.more-image-remove {
+  position: absolute;
+  top: 3px; right: 3px;
+  width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55); color: #fff; cursor: pointer; padding: 0;
+}
+.english-learn { margin-bottom: 4px; }
 
 .reference-section {
   display: flex;

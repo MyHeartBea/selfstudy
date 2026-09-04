@@ -113,6 +113,12 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         "source_year": "TEXT DEFAULT ''",
         "source_name": "TEXT DEFAULT ''",
         "images": "TEXT",
+        "passage_text": "TEXT",
+        "passage_translation": "TEXT",
+        "english_sentences": "TEXT",
+        "english_phrases": "TEXT",
+        "english_words": "TEXT",
+        "english_questions": "TEXT",
     }
     for column, ddl in additions.items():
         if column not in existing_columns:
@@ -147,6 +153,19 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     }
     if "kind" not in subject_columns:
         conn.execute("ALTER TABLE subjects ADD COLUMN kind TEXT DEFAULT ''")
+
+    # 生词本：单词/词语分类
+    vocab_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(vocab_items)").fetchall()
+    }
+    if "kind" not in vocab_columns:
+        conn.execute("ALTER TABLE vocab_items ADD COLUMN kind TEXT DEFAULT 'word'")
+    # 把含空格的短语归类为 phrase（历史数据默认 word，需回填）
+    conn.execute(
+        "UPDATE vocab_items SET kind = 'phrase' "
+        "WHERE kind = 'word' AND TRIM(word) LIKE '% %'"
+    )
 
     _ensure_math_categories(conn)
     _ensure_english_categories(conn)
@@ -479,6 +498,17 @@ def mistake_to_dict(row: sqlite3.Row) -> dict:
             data["images"] = []
     else:
         data["images"] = []
+
+    # 英语整篇精读附加字段（JSON 字符串 → 数组）
+    for column in ("english_sentences", "english_phrases", "english_words", "english_questions"):
+        raw = data.get(column) or ""
+        if raw:
+            try:
+                data[column] = _json.loads(raw)
+            except (TypeError, ValueError):
+                data[column] = []
+        else:
+            data[column] = []
     return data
 
 

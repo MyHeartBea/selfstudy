@@ -140,6 +140,12 @@ function openDetail(id) {
   detailVisible.value = true
 }
 
+function onDeleted() {
+  // 删除成功后关闭详情弹窗并刷新列表
+  detailVisible.value = false
+  loadMistakes()
+}
+
 function startPractice() {
   router.push('/practice')
 }
@@ -375,7 +381,7 @@ onUnmounted(() => {
       v-model="detailVisible"
       :mistake-id="detailId"
       @edit="(m) => router.push(`/mistakes/${m.id}/edit`)"
-      @deleted="loadMistakes"
+      @deleted="onDeleted"
     />
 
     <UiModal v-model="importDialogVisible" title="导入预览" size="lg">

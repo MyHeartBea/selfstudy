@@ -91,6 +91,13 @@ function fillForm(initial) {
   form.source_year = initial.source_year || ''
   form.source_name = initial.source_name || ''
   form.images = (initial.images || []).slice()
+  // 英语整篇精读附加字段
+  form.passage_text = initial.passage_text || ''
+  form.passage_translation = initial.passage_translation || ''
+  form.english_sentences = (initial.english_sentences || []).slice()
+  form.english_phrases = (initial.english_phrases || []).slice()
+  form.english_words = (initial.english_words || []).slice()
+  form.english_questions = (initial.english_questions || []).slice()
 }
 
 watch(() => props.initial, fillForm, { immediate: true })
@@ -189,6 +196,12 @@ async function submitForm() {
     source_year: form.source_year,
     source_name: form.source_name,
     images: form.images,
+    passage_text: form.passage_text,
+    passage_translation: form.passage_translation,
+    english_sentences: form.english_sentences,
+    english_phrases: form.english_phrases,
+    english_words: form.english_words,
+    english_questions: form.english_questions,
   }
   try {
     let res

@@ -11,7 +11,11 @@ def _load_env_file(path: Path) -> None:
     """轻量读取 .env 文件，不引入额外依赖。"""
     if not path.exists():
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    # 容忍 .env 被写成带 UTF-8 BOM 的情况（避免第一个键名带上 \ufeff 前缀）。
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -54,15 +58,15 @@ class Settings:
     # DeepSeek 多模态视觉模型（DeepSeek-V4-Flash-Vision-Exp，走 AI_BASE_URL/AI_API_KEY，
     # 不占用 AI_VISION_* 视觉密钥）：作为识图首选，便宜且精度高。
     AI_VISION_DS_MODEL = os.environ.get("AI_VISION_DS_MODEL", "deepseek-v4-flash-vision-exp")
-    AI_TIMEOUT = int(os.environ.get("AI_TIMEOUT", "90"))
+    AI_TIMEOUT = int(os.environ.get("AI_TIMEOUT", "240"))
     # 首选 DeepSeek Vision 通道可处理复杂试题图片，因此给予更长的单次预算。
     AI_VISION_PRIMARY_TIMEOUT = int(
-        os.environ.get("AI_VISION_PRIMARY_TIMEOUT", "60")
+        os.environ.get("AI_VISION_PRIMARY_TIMEOUT", "240")
     )
     # 备用视觉通道保持较短超时，避免首选失败后拖慢整体回退。
     AI_VISION_TIMEOUT = int(os.environ.get("AI_VISION_TIMEOUT", "20"))
-    # 图片识别整体预算：所有视觉通道 + 本地 OCR 前的总耗时上限，低于前端 120s 超时。
-    AI_OCR_TOTAL_TIMEOUT = int(os.environ.get("AI_OCR_TOTAL_TIMEOUT", "110"))
+    # 图片识别整体预算：所有视觉通道 + 本地 OCR 前的总耗时上限，需高于前端 300s 之外的余量。
+    AI_OCR_TOTAL_TIMEOUT = int(os.environ.get("AI_OCR_TOTAL_TIMEOUT", "290"))
     # 可选 API Token：设置后所有 /api 请求需携带（X-API-Token 或 Authorization: Bearer）。
     API_TOKEN = os.environ.get("API_TOKEN", "")
     # AI 端点限流：每分钟最大请求数（默认 30，单机个人使用足够）。

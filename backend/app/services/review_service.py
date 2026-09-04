@@ -31,6 +31,34 @@ def _days_between(value, now_text: str):
         return None
 
 
+def _expand_passage_items(data: List[dict]) -> List[dict]:
+    """英语整篇（一条错题含多题）：复习时按「答错的题」逐题展开，每题一个复习项。
+
+    若未标记答错（wrong 均非 true），则回退为展开全部题目，保证总是可复习。
+    """
+    out: List[dict] = []
+    for item in data:
+        qs = item.get("english_questions") or []
+        if qs:
+            wrong_qs = [q for q in qs if isinstance(q, dict) and q.get("wrong") is True]
+            chosen = wrong_qs if wrong_qs else [q for q in qs if isinstance(q, dict)]
+            if len(chosen) > 1:
+                for q in chosen:
+                    entry = dict(item)
+                    for key in (
+                        "question", "question_type", "option_a", "option_b", "option_c",
+                        "option_d", "correct_answer", "analysis", "difficulty",
+                        "difficulty_points", "approach",
+                    ):
+                        if q.get(key) is not None:
+                            entry[key] = q[key]
+                    entry["english_sub_question"] = True
+                    out.append(entry)
+                continue
+        out.append(item)
+    return out
+
+
 def get_due_mistakes(conn: sqlite3.Connection, limit: int = 50) -> List[dict]:
     """返回今日待复习错题：新录入的错题优先，其次按下次复习时间升序。"""
     rows = conn.execute(
@@ -41,7 +69,7 @@ def get_due_mistakes(conn: sqlite3.Connection, limit: int = 50) -> List[dict]:
         "COALESCE(next_review_at, '9999-12-31 23:59:59') ASC, id ASC LIMIT ?",
         (limit,),
     ).fetchall()
-    return [mistake_to_dict(row) for row in rows]
+    return _expand_passage_items([mistake_to_dict(row) for row in rows])
 
 
 def get_practice_mistakes(
@@ -132,7 +160,7 @@ def get_practice_mistakes(
             now_text,
         )
 
-    return data
+    return _expand_passage_items(data)
 
 
 def review_mistake(

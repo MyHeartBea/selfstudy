@@ -39,11 +39,12 @@ def list_vocab(
     conn: sqlite3.Connection,
     search: Optional[str] = None,
     mastery: Optional[int] = None,
+    kind: Optional[str] = None,
     page: Optional[int] = None,
     page_size: int = 20,
     sort: str = "created_desc",
 ) -> dict:
-    """生词列表：搜索（词/释义/笔记）、掌握度筛选、分页与排序。"""
+    """生词列表：搜索（词/释义/笔记）、掌握度筛选、单词/词语分类、分页与排序。"""
     where = []
     params: List[object] = []
     if search:
@@ -55,6 +56,9 @@ def list_vocab(
     if mastery is not None:
         where.append("mastery_level = ?")
         params.append(mastery)
+    if kind in ("word", "phrase"):
+        where.append("kind = ?")
+        params.append(kind)
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
     order = {
@@ -93,6 +97,7 @@ def create_vocab(
     example: str = "",
     note: str = "",
     source: str = "",
+    kind: str = "word",
 ) -> sqlite3.Row:
     """新增生词；重复单词返回已有条目（幂等）。"""
     existing = get_vocab_by_word(conn, word)
@@ -100,10 +105,10 @@ def create_vocab(
         return existing
     conn.execute(
         """
-        INSERT INTO vocab_items (word, meaning, phonetic, example, note, source)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO vocab_items (word, meaning, phonetic, example, note, source, kind)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (word.strip(), meaning.strip(), phonetic.strip(), example.strip(), note.strip(), source.strip()),
+        (word.strip(), meaning.strip(), phonetic.strip(), example.strip(), note.strip(), source.strip(), kind),
     )
     conn.commit()
     return get_vocab_by_word(conn, word)
@@ -111,7 +116,7 @@ def create_vocab(
 
 def update_vocab(conn: sqlite3.Connection, vocab_id: int, fields: dict) -> Optional[sqlite3.Row]:
     """更新生词（只更新传入字段）。"""
-    allowed = ("word", "meaning", "phonetic", "example", "note", "source")
+    allowed = ("word", "meaning", "phonetic", "example", "note", "source", "kind")
     sets = []
     params: List[object] = []
     for key in allowed:
@@ -263,6 +268,67 @@ def import_vocab(
         conn.execute(
             "INSERT INTO vocab_items (word, meaning, source) VALUES (?, ?, ?)",
             (word, meaning, source),
+        )
+        created += 1
+    conn.commit()
+    return {"created": created, "updated": updated, "failed": failed}
+
+
+def _is_ascii_word(word: str) -> bool:
+    return bool(word) and all(ch.isascii() or ch in "-'. " for ch in word)
+
+
+def import_english_words(
+    conn: sqlite3.Connection, items: List[dict], source: str = ""
+) -> dict:
+    """英语精读选词批量入生词本：每项 {word, meaning, phonetic, example, note, source}。
+
+    已有单词时仅在字段缺失时补充（不覆盖用户已填内容）。
+    """
+    created = 0
+    updated = 0
+    failed: List[dict] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            failed.append({"index": index, "reason": "格式错误"})
+            continue
+        word = str(item.get("word") or "").strip()
+        if not word or not _is_ascii_word(word):
+            failed.append({"index": index, "text": word, "reason": "无法识别单词"})
+            continue
+        meaning = str(item.get("meaning") or "").strip()
+        phonetic = str(item.get("phonetic") or "").strip()
+        example = str(item.get("example") or "").strip()
+        note = str(item.get("note") or "").strip()
+        src = str(item.get("source") or source or "").strip()
+        kind = "phrase" if item.get("kind") == "phrase" else "word"
+        existing = get_vocab_by_word(conn, word)
+        if existing is not None:
+            sets = []
+            params: List[object] = []
+            if meaning and not (existing["meaning"] or "").strip():
+                sets.append("meaning = ?")
+                params.append(meaning)
+            if phonetic and not (existing["phonetic"] or "").strip():
+                sets.append("phonetic = ?")
+                params.append(phonetic)
+            if example and not (existing["example"] or "").strip():
+                sets.append("example = ?")
+                params.append(example)
+            if note and not (existing["note"] or "").strip():
+                sets.append("note = ?")
+                params.append(note)
+            if sets:
+                params.append(existing["id"])
+                conn.execute(
+                    f"UPDATE vocab_items SET {', '.join(sets)} WHERE id = ?", params
+                )
+                updated += 1
+            continue
+        conn.execute(
+            "INSERT INTO vocab_items (word, meaning, phonetic, example, note, source, kind) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (word, meaning, phonetic, example, note, src, kind),
         )
         created += 1
     conn.commit()

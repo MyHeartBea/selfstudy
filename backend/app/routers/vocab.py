@@ -17,11 +17,12 @@ router = APIRouter(prefix="/api/vocab", tags=["生词本"])
 def list_vocab(
     search: Optional[str] = Query(None),
     mastery: Optional[int] = Query(None, ge=0, le=8),
+    kind: Optional[str] = Query(None),
     sort: str = Query("created_desc"),
     page: Optional[int] = Query(None, ge=1),
     page_size: int = Query(20, ge=1, le=200),
 ):
-    """生词列表：可搜索、按掌握度筛选，传 page 返回分页结果。"""
+    """生词列表：可搜索、按掌握度/单词词语筛选，传 page 返回分页结果。"""
     conn = get_connection()
     try:
         return ok(
@@ -29,6 +30,7 @@ def list_vocab(
                 conn,
                 search=search,
                 mastery=mastery,
+                kind=kind,
                 page=page,
                 page_size=page_size,
                 sort=sort,
@@ -77,6 +79,7 @@ def create_vocab(body: VocabCreate):
             example=body.example,
             note=body.note,
             source=body.source,
+            kind=body.kind or "word",
         )
         return ok(vocab_service.vocab_to_dict(row))
     except sqlite3.IntegrityError:
@@ -99,6 +102,28 @@ def import_vocab(body: dict):
     conn = get_connection()
     try:
         result = vocab_service.import_vocab(conn, [str(item) for item in lines], source)
+        return ok(result)
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.post("/import-english")
+def import_english(body: dict):
+    """英语精读选词批量入生词本：body = {"items": [{word,meaning,phonetic,example,note}], "source": "来源"}。
+
+    已有单词仅在字段缺失时补充，不覆盖用户已填内容。
+    """
+    items = body.get("items") or []
+    source = str(body.get("source") or "")
+    if not isinstance(items, list) or not items:
+        return error(400, "请提供要导入的生词")
+    if len(items) > 1000:
+        return error(400, "单次最多导入 1000 条")
+    conn = get_connection()
+    try:
+        result = vocab_service.import_english_words(conn, items, source)
         return ok(result)
     except Exception as exc:
         return server_error(exc)

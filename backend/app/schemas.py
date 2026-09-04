@@ -27,6 +27,13 @@ class MistakeCreate(BaseModel):
     source_name: str = ""
     # 题干配图：元素为 data URL（新上传）或已保存的相对路径（编辑时保留）
     images: List[str] = Field(default_factory=list, max_length=5)
+    # 英语整篇精读（可选）：解析后挂在错题上的附加内容
+    passage_text: str = ""
+    passage_translation: str = ""
+    english_sentences: List[dict] = Field(default_factory=list)
+    english_phrases: List[dict] = Field(default_factory=list)
+    english_words: List[dict] = Field(default_factory=list)
+    english_questions: List[dict] = Field(default_factory=list)
 
 
 class MistakeUpdate(MistakeCreate):
@@ -79,6 +86,15 @@ class AiOcrRequest(BaseModel):
     reference_image_base64: str = Field(default="", max_length=20000000)
 
 
+class AiEnglishRequest(BaseModel):
+    """英语整篇精读：支持多张图片（原文段落 + 选项）与可选粘贴文本。"""
+
+    images: List[str] = Field(default_factory=list, max_length=10)
+    text: str = Field(default="", max_length=50000)
+    # 可选：补充指令（如「逐句翻译」「重点讲解长难句」）
+    instruction: str = Field(default="", max_length=5000)
+
+
 class JudgeRequest(BaseModel):
     user_answer: str = Field(min_length=1)
 
@@ -127,6 +143,7 @@ class VocabCreate(BaseModel):
     example: str = Field(default="", max_length=2000)
     note: str = Field(default="", max_length=2000)
     source: str = Field(default="", max_length=200)
+    kind: str = Field(default="word", max_length=20)
 
 
 class VocabUpdate(BaseModel):

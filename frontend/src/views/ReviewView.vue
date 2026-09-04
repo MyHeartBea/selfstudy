@@ -342,6 +342,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <span class="count-tip progress-chip">第 {{ index + 1 }} / {{ queue.length }} 题</span>
         </div>
 
+        <!-- 英语整篇：先给原文与参考译文，再做题 -->
+        <div v-if="current.passage_text" class="review-passage">
+          <div class="block-label">原文</div>
+          <div class="rp-text">{{ current.passage_text }}</div>
+          <details v-if="current.passage_translation" class="rp-trans">
+            <summary>查看全文翻译</summary>
+            <div class="rp-trans-text">{{ current.passage_translation }}</div>
+          </details>
+        </div>
+
         <div class="question-block">
           <QuestionImages :images="current.images" />
           <MathText :text="current.question" />
@@ -498,6 +508,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 
 .hint { margin: 10px 0; }
+
+.review-passage {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.review-passage .block-label { margin-bottom: 6px; }
+.rp-text { white-space: pre-wrap; line-height: 1.9; font-size: 14px; color: var(--ink); }
+.rp-trans { margin-top: 10px; }
+.rp-trans summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--teal); }
+.rp-trans-text { margin-top: 6px; white-space: pre-wrap; line-height: 1.8; font-size: 12.5px; color: var(--ink-2); }
 
 .kbd-hints {
   display: flex;

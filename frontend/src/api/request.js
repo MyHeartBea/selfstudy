@@ -4,7 +4,8 @@ import { toast } from '../ui/toast'
 
 const request = axios.create({
   baseURL: '/api',
-  timeout: 120000,
+  // 英语整篇/AI 解析耗时较长（多图+长输出），放宽到 300s 避免中途超时
+  timeout: 300000,
   // 数组参数序列化为重复键（difficulty=3&difficulty=4），与 FastAPI Query(List[int]) 契约一致
   paramsSerializer: { indexes: null },
 })

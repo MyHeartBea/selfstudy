@@ -29,7 +29,7 @@ const items = ref([])
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const filters = reactive({ search: '', mastery: null, sort: 'created_desc' })
+const filters = reactive({ search: '', mastery: null, kind: '', sort: 'created_desc' })
 
 async function loadList() {
   loading.value = true
@@ -37,6 +37,7 @@ async function loadList() {
     const params = { page: page.value, page_size: pageSize.value, sort: filters.sort }
     if (filters.search.trim()) params.search = filters.search.trim()
     if (filters.mastery !== null) params.mastery = filters.mastery
+    if (filters.kind) params.kind = filters.kind
     const res = await request.get('/vocab', { params })
     const data = res.data.data
     items.value = data?.items || []
@@ -370,6 +371,9 @@ function onKeydown(event) {
     <!-- 词表 -->
     <template v-else>
       <div class="card card-pad filter-bar">
+        <div class="kind-tabs">
+          <button v-for="k in [['', '全部'], ['word', '单词'], ['phrase', '词语']]" :key="k[0]" class="kind-tab" :class="{ active: filters.kind === k[0] }" @click="filters.kind = k[0]; searchList()">{{ k[1] }}</button>
+        </div>
         <div class="filter-search">
           <Icon name="search" :size="15" class="search-icon" />
           <input
@@ -407,6 +411,7 @@ function onKeydown(event) {
         <article v-for="row in items" :key="row.id" class="vocab-card card">
           <div class="vocab-head">
             <span class="vocab-word serif">{{ row.word }}</span>
+            <span v-if="row.kind === 'phrase'" class="vocab-kind">词语</span>
             <UiTag size="sm" :color="row.mastery_level >= 5 ? 'var(--green)' : row.mastery_level >= 1 ? 'var(--gold)' : ''">
               {{ masteryLabel(row.mastery_level) }}
             </UiTag>
@@ -639,6 +644,20 @@ function onKeydown(event) {
   flex-wrap: wrap;
   margin-bottom: 14px;
 }
+.kind-tabs { display: inline-flex; gap: 4px; }
+.kind-tab {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.13s;
+}
+.kind-tab:hover { border-color: var(--accent); color: var(--accent-ink); }
+.kind-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .filter-search { position: relative; display: flex; align-items: center; }
 .search-icon { position: absolute; left: 11px; color: var(--ink-3); pointer-events: none; }
 .filter-search .field-input { width: 220px; padding-left: 33px; }
@@ -667,6 +686,14 @@ function onKeydown(event) {
   gap: 8px;
 }
 .vocab-word { font-size: 18px; font-weight: 700; }
+.vocab-kind {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--teal);
+  background: var(--teal-soft);
+  padding: 2px 7px;
+  border-radius: 6px;
+}
 .vocab-meaning {
   font-size: 13px;
   color: var(--ink-2);

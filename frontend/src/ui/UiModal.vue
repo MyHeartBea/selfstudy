@@ -7,11 +7,13 @@ const props = defineProps({
   title: { type: String, default: '' },
   size: { type: String, default: 'md' },
   closeOnEsc: { type: Boolean, default: true },
+  // 弹窗层级：普通弹窗默认 1000；确认弹窗（ConfirmHost）传入更高值以盖在其他弹窗之上。
+  zIndex: { type: Number, default: 1000 },
 })
 
 const emit = defineEmits(['update:modelValue'])
 
-const WIDTH = { sm: '460px', md: '640px', lg: '820px', xl: '960px' }
+const WIDTH = { sm: '560px', md: '760px', lg: '1000px', xl: '1220px' }
 
 function close() {
   emit('update:modelValue', false)
@@ -46,7 +48,7 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="modelValue" class="modal-backdrop" @mousedown.self="close()">
+      <div v-if="modelValue" class="modal-backdrop" :style="{ zIndex: props.zIndex }" @mousedown.self="close()">
         <div class="modal-panel" :style="{ maxWidth: WIDTH[size] || WIDTH.md }" role="dialog" aria-modal="true">
           <header class="modal-head">
             <h3 class="modal-title">{{ title }}</h3>

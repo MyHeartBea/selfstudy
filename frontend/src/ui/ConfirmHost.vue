@@ -18,7 +18,7 @@ watch(
 </script>
 
 <template>
-  <UiModal :model-value="confirmState.open" :title="confirmState.title" size="sm" @update:model-value="confirmCancel()">
+  <UiModal :model-value="confirmState.open" :title="confirmState.title" size="sm" :z-index="1100" @update:model-value="confirmCancel()">
     <p class="confirm-msg">{{ confirmState.message }}</p>
     <input
       v-if="confirmState.input"

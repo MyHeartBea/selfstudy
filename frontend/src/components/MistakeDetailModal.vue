@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 
 import request from '../api/request'
 import DetailMeta from './DetailMeta.vue'
+import EnglishAnalysisPanel from './EnglishAnalysisPanel.vue'
 import RelatedList from './RelatedList.vue'
 import ReviewHistory from './ReviewHistory.vue'
 import { formatTime } from '../composables/useBaseData'
@@ -13,6 +14,7 @@ import { confirmDialog } from '../ui/confirm'
 import UiModal from '../ui/UiModal.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiTag from '../ui/UiTag.vue'
+import Icon from '../ui/Icon.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -169,6 +171,7 @@ async function deleteCurrent() {
   try {
     await request.delete(`/mistakes/${detail.value.id}`)
     toast.success('删除成功')
+    visible.value = false // 删除成功后关闭详情弹窗
     emit('deleted', detail.value.id)
   } catch (err) {
     // 错误提示由请求拦截器统一处理
@@ -177,14 +180,16 @@ async function deleteCurrent() {
 </script>
 
 <template>
-  <UiModal v-model="visible" title="错题详情" size="lg">
+  <UiModal v-model="visible" title="错题详情" size="xl">
     <div v-if="loading" class="detail-loading">
       <span class="skeleton" style="height: 18px; width: 40%"></span>
       <span class="skeleton" style="height: 90px"></span>
       <span class="skeleton" style="height: 60px"></span>
     </div>
     <template v-else-if="detail">
-      <DetailMeta :detail="detail" />
+      <!-- 英语整篇：用整篇精读视图（原文逐句对照+各题解析+句型+词汇），不再显示通用框 -->
+      <EnglishAnalysisPanel v-if="detail.passage_text" :parsed="detail" readonly />
+      <DetailMeta v-else :detail="detail" />
 
       <div class="review-info">
         <div class="review-chips">
@@ -245,6 +250,33 @@ async function deleteCurrent() {
   flex-direction: column;
   gap: 10px;
 }
+
+.english-detail {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.ed-title {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; font-size: 14px; margin-bottom: 8px;
+}
+.ed-title svg { color: var(--accent); }
+.ed-passage { font-size: 13.5px; line-height: 1.8; color: var(--ink); margin: 0 0 8px; }
+.ed-trans { display: flex; gap: 8px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; line-height: 1.7; }
+.ed-trans-label { flex: none; font-size: 11.5px; font-weight: 700; color: var(--teal); background: var(--teal-soft); border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
+.ed-sentences { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.ed-sentence { border-left: 3px solid var(--accent); padding: 4px 10px; }
+.ed-sentence-text { font-size: 13px; color: var(--ink); }
+.ed-sentence-meta { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+.ed-vocab { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ed-vocab-label { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.ed-chip {
+  font-size: 12px; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--accent); color: var(--accent-ink); background: var(--accent-soft);
+}
+.ed-chip.phrase { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); }
 
 .review-info {
   margin-top: 14px;

@@ -1,8 +1,10 @@
 """AI 服务层：调用 OpenAI 兼容的 chat/completions 接口。"""
 
 import base64
+import http.client
 import json
 import re
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -30,6 +32,7 @@ def _chat(
     base_url: str | None = None,
     api_key: str | None = None,
     response_format: dict | None = None,
+    max_tokens: int | None = None,
 ) -> str:
     if not is_configured():
         raise AiNotConfigured()
@@ -41,6 +44,8 @@ def _chat(
     }
     if response_format is not None:
         payload["response_format"] = response_format
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -54,7 +59,7 @@ def _chat(
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
         last_message = ""
-        for attempt in range(3):
+        for attempt in range(4):
             try:
                 with opener.open(
                     request,
@@ -65,8 +70,29 @@ def _chat(
             except urllib.error.HTTPError as exc:
                 detail = exc.read().decode("utf-8", errors="replace")
                 last_message = f"AI 服务返回 {exc.code}: {detail[:300]}"
-                if exc.code == 429 and attempt < 2:
-                    time.sleep(3 * (attempt + 1))
+                # 429 与服务端临时错误都值得重试
+                if exc.code in (429, 500, 502, 503) and attempt < 3:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                raise AiRequestError(last_message) from exc
+            except (
+                http.client.IncompleteRead,
+                http.client.RemoteDisconnected,
+                ConnectionError,
+                TimeoutError,
+                socket.timeout,
+                urllib.error.URLError,
+            ) as exc:
+                # 上游断连/超时：0 bytes 等偶发，重试更稳
+                last_message = f"AI 连接中断：{exc}"
+                if attempt < 3:
+                    time.sleep(2 * (attempt + 1))
+                    continue
+                raise AiRequestError(last_message) from exc
+            except OSError as exc:
+                last_message = f"AI 网络错误：{exc}"
+                if attempt < 3:
+                    time.sleep(2 * (attempt + 1))
                     continue
                 raise AiRequestError(last_message) from exc
         else:
@@ -79,6 +105,27 @@ def _chat(
         raise AiRequestError("AI 服务响应格式异常") from exc
 
 
+def _chat_json(messages: List[dict], attempts: int = 3, **kwargs) -> dict:
+    """调用 AI 并解析严格 JSON。空内容/畸形/截断都算失败并重试（最多 3 次）。"""
+    last = None
+    for i in range(max(1, attempts)):
+        content = _chat(messages, **kwargs)
+        if content is None or not str(content).strip():
+            last = ValueError("AI 返回内容为空")
+            if i < attempts - 1:
+                time.sleep(1.5 * (i + 1))
+                continue
+            break
+        try:
+            return _extract_json(content)
+        except (json.JSONDecodeError, ValueError) as exc:
+            last = exc
+            if i < attempts - 1:
+                time.sleep(1.2)
+                continue
+    raise AiRequestError(f"AI 返回内容不是有效 JSON：{last}") from last
+
+
 def _parse_prompt(standard_tags: List[str] | None = None) -> str:
     prompt = (
         "你是一个考研错题整理助手。请根据用户提供的题目内容，输出严格的 JSON（不要 Markdown），字段如下：\n"
@@ -89,7 +136,8 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
         '"knowledge_tags": ["标签1", "标签2"], '
         '"approach": "解题思路", "source": "来源备注", '
         '"source_type": "real_exam/mock/other", '
-        '"source_year": "如 2025", "source_name": "如 李林六套卷(一)"}\n'
+        '"source_year": "如 2025", "source_name": "如 李林六套卷(一)", '
+        '"subject_hint": "数学/英语/408/政治"}\n'
         "question_type 只能输出三个值之一：choice/fill/solution，根据题目形式判断："
         "有 A/B/C/D 选项选 choice，只要求填数值或结果的选 fill，"
         "需要写完整过程或证明的选 solution。"
@@ -110,7 +158,15 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
         "6. 解析控制在 200-500 字左右，除非推导确实需要更长。\n"
         "7. 最后单独一行写明“结论：”或“答案：”。\n"
         "8. 解析和题干中的所有公式统一用 $...$ 行内、$$...$$ 独立行的 LaTeX 写法。\n"
-        "9. JSON 字符串中的换行使用真实换行符，不要把 \\n 当作字面量文本输出；$ 只能包裹同一行内的单个公式。"
+        "9. JSON 字符串中的换行使用真实换行符，不要把 \\n 当作字面量文本输出；$ 只能包裹同一行内的单个公式。\n"
+        "10. 解析必须做到「懂一题、会三题」，明显比参考答案更细致更精细：\n"
+        "a) 【深入讲透考点】先把题中涉及的概念、公式、原理用大白话讲清楚（是什么、为什么这样、怎么用、容易错在哪），不能一带而过；\n"
+        "b) 【联想拓展/举一反三】主动联想相关的知识点、同类题型、变式与常见陷阱，并补充 1-3 个关联方法或扩展知识点；\n"
+        "c) 分步推导要每一步写清依据与细节（如 1.1、1.2、2.1），展示完整推理过程，而不只是给出结论。\n"
+        "11. 讲题要「当作读者没学过」：对题中出现的每个关键知识点（如 ARP、子网掩码、数据结构、等价无穷小、长难句结构等），"
+        "先独立、完整地介绍它在考研里的考法、原理、常见题型、常与哪些知识点组合出现，再解题；"
+        "不要默认读者已深刻掌握而直接讲题。\n"
+        "整段解析要有启发性与深度，让读者不仅会这一题，还能迁移到同类题。"
     )
     if standard_tags:
         prompt += (
@@ -121,19 +177,82 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
     return prompt
 
 
+def _repair_backslashes(content: str) -> str:
+    """把 JSON 字符串值里未转义的反斜杠修复为 \\\\（修 LaTeX 的 \\alpha 等导致 Invalid \\escape）。"""
+    out = []
+    in_str = False
+    i = 0
+    n = len(content)
+    while i < n:
+        ch = content[i]
+        if ch == '"':
+            out.append(ch)
+            in_str = not in_str
+            i += 1
+            continue
+        if ch == "\\" and in_str and i + 1 < n:
+            nxt = content[i + 1]
+            if nxt in ('"', "\\", "/", "b", "f", "n", "r", "t", "u"):
+                out.append(ch)
+                out.append(nxt)
+                i += 2
+                continue
+            # 非法转义（如 \alpha 的 \a）→ 变成 \\a
+            out.append("\\\\")
+            out.append(nxt)
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _repair_json(content: str) -> str:
+    """修复 AI 常见 JSON 问题：未转义反斜杠、缺失逗号、尾逗号。"""
+    repaired = _repair_backslashes(content)
+    # 数组里两个对象 / 数组元素之间缺逗号：} { 或 } [ 或 ] [
+    repaired = re.sub(r"\}\s*(?=\{)", "},", repaired)
+    repaired = re.sub(r"\}\s*(?=\[)", "},", repaired)
+    # 对象内：字符串值/数字/数组/对象后紧接下一个键而缺逗号
+    repaired = re.sub(
+        r'(?<![{,\s])(["\d\]\}])\s*(?="[a-zA-Z_][a-zA-Z0-9_]*"\s*:)',
+        r"\1,",
+        repaired,
+    )
+    # 去掉尾逗号
+    return re.sub(r",(\s*[}\]])", r"\1", repaired)
+
+
 def _extract_json(content: str) -> dict:
     content = content.strip()
     if content.startswith("```"):
         content = re.sub(r"^```(?:json)?\s*", "", content)
         content = re.sub(r"\s*```$", "", content)
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        start = content.find("{")
-        end = content.rfind("}")
+    last_error: json.JSONDecodeError | None = None
+    for candidate in (content, None):
+        # 先试原始、再试 {..} 提取、再试修复
+        if candidate is None:
+            break
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            last_error = exc
+        start = candidate.find("{")
+        end = candidate.rfind("}")
         if start != -1 and end > start:
-            return json.loads(content[start : end + 1])
-        raise
+            try:
+                return json.loads(candidate[start : end + 1])
+            except json.JSONDecodeError as exc:
+                last_error = exc
+        repaired = _repair_json(candidate)
+        if repaired != candidate:
+            try:
+                return json.loads(repaired)
+            except json.JSONDecodeError as exc:
+                last_error = exc
+    raise last_error if last_error is not None else json.JSONDecodeError(
+        "无效 JSON", content, 0
+    )
 
 
 _MATH_RUN_RE = re.compile(
@@ -385,6 +504,383 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
         "source_type": source_type,
         "source_year": source_year,
         "source_name": source_name,
+        "subject_hint": as_text(parsed.get("subject_hint")),
+    }
+
+
+def _parse_english_prompt(standard_tags: List[str] | None = None) -> str:
+    prompt = (
+        "你是考研英语阅读精读助手。请根据用户提供的英语原文（可从多张图片识别，或直接粘贴文本），"
+        "自动判断是否为英语篇章/阅读内容，并输出严格的 JSON（不要 Markdown），字段如下：\n"
+        '{"is_english": true/false, '
+        '"passage": "识别出的英语原文全文，段落之间用 \\n\\n 分隔，明确分段", '
+        '"passage_translation": "全文通顺的中文翻译，段落与原文一一对应，段落间用 \\n\\n 分隔", '
+        '"sentences": [{"text": "单个句子", "structure": "句子结构（主谓宾/主从复合句/并列句等）", '
+        '"pattern": "句型分析（定语从句/同位语从句/非谓语/插入语/倒装等，具体到知识点）", '
+        '"translation": "该句中文翻译"}], '
+        '"phrases": [{"phrase": "考研重要短语", "meaning": "短语含义", "pos": "短语/固定搭配", "example": "选自原文的例句"}], '
+        '"words": [{"word": "生词/重点词", '
+        '"meaning": "词义（含多个词性与义项，如 v. 放弃；n. 放纵；adj. 放任的）", '
+        '"pos": "词性（动词/名词/形容词/副词/动名词/介词/连词/代词/数词等）", '
+        '"phonetic": "音标（如 /əˈbændən/）", "example": "选自原文的例句"}], '
+        '"question_type": "choice/fill/solution", '
+        '"question": "题目题干", '
+        '"option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...", '
+        '"correct_answer": "选择题填 A/B/C/D，其他填参考答案文本", '
+        '"analysis": "解析：先写【定位】原文第几句/哪一段；再写【来源】哪年真题或篇目出处；再写【思路】如何理解与作答；最后【总结】该题考点与答题要点", '
+        '"difficulty": 1-5 的整数, "difficulty_points": "主要难点简析", '
+        '"knowledge_tags": ["标签1", "标签2"], "approach": "解题思路", '
+        '"source": "来源备注", "source_type": "real_exam/mock/other", '
+        '"source_year": "如 2017", "source_name": "如 2017 英语二 阅读 Text 2", '
+        '"questions": [{"question": "第2题题干", "option_a": "...", "option_b": "...", '
+        '"option_c": "...", "option_d": "...", "correct_answer": "另一题的答案", '
+        '"analysis": "该题解析（含定位/来源/思路/总结）", "difficulty": 3, '
+        '"difficulty_points": "该题难点", "approach": "该题思路"}]}\n'
+        "判断规则：若图片/文本是英语篇章（多为句英文、阅读/完形/翻译段落），is_english=true，"
+        "完整填写 passage/translation/sentences/phrases/words；"
+        "段落含多道题目时，把第 2 道及以后的题目逐一放进 questions 数组（每题含 question/option_a~d/"
+        "correct_answer/analysis/difficulty 等标准字段，解析同样要写【定位/来源/思路/总结】）；"
+        "顶层 question/option_a~d/answer/analysis 填第一道题，避免与 questions 重复；"
+        "若只有一道题，questions 填空数组。"
+        "若不是英语篇章（如数学、政治、计算机等），is_english=false，passage 填空字符串，"
+        "只按通用错题字段输出（question/options/answer/analysis 等）。\n"
+        "选择题的 correct_answer 只能填单个字母 A/B/C/D。question_type：有 A/B/C/D 选项选 choice，"
+        "只填数值/结果选 fill，写完整过程选 solution。\n"
+        "题干与选项中的数学/LaTeX 表达式用 $...$ 或 $$...$$ 包裹；但英语原文 passage 与翻译不要用 $ 包裹。\n"
+        "sentences 必须覆盖原文的每一个句子（包括引号内的对话、破折号后的分句），逐句给出 "
+        "text/structure/pattern/translation，不要合并、不要省略；words 尽量完整收录原文里的考研重点词与生词、高频词，"
+        "每个词给出多词性与完整义项；phrases 尽量完整收录考研重要短语与固定搭配，不要人为减少数量。\n"
+        "解析用【定位】【来源】【思路】【总结】四段，不要用 1.1/1.2 这类编号（那是数学/408 的格式）。\n"
+        "【定位】必须指明原文具体位置（如“第二段第二句”），并引用定位到的那句话或关键词；"
+        "禁止只写“全文”或笼统描述。\n"
+        "【来源】写明哪年真题/哪篇哪题。\n"
+        "【思路】用通顺自然语言详细讲清推理与排除过程（可自然分段或“第一/第二/第三”，但不用硬编号），"
+        "像给同学讲题一样通俗、有依据，不能只给结论。\n"
+        "【总结】点明该题考点与易错点。"
+    )
+    if standard_tags:
+        prompt += (
+            "\n以下是系统里已有的标准知识点标签，若适用请直接使用，不要新增近似叫法："
+            + "、".join(standard_tags[:40])
+        )
+    return prompt
+
+
+def _clean_items(raw) -> List[dict]:
+    """把 AI 返回的句子/短语/单词列表规整为字典数组；兜底按行拆分。"""
+    items: List[dict] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            cleaned = {k: str(v or "").strip() for k, v in item.items()}
+            if any(cleaned.values()):
+                items.append(cleaned)
+        return items
+    if isinstance(raw, str) and raw.strip():
+        for line in raw.splitlines():
+            line = line.strip()
+            if line:
+                items.append({"text": line})
+    return items
+
+
+def normalize_english_parsed(parsed: dict, fallback_text: str = "") -> dict:
+    """规整英语整篇解析结果：保留标准错题字段，并挂上英语附加内容与多题。"""
+    if not isinstance(parsed, dict):
+        parsed = {}
+    is_english = bool(parsed.get("is_english"))
+    base = normalize_parsed(parsed, fallback_text)
+    base["is_english"] = is_english
+    base["passage_text"] = str(parsed.get("passage") or "").strip()
+    base["passage_translation"] = str(parsed.get("passage_translation") or "").strip()
+    base["english_sentences"] = _clean_items(parsed.get("sentences"))
+    base["english_phrases"] = _clean_items(parsed.get("phrases"))
+    base["english_words"] = _clean_items(parsed.get("words"))
+    # 多道题目：第 2 题起的完整题目数组；顶层已填第一题
+    questions = parsed.get("questions")
+    base["english_questions"] = []
+    if isinstance(questions, list):
+        for q in questions:
+            if not isinstance(q, dict):
+                continue
+            qq = normalize_parsed(q)
+            # 题目来自同一篇，继承来源信息
+            for key in ("source", "source_type", "source_year", "source_name"):
+                if not qq.get(key) and base.get(key):
+                    qq[key] = base[key]
+            qq["is_english"] = True
+            base["english_questions"].append(qq)
+    return base
+
+
+def _guess_mime(data_url: str) -> str:
+    """从图片 base64 推测 MIME（避免一律当 PNG 被视觉模型拒识返回空）。"""
+    payload = data_url.partition("base64,")[2]
+    if payload.startswith("iVBOR"):
+        return "image/png"
+    if payload.startswith("/9j/"):
+        return "image/jpeg"
+    if payload.startswith("R0lGOD"):
+        return "image/gif"
+    if payload.startswith("UklGR"):
+        return "image/webp"
+    return "image/png"
+
+
+def _vision_extract_text(
+    images: List[str],
+    instruction: str = "",
+    timeout: int | None = None,
+) -> str:
+    """用视觉模型把图片里的文字提取成纯文本（小输出、快、稳，供后续文本分析）。"""
+    content = []
+    head = "请识别这几张图片中的文字，原样完整输出（保留段落与换行）；只输出文字本身，不要解释。"
+    if instruction and instruction.strip():
+        head += "\n" + instruction
+    content.append({"type": "text", "text": head})
+    for img in images:
+        data_url = img.strip()
+        if not data_url.startswith("data:"):
+            data_url = f"data:{_guess_mime(data_url)};base64," + data_url
+        content.append({"type": "image_url", "image_url": {"url": data_url}})
+    result = _chat(
+        [{"role": "user", "content": content}],
+        model=settings.AI_VISION_DS_MODEL,
+        max_tokens=4000,
+        timeout=timeout,
+    )
+    return str(result or "").strip()
+
+
+def _parse_english_reading_prompt(standard_tags: List[str] | None = None) -> str:
+    return (
+        "你是考研英语阅读精读助手。根据用户提供的英语原文，输出严格的 JSON（不要 Markdown）：\n"
+        '{"is_english": true/false, '
+        '"passage_translation": "全文通顺中文翻译，段落与原文一一对应，段落间用 \\n\\n 分隔", '
+        '"sentences": [{"text": "单个句子", "structure": "句子结构", '
+        '"pattern": "句型分析（定语从句/同位语/非谓语/插入语/倒装等，具体到知识点）", "translation": "该句中文翻译"}]}\n'
+        "判断：原文是英语篇章则 is_english=true；sentences 必须覆盖原文每一个句子（含引号内对话、破折号分句），"
+        "逐句给出 text/structure/pattern/translation，不要合并、不要省略；否则 is_english=false。"
+    )
+
+
+def _parse_english_vocab_prompt() -> str:
+    return (
+        "你是考研英语词汇助手。根据用户提供的英语原文，提取重点短语与生词，输出严格的 JSON（不要 Markdown）：\n"
+        '{"phrases": [{"phrase": "考研重要短语", "meaning": "短语含义", "pos": "短语/固定搭配", "example": "原文例句"}], '
+        '"words": [{"word": "生词/重点词", '
+        '"meaning": "词义（含多个词性与义项，如 v. 放弃；n. 放纵；adj. 放任的）", '
+        '"pos": "词性（动词/名词/形容词/副词/动名词/介词/连词等）", "phonetic": "音标", "example": "原文例句"}]}\n'
+        "words 与 phrases 尽量完整收录原文里的考研重点词、生词与重要短语/固定搭配，不要人为减少数量。"
+    )
+
+
+def _parse_english_questions_prompt(standard_tags: List[str] | None = None) -> str:
+    prompt = (
+        "你是考研英语阅读精读助手。根据用户提供的英语原文与题目要求，输出严格的 JSON（不要 Markdown），字段如下：\n"
+        '{"question_type": "choice/fill/solution", "question": "题目题干", '
+        '"option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...", '
+        '"correct_answer": "选择题填 A/B/C/D，其他填参考答案文本", '
+        '"analysis": "解析：用【定位】【来源】【思路】【总结】四段。'
+        '【定位】要指明原文具体句（如“第二段第二句”）并引用关键词，禁止只写“全文”；'
+        '【来源】写明哪年真题/哪篇哪题；'
+        '【思路】用通顺自然语言详细讲清推理与排除过程（可自然分段或“第一/第二”，但不要用 1.1/1.2 编号）；'
+        '【总结】点明考点与易错点。", '
+        '"difficulty": 1-5 的整数, "difficulty_points": "主要难点简析", '
+        '"knowledge_tags": ["标签1", "标签2"], "approach": "解题思路", '
+        '"source": "来源备注", "source_type": "real_exam/mock/other", "source_year": "如 2010", '
+        '"source_name": "如 2010 英语一 阅读 Text 4", '
+        '"questions": [{"question": "下一题题干", "option_a": "...", "option_b": "...", '
+        '"option_c": "...", "option_d": "...", "correct_answer": "另一题答案", '
+        '"analysis": "该题解析（含定位/来源/思路/总结）", "difficulty": 3, '
+        '"difficulty_points": "该题难点", "approach": "该题思路"}]}\n'
+        "顶层填第 1 题，第 2 题起的题目逐一放进 questions 数组。选择题 correct_answer 只能填单个字母 A/B/C/D。"
+        "题干与选项里的数学/LaTeX 表达式用 $...$ 包裹。"
+    )
+    if standard_tags:
+        prompt += (
+            "\n以下是系统里已有的标准知识点标签，若适用请直接使用，不要新增近似叫法："
+            + "、".join(standard_tags[:40])
+        )
+    return prompt
+
+
+def analyze_english(
+    image_base64_list: List[str],
+    text: str = "",
+    standard_tags: List[str] | None = None,
+    instruction: str = "",
+    timeout: int | None = None,
+) -> dict:
+    """英语整篇精读（分段式，内容不减）：看图提字 + 阅读/翻译/拆解 + 词汇短语 + 多题解析，各段更小更稳。"""
+    images = [img for img in (image_base64_list or []) if img and img.strip()]
+    source_text = text.strip()
+    if images:
+        try:
+            source_text = _vision_extract_text(images, instruction, timeout) or source_text
+        except Exception:
+            source_text = text.strip()
+    if not source_text.strip():
+        raise AiRequestError("未能从图片或文本中获取到内容")
+
+    # ① 阅读/翻译/句子拆解 + 是否英语
+    reading = _chat_json(
+        [
+            {"role": "system", "content": _parse_english_reading_prompt(standard_tags)},
+            {"role": "user", "content": source_text},
+        ],
+        max_tokens=4000,
+        timeout=timeout,
+    )
+    if not reading.get("is_english"):
+        return _analyze_standard_content([], source_text, standard_tags, instruction, timeout)
+
+    # ② 重点短语/生词（失败则不阻塞，词汇可为空）
+    try:
+        vocab = _chat_json(
+            [
+                {"role": "system", "content": _parse_english_vocab_prompt()},
+                {"role": "user", "content": source_text},
+            ],
+            max_tokens=4000,
+            timeout=timeout,
+        )
+    except Exception:
+        vocab = {}
+
+    # ③ 题目与解析：先列清单（小、稳），再逐题完整分析（单题输出小，不易漏逗号）
+    user_req = source_text
+    if instruction and instruction.strip():
+        user_req = f"{source_text}\n\n【要求】{instruction.strip()}"
+
+    questions_items = []
+    try:
+        titles = _chat_json(
+            [
+                {"role": "system", "content": (
+                    "你是考研英语阅读助手。根据用户提供的原文与题目，输出严格的 JSON（不要 Markdown）：\n"
+                    '{"questions": [{"question": "题干", "option_a": "...", "option_b": "...", '
+                    '"option_c": "...", "option_d": "...", "correct_answer": "单字母或参考答案文本"}]}\n'
+                    "只列出题目（含选项与答案），不要写解析；选择题 correct_answer 只能单个字母。"
+                )},
+                {"role": "user", "content": user_req},
+            ],
+            max_tokens=2500,
+            timeout=timeout,
+        )
+        questions_items = titles.get("questions") or []
+    except Exception:
+        questions_items = []
+
+    full_questions = []
+    for q in questions_items:
+        if not isinstance(q, dict) or not q.get("question"):
+            continue
+        opts = " ".join(str(q.get(k) or "") for k in ("option_a", "option_b", "option_c", "option_d"))
+        try:
+            qa_one = _chat_json(
+                [
+                    {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
+                    {"role": "user", "content": (
+                        "题目：" + str(q.get("question"))
+                        + "\n选项：" + opts + "\n答案：" + str(q.get("correct_answer") or "")
+                        + "\n\n请按 JSON 输出（仅这一题，含题干/选项/答案/解析/难度/标签）。"
+                    )},
+                ],
+                max_tokens=3000,
+                timeout=timeout,
+            )
+            full_questions.append(qa_one)
+        except Exception:
+            full_questions.append(q)
+
+    if not full_questions:
+        qa = _chat_json(
+            [
+                {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
+                {"role": "user", "content": user_req},
+            ],
+            max_tokens=6000,
+            timeout=timeout,
+        )
+        full_questions = [qa]
+
+    qa = full_questions[0] if full_questions else {}
+    qa["questions"] = full_questions[1:] if full_questions else []
+
+    # 组装完整结构
+    qa["is_english"] = True
+    qa["subject_hint"] = "英语"
+    qa["passage"] = source_text
+    qa["passage_translation"] = reading.get("passage_translation", "")
+    qa["sentences"] = reading.get("sentences", [])
+    qa["phrases"] = vocab.get("phrases", [])
+    qa["words"] = vocab.get("words", [])
+    return normalize_english_parsed(qa, fallback_text=source_text)
+
+
+def _analyze_standard_content(
+    images: List[str],
+    text: str,
+    standard_tags: List[str] | None = None,
+    instruction: str = "",
+    timeout: int | None = None,
+) -> dict:
+    """对非英语内容用标准错题 prompt 分析（数学/408 等，含 1.1/1.2 详细分步、更细致）。"""
+    prompt = _parse_prompt(standard_tags)
+    if instruction and instruction.strip():
+        text = (f"{text}\n\n【补充要求】{instruction.strip()}" if text else instruction.strip())
+    if images:
+        # 先看图提取文字（快、稳），再用文本做详细分析，避免超大视觉生成超时
+        try:
+            text = _vision_extract_text(images, instruction, timeout) or text
+        except Exception:
+            text = text
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": text or "请分析这道题。"},
+    ]
+    parsed = _chat_json(messages, max_tokens=8000, timeout=timeout)
+    return normalize_parsed(parsed, fallback_text=text)
+
+
+_WORD_PROMPT = (
+    "你是考研英语词汇助手。请用中文解释英语单词，输出严格的 JSON（不要 Markdown）：\n"
+    '{"word": "原词", "phonetic": "音标（如 /əˈbændən/）", '
+    '"meanings": [{"pos": "词性（动词/名词/形容词/副词/动名词/介词/连词等）", "meaning": "该词性下的中文释义"}], '
+    '"example": "一个含该词的例句（尽量贴考研语境）"}\n'
+    "要求：meanings 完整列出所有常见词性与义项（含动词/名词/形容词/动名词等），"
+    "不要只给一个意思；释义准确通俗。"
+)
+
+
+def lookup_word(word: str, timeout: int | None = None) -> dict:
+    """点词查义：用 AI 解释任意英语单词，返回多词性释义（供点击未收录单词时调用）。"""
+    word = (word or "").strip()
+    parsed = _extract_json(
+        _chat(
+            [
+                {"role": "system", "content": _WORD_PROMPT},
+                {"role": "user", "content": f"请解释单词：{word}"},
+            ],
+            timeout=timeout,
+        )
+    )
+    if not isinstance(parsed, dict):
+        parsed = {}
+    meanings = parsed.get("meanings")
+    if not isinstance(meanings, list):
+        meanings = []
+    return {
+        "word": str(parsed.get("word") or word).strip(),
+        "phonetic": str(parsed.get("phonetic") or "").strip(),
+        "meanings": [
+            {"pos": str(m.get("pos") or "").strip(), "meaning": str(m.get("meaning") or "").strip()}
+            for m in meanings
+            if isinstance(m, dict) and (m.get("pos") or m.get("meaning"))
+        ],
+        "example": str(parsed.get("example") or "").strip(),
     }
 
 
@@ -407,7 +903,7 @@ def analyze_text(
         {"role": "user", "content": user_text},
     ]
     return normalize_parsed(
-        _extract_json(_chat(messages, timeout=timeout)),
+        _chat_json(messages, max_tokens=8000, timeout=timeout),
         fallback_text=text.strip(),
     )
 
@@ -424,58 +920,17 @@ def ocr_image(
 ) -> dict:
     """识别图片中的题目并生成结构化错题数据。
 
-    instruction 为可选文字要求（如按某思路解题、某步骤写详细）；
-    reference_image_base64 为可选参考图片（要求按图中思路/方法解题）。
+    先看图提取文字（主图 + 可选参考图），再用文本做详细分析，避免超大视觉生成超时。
     """
-    image_base64 = image_base64.strip()
-    if image_base64.startswith("data:"):
-        data_url = image_base64
-    else:
-        data_url = "data:image/png;base64," + image_base64
-
-    text_part = "请识别图片中的题目，并按要求输出 JSON。"
-    if instruction and instruction.strip():
-        text_part += (
-            "\n\n【补充要求】"
-            + instruction.strip()
-            + "（请严格遵循该思路/方向解题，要求写详细的部分展开写）"
-        )
-    content = [
-        {"type": "text", "text": text_part},
-        {"type": "image_url", "image_url": {"url": data_url}},
-    ]
-    if reference_image_base64 and reference_image_base64.strip():
-        ref = reference_image_base64.strip()
-        if ref.startswith("data:"):
-            ref_data_url = ref
-        else:
-            ref_data_url = "data:image/png;base64," + ref
-        content.append(
-            {"type": "text", "text": "【参考图片】请按此图中的思路/方法解题。"}
-        )
-        content.append(
-            {"type": "image_url", "image_url": {"url": ref_data_url}}
-        )
-
-    messages = [
-        {"role": "system", "content": _parse_prompt(standard_tags)},
-        {"role": "user", "content": content},
-    ]
-    if model:
-        json_mode = model.lower().startswith("deepseek-")
-        return normalize_parsed(
-            _extract_json(
-                _chat(
-                    messages,
-                    model=model,
-                    base_url=base_url or settings.AI_VISION_BASE_URL or None,
-                    api_key=api_key or settings.AI_VISION_API_KEY or None,
-                    timeout=timeout,
-                    response_format={"type": "json_object"} if json_mode else None,
-                )
-            )
-        )
-    return normalize_parsed(_extract_json(_chat(messages, timeout=timeout)))
+    images = [img for img in (image_base64, reference_image_base64) if img and img.strip()]
+    text = ""
+    if images:
+        # 视觉只做简单识人字（小输出、快、稳）
+        text = _vision_extract_text(images, instruction, timeout) or ""
+    # 自动检测：英语→整篇精读；数学/408→标准详细解析
+    return analyze_english(
+        [], text or "", standard_tags=standard_tags, instruction=instruction, timeout=timeout
+    )
 
 
 def vision_extract_text(
@@ -630,4 +1085,4 @@ def grade_solution(
         {"role": "system", "content": _grade_prompt()},
         {"role": "user", "content": material},
     ]
-    return normalize_grade(_extract_json(_chat(messages)))
+    return normalize_grade(_chat_json(messages, max_tokens=6000))
