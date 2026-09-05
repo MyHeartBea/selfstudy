@@ -110,11 +110,28 @@ export function renderBlocks(source) {
   const lines = String(source || '').replace(/\r/g, '').split('\n')
   const html = []
   let index = 0
+  const isHexDump = (raw) => {
+    const s = String(raw || '')
+    const t = s.trim()
+    if (!/^[0-9a-fA-F]{4,}/.test(t)) return false
+    // 行内含 8 个以上两字节十六进制组（如 "0000 00 21 27 ..."）
+    return (t.match(/[0-9a-fA-F]{2}(?:\s|$)/g) || []).length >= 8
+  }
 
   while (index < lines.length) {
     const line = lines[index].trim()
     if (!line) {
       index += 1
+      continue
+    }
+    // 十六进制转储块 → 等宽 mono，防止换行错位（如 题47-b 帧数据）
+    if (isHexDump(lines[index])) {
+      const pre = []
+      while (index < lines.length && (lines[index].trim() === '' || isHexDump(lines[index]))) {
+        pre.push(lines[index])
+        index += 1
+      }
+      html.push(`<pre class="hex-dump">${renderInline(pre.join('\n'))}</pre>`)
       continue
     }
     if (line.startsWith('|')) {
