@@ -6,11 +6,19 @@ import Icon from '../ui/Icon.vue'
 const props = defineProps({
   images: { type: Array, default: () => [] },
   maxWidth: { type: Number, default: 520 },
+  // 只显示前 N 张（列表卡片=1，详情=0 表示全部）
+  count: { type: Number, default: 0 },
 })
 
 const viewerVisible = ref(false)
 const viewerIndex = ref(0)
 const savedOverflow = ref('')
+
+const showList = computed(() => {
+  const list = props.images || []
+  if (props.count > 0) return list.slice(0, props.count)
+  return list
+})
 
 const previewList = computed(() =>
   (props.images || []).map((item) => imageSrc(item)),
@@ -61,13 +69,13 @@ function imageSrc(item) {
 </script>
 
 <template>
-  <div v-if="images && images.length" class="question-images">
+  <div v-if="showList && showList.length" class="question-images">
     <figure
-      v-for="(img, index) in images"
+      v-for="(img, index) in showList"
       :key="index"
       class="question-image"
-      :title="'点击放大（' + (index + 1) + '/' + images.length + '）'"
-      @click="openPreview(index)"
+      :title="'点击放大（' + (index + 1) + '/' + previewList.length + '）'"
+      @click="openPreview(images.indexOf(img))"
     >
       <img :src="imageSrc(img)" alt="题干配图" loading="lazy" />
     </figure>

@@ -100,7 +100,7 @@ const cardText = computed(() => {
       </span>
     </div>
 
-    <QuestionImages :images="mistake.images" :max-width="260" />
+    <QuestionImages :images="mistake.images" :max-width="260" :count="1" />
 
     <div class="question-text">
       <template v-if="mistake.passage_text">
