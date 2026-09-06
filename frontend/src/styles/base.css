@@ -355,64 +355,94 @@ textarea.field-input {
 }
 
 .option-row {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
+  gap: 14px;
+  padding: 13px 18px;
+  border: 1.5px solid transparent;
   border-radius: var(--r-md);
-  margin-bottom: 8px;
-  background: var(--surface);
-  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 10px;
+  background: color-mix(in srgb, var(--surface-2) 55%, transparent);
+  backdrop-filter: blur(6px);
+  transition: border-color 0.16s var(--ease), background 0.16s var(--ease), transform 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
 
 .option-row.clickable {
   cursor: pointer;
 }
 .option-row.clickable:hover {
-  border-color: var(--accent);
+  background: var(--surface-2);
+  transform: translateX(5px);
+  box-shadow: var(--shadow-1);
 }
+.option-row.clickable:active { transform: translateX(5px) scale(0.985); }
 
 .option-row.selected {
   border-color: var(--accent);
   background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .option-row.correct {
   border-color: var(--green);
   background: var(--green-soft);
 }
+.option-row.correct::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--green);
+  opacity: 0;
+  animation: ring-pulse 0.7s var(--ease) forwards;
+  pointer-events: none;
+}
 
 .option-row.wrong {
   border-color: var(--red);
   background: var(--red-soft);
+  animation: opt-shake 0.4s var(--ease);
 }
 
 .option-key {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  font-size: 12.5px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: 13.5px;
   font-weight: 800;
   color: var(--ink-2);
+  transition: all 0.16s var(--ease);
 }
 
 .option-row.correct .option-key {
   background: var(--green);
-  border-color: var(--green);
   color: #fff;
+  box-shadow: none;
 }
 
 .option-row.wrong .option-key {
   background: var(--red);
-  border-color: var(--red);
   color: #fff;
+  box-shadow: none;
+}
+
+@keyframes ring-pulse {
+  from { opacity: 0.8; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.09); }
+}
+@keyframes opt-shake {
+  0%, 100% { transform: translateX(5px); }
+  25% { transform: translateX(0); }
+  50% { transform: translateX(9px); }
+  75% { transform: translateX(3px); }
 }
 
 .review-footer {

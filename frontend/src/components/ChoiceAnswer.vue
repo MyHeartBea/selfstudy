@@ -117,8 +117,13 @@ function confirmAnswer() {
   color: var(--gold);
 }
 .option-row.selected .option-key {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-grad);
   color: #fff;
+  box-shadow: none;
+  animation: key-pop 0.25s var(--spring);
+}
+@keyframes key-pop {
+  from { transform: scale(0.6); }
+  to { transform: scale(1); }
 }
 </style>

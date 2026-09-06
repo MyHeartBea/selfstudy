@@ -14,8 +14,10 @@ import { toast } from '../ui/toast'
 import { confetti } from '../utils/confetti'
 import UiButton from '../ui/UiButton.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
-import UiProgress from '../ui/UiProgress.vue'
 import Icon from '../ui/Icon.vue'
+import GlassCard from '../ui/GlassCard.vue'
+import StageBadge from '../ui/StageBadge.vue'
+import Skeleton from '../ui/Skeleton.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -312,12 +314,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     </div>
 
     <template v-if="done">
-      <div class="done-card card">
-        <span class="done-icon"><Icon name="check" :size="30" /></span>
-        <h3 class="pop-num">{{ practiceTitle ? '练习完成' : '今日复习完成' }}</h3>
+      <div class="done-stage">
+        <div class="stamp">已<br />完成</div>
+        <h3 class="done-title">{{ practiceTitle ? '练习完成' : '今日复习完成' }}</h3>
         <p class="done-sub">
           答对 <b class="ok pop-num">{{ resultCount.correct }}</b> 题，答错
-          <b class="bad pop-num">{{ resultCount.wrong }}</b> 题
+          <b class="bad pop-num">{{ resultCount.wrong }}</b> 题 · 朱砂印为证
         </p>
         <div class="done-actions">
           <UiButton v-if="isPractice" variant="outline" @click="router.push('/practice')">再练一组</UiButton>
@@ -328,9 +330,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     </template>
 
     <template v-else-if="current">
-      <UiProgress :percentage="progress" :height="9" class="review-progress" />
+      <!-- 顶部流光进度线 -->
+      <div class="top-progress" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100">
+        <div class="tp-fill" :style="{ width: Math.max(3, progress) + '%' }"></div>
+      </div>
 
-      <div class="card card-pad review-card">
+      <GlassCard class="stage-card" :hover="false">
+        <template #badge>
+          <StageBadge :text="`第 ${index + 1} / ${queue.length} 题`" />
+        </template>
         <div class="detail-meta">
           <MistakeMeta :mistake="current" />
           <span v-if="current.days_since_wrong != null" class="count-tip">
@@ -339,7 +347,6 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <span v-if="current.days_since_review != null" class="count-tip">
             {{ current.days_since_review === 0 ? '今天复习过' : current.days_since_review + ' 天未复习' }}
           </span>
-          <span class="count-tip progress-chip">第 {{ index + 1 }} / {{ queue.length }} 题</span>
         </div>
 
         <!-- 英语整篇：先给原文与参考译文，再做题 -->
@@ -485,27 +492,43 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <template v-else-if="!isChoice && !isFill && !isSolution && !isTranslation"><span><kbd>空格</kbd> 显示答案</span><span><kbd>Q</kbd>/<kbd>W</kbd> 记住/没记住</span></template>
           <template v-else-if="isFill || isSolution"><span><kbd>Ctrl+↵</kbd> 提交作答</span></template>
         </div>
-      </div>
+      </GlassCard>
     </template>
 
     <UiEmpty v-else-if="!loading" :text="emptyText" icon="check" />
-    <div v-else class="card card-pad">
-      <div class="skeleton" style="height: 20px; width: 35%; margin-bottom: 12px"></div>
-      <div class="skeleton" style="height: 120px; margin-bottom: 12px"></div>
-      <div class="skeleton" style="height: 44px; width: 40%"></div>
-    </div>
+    <GlassCard v-else class="stage-card" :hover="false">
+      <div style="display: flex; flex-direction: column; gap: 14px">
+        <Skeleton variant="text" :width="'35%'" />
+        <Skeleton variant="rect" :height="120" :radius="14" />
+        <Skeleton variant="rect" :height="44" :width="'40%'" :radius="12" />
+      </div>
+    </GlassCard>
   </div>
 </template>
 
 <style scoped>
 .remaining { align-self: center; }
 
-.review-progress { margin-bottom: 16px; }
-
-.review-card { max-width: 860px; margin: 0 auto; }
-.progress-chip {
-  margin-left: auto;
+/* ---------- 沉浸舞台 ---------- */
+.top-progress {
+  height: 4px;
+  max-width: 860px;
+  margin: 0 auto 24px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  overflow: hidden;
 }
+.tp-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), #d0664c, #d0664c, var(--accent));
+  background-size: 200% 100%;
+  animation: tp-flow 3s linear infinite;
+  transition: width 0.7s var(--spring);
+}
+@keyframes tp-flow { to { background-position: 200% 0; } }
+
+.stage-card { max-width: 860px; margin: 0 auto; }
 
 .hint { margin: 10px 0; }
 
@@ -546,43 +569,52 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   font-family: var(--font-body);
 }
 
-.done-card {
+.done-stage {
   max-width: 520px;
-  margin: 40px auto;
+  margin: 48px auto;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 44px 32px;
+  gap: 12px;
+  padding: 52px 32px 40px;
   text-align: center;
-  animation: done-in 0.5s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-xl);
+  animation: done-in 0.5s var(--spring) both;
 }
 @keyframes done-in {
   from { opacity: 0; transform: translateY(22px) scale(0.94); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.done-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  background: var(--green-soft);
-  color: var(--green);
-  margin-bottom: 6px;
-  animation: icon-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
-}
-@keyframes icon-pop {
-  from { opacity: 0; transform: scale(0.3) rotate(-20deg); }
-  to { opacity: 1; transform: scale(1) rotate(0deg); }
-}
-.done-card h3 {
+/* 落章：从空中盖章 + 回弹 */
+.stamp {
+  width: 108px;
+  height: 108px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  background: var(--accent-grad);
+  color: #fff;
   font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 700;
+  font-weight: 900;
+  font-size: 32px;
+  line-height: 1.25;
+  box-shadow: 0 10px 28px rgba(168, 51, 32, 0.4), inset 0 2px 0 rgba(255, 255, 255, 0.25);
+  animation: stamp-in 0.6s var(--spring) both, stamp-thud 0.3s var(--ease) 0.38s;
+  margin-bottom: 8px;
 }
-.done-sub { color: var(--ink-2); }
+@keyframes stamp-in {
+  0% { transform: rotate(-6deg) scale(2.4); opacity: 0; }
+  60% { transform: rotate(-6deg) scale(0.94); opacity: 1; }
+  100% { transform: rotate(-6deg) scale(1); }
+}
+@keyframes stamp-thud {
+  0% { transform: rotate(-6deg) scale(1); }
+  40% { transform: rotate(-7deg) scale(1.05); }
+  100% { transform: rotate(-6deg) scale(1); }
+}
+.done-title { font-family: var(--font-display); font-size: 26px; font-weight: 900; margin: 0; }
+.done-sub { color: var(--ink-2); margin: 0; }
 .done-sub .ok { color: var(--green); }
 .done-sub .bad { color: var(--red); }
 .done-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
