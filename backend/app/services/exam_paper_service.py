@@ -143,8 +143,24 @@ def _pdf_text_layer(path: Path) -> str:
 
 
 def _pdf_text_usable(text: str) -> bool:
-    """文本层是否足够用来拆题：扫描版常为空或极稀疏，低于阈值即走 OCR。"""
-    return len((text or "").strip()) >= settings.PDF_TEXT_MIN
+    """文本层是否足够用来拆题。
+
+    扫描版常为空或极稀疏（低于 PDF_TEXT_MIN 即走 OCR）；pypdf 对部分内嵌字体 PDF
+    会提取出大量乱码/控制符，故再用「可读字符占比」判定，占比过低同样触发视觉/OCR 兜底。
+    """
+    s = (text or "").strip()
+    if len(s) < settings.PDF_TEXT_MIN:
+        return False
+    n = len(s)
+    cjk = sum(1 for ch in s if "\u4e00" <= ch <= "\u9fff")
+    alnum = sum(1 for ch in s if ch.isascii() and ch.isalnum())
+    space = sum(1 for ch in s if ch.isspace())
+    punct = sum(
+        1 for ch in s
+        if ch in "，。、；：？！（）《》【】.,;:?!()[]\"'-+=<>/\\|%$#@&*^~`{}"
+    )
+    good = cjk + alnum + space + punct
+    return good / n >= settings.PDF_TEXT_RATIO
 
 
 def _pdf_ocr(path: Path, subject: str = "") -> str:

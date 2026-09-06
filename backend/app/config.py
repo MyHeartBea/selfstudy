@@ -41,6 +41,9 @@ class Settings:
     PDF_OCR_PAGES = int(os.environ.get("PDF_OCR_PAGES", "60"))
     # 判定 PDF 文本层是否可用的最小字符数，低于则触发 OCR 兜底
     PDF_TEXT_MIN = int(os.environ.get("PDF_TEXT_MIN", "200"))
+    # 文本层「可读字符」(CJK+字母数字+空白+常见标点) 占比下限；pypdf 对部分内嵌字体 PDF
+    # 会提取出大量乱码/控制符，占比过低即判定为乱码，触发视觉/OCR 兜底
+    PDF_TEXT_RATIO = float(os.environ.get("PDF_TEXT_RATIO", "0.6"))
 
     # AI 服务（OpenAI 兼容接口，可在 backend/.env 中配置）
     AI_API_KEY = os.environ.get("AI_API_KEY", "")

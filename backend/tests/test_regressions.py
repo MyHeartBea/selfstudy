@@ -352,6 +352,15 @@ class TestPdfOcrFallback(unittest.TestCase):
         self.assertFalse(_is_math("英语二"))
         self.assertFalse(_is_math("政治"))
 
+    def test_pdf_text_usable_rejects_garbled(self):
+        from app.services.exam_paper_service import _pdf_text_usable
+        # 乱码（大量控制符/不可读，可读占比过低）→ 不可用 → 触发视觉/OCR 兜底
+        self.assertFalse(_pdf_text_usable("\x00\x01\x02\x03" * 100))
+        self.assertFalse(_pdf_text_usable("\x00" * 300 + "\x01\x02\x03" * 100))
+        # 正常中文 / 英文 → 可用（走文本层，快）
+        self.assertTrue(_pdf_text_usable("一、单项选择题：1～40 小题，每题 2 分。" * 30))
+        self.assertTrue(_pdf_text_usable("In a linked list, a node is inserted at the head. " * 30))
+
 
 if __name__ == "__main__":
     unittest.main()
