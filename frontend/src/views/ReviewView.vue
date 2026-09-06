@@ -66,6 +66,12 @@ const progress = computed(() =>
   queue.value.length ? Math.round((index.value / queue.value.length) * 100) : 0,
 )
 
+// —— 戏台汉字数字：壹、贰、叁…（超过拾用阿拉伯数字） ——
+const CN_NUMERALS = ['壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖', '拾']
+const stageNumeral = computed(() =>
+  index.value < CN_NUMERALS.length ? CN_NUMERALS[index.value] : String(index.value + 1),
+)
+
 async function loadQueue() {
   loading.value = true
   try {
@@ -330,10 +336,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
     </template>
 
     <template v-else-if="current">
-      <!-- 顶部流光进度线 -->
-      <div class="top-progress" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100">
-        <div class="tp-fill" :style="{ width: Math.max(3, progress) + '%' }"></div>
-      </div>
+      <!-- 巨型汉字数字戏台背景（随题号翻动） -->
+      <div class="stage-wrap">
+        <div :key="index" class="stage-numeral serif" aria-hidden="true">{{ stageNumeral }}</div>
+        <!-- 顶部流光进度线 -->
+        <div class="top-progress" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100">
+          <div class="tp-fill" :style="{ width: Math.max(3, progress) + '%' }"></div>
+        </div>
 
       <GlassCard class="stage-card" :hover="false">
         <template #badge>
@@ -493,6 +502,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <template v-else-if="isFill || isSolution"><span><kbd>Ctrl+↵</kbd> 提交作答</span></template>
         </div>
       </GlassCard>
+      </div>
     </template>
 
     <UiEmpty v-else-if="!loading" :text="emptyText" icon="check" />
@@ -510,7 +520,34 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 .remaining { align-self: center; }
 
 /* ---------- 沉浸舞台 ---------- */
+.stage-wrap {
+  position: relative;
+  max-width: 860px;
+  margin: 0 auto;
+}
+/* 巨型汉字数字：戏台纵深 */
+.stage-numeral {
+  position: absolute;
+  top: -84px;
+  right: -14px;
+  z-index: 0;
+  font-size: 230px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0.055;
+  pointer-events: none;
+  user-select: none;
+  animation: numeral-in 0.65s var(--ease) both;
+}
+@keyframes numeral-in {
+  from { opacity: 0; transform: translateY(26px) rotate(5deg) scale(0.9); }
+  to { opacity: 0.055; transform: translateY(0) rotate(0deg) scale(1); }
+}
+
 .top-progress {
+  position: relative;
+  z-index: 1;
   height: 4px;
   max-width: 860px;
   margin: 0 auto 24px;
@@ -528,7 +565,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 }
 @keyframes tp-flow { to { background-position: 200% 0; } }
 
-.stage-card { max-width: 860px; margin: 0 auto; }
+.stage-card { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; }
 
 .hint { margin: 10px 0; }
 

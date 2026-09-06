@@ -1,6 +1,6 @@
 <script setup>
 /** 智能录入：粘贴题干 / 上传截图 → AI 解析 → 核对表单 → 提交 */
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -365,6 +365,13 @@ onMounted(() => {
   window.addEventListener('paste', onPaste, true)
 })
 
+// —— 研墨三步：壹 投料 → 贰 研磨 → 叁 装订 ——
+const flowStep = computed(() => {
+  if (analyzing.value) return 2
+  if (parsed.value) return 3
+  return 1
+})
+
 onUnmounted(() => {
   window.removeEventListener('paste', onPaste, true)
   analysisRequestId += 1
@@ -379,6 +386,21 @@ onUnmounted(() => {
         <div class="view-kicker">Smart Capture</div>
         <h2>智能录入</h2>
         <p class="view-desc">粘贴题干或上传图片，可附加解题要求与参考图，AI 按你的思路整理成完整错题。</p>
+      </div>
+    </div>
+
+    <!-- 研墨三步流程轴 -->
+    <div class="ink-steps" aria-hidden="true">
+      <div class="ink-step" :class="{ active: flowStep === 1, done: flowStep > 1 }">
+        <i class="serif">壹</i><span>投料 · 粘贴或上传</span>
+      </div>
+      <i class="ink-join"></i>
+      <div class="ink-step" :class="{ active: flowStep === 2, done: flowStep > 2 }">
+        <i class="serif">贰</i><span>研磨 · AI 解析</span>
+      </div>
+      <i class="ink-join"></i>
+      <div class="ink-step" :class="{ active: flowStep === 3 }">
+        <i class="serif">叁</i><span>装订 · 核对保存</span>
       </div>
     </div>
 
@@ -539,6 +561,57 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/* 研墨三步流程轴 */
+.ink-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.ink-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.ink-step i {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-weight: 900;
+  font-size: 15px;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  transition: all 0.35s var(--ease);
+}
+.ink-step.active i {
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-hover) 45%, transparent);
+  transform: rotate(-4deg) scale(1.05);
+}
+.ink-step.done i {
+  background: var(--green-soft);
+  border-color: transparent;
+  color: var(--green);
+}
+.ink-step.active { color: var(--accent-ink); }
+.ink-step.done { color: var(--ink-2); }
+.ink-join {
+  width: 34px;
+  height: 0;
+  border-top: 2px dashed var(--line-strong);
+}
+
 .notice {
   display: flex;
   gap: 11px;
@@ -576,6 +649,19 @@ onUnmounted(() => {
 
 .capture-panel { display: flex; flex-direction: column; gap: 16px; }
 .tab-body { display: flex; flex-direction: column; gap: 12px; }
+/* 宣纸笺输入区：虚线笺边，落笔（聚焦）变实 */
+.tab-body textarea.field-input {
+  border: 1.5px dashed var(--line-strong);
+  background: color-mix(in srgb, var(--surface-2) 40%, transparent);
+  line-height: 1.8;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.tab-body textarea.field-input:focus {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
 
 .capture-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .pick-label { cursor: pointer; }

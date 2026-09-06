@@ -21,6 +21,7 @@ const props = defineProps({
   index: { type: Number, default: 0 }, // 展示序号（倒序编号）
   pos: { type: Number, default: 0 }, // 页内位置（级联入场 / 相纸倾角）
   selected: { type: Boolean, default: false },
+  featured: { type: Boolean, default: false }, // 头条卡：双栏放大，更多题干
 })
 
 const emit = defineEmits(['open', 'toggle-select'])
@@ -80,7 +81,7 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
 <template>
   <article
     class="mistake-card card tilt"
-    :class="{ picked: selected }"
+    :class="{ picked: selected, 'featured-card': featured }"
     :style="{ '--enter-delay': `${Math.min(pos, 11) * 55}ms`, '--spine': spineColor }"
     tabindex="0"
     role="button"
@@ -106,9 +107,9 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
       </span>
     </div>
 
-    <!-- 相纸贴片：白边相框 + 交错微倾角，悬停回正 -->
-    <div v-if="hasImage" class="shot-frame" :class="`rot-${pos % 3}`">
-      <QuestionImages :images="mistake.images" :max-width="250" :count="1" />
+    <!-- 相纸贴片：白边相框 + 胶带贴角 + 交错微倾角，悬停回正 -->
+    <div v-if="hasImage" class="shot-frame" :class="[`rot-${pos % 3}`, { featured }]">
+      <QuestionImages :images="mistake.images" :max-width="featured ? 340 : 250" :count="1" />
     </div>
 
     <div class="question-text">
@@ -221,12 +222,28 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
 
 /* 相纸贴片 */
 .shot-frame {
+  position: relative;
   align-self: center;
   background: #fffdf9;
   border-radius: 8px;
   padding: 7px 7px 9px;
   box-shadow: 0 4px 14px rgba(30, 24, 16, 0.18), 0 1px 3px rgba(30, 24, 16, 0.12);
   transition: transform 0.35s var(--spring), box-shadow 0.35s var(--ease);
+}
+/* 朱砂胶带贴角 */
+.shot-frame::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 84px;
+  height: 20px;
+  transform: translateX(-50%) rotate(-2.5deg);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+  border-right: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+  backdrop-filter: blur(1px);
+  pointer-events: none;
 }
 .shot-frame img { display: block; }
 .rot-0 { transform: rotate(-1.2deg); }
@@ -235,6 +252,14 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
 .mistake-card:hover .shot-frame {
   transform: rotate(0deg) scale(1.025);
   box-shadow: 0 10px 24px rgba(30, 24, 16, 0.24), 0 2px 6px rgba(30, 24, 16, 0.14);
+}
+.mistake-card:hover .shot-frame::before { transform: translateX(-50%) rotate(-1deg); }
+
+/* 头条卡：更多题干 */
+.featured-card .question-text {
+  -webkit-line-clamp: 6;
+  font-size: 14.5px;
+  line-height: 27px;
 }
 
 .question-text {
