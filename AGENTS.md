@@ -105,6 +105,7 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 - **已弃用，勿再使用**：`start-server.cmd`、启动文件夹里 `openviking-server.cmd`、`D:\\dsh-home\\openviking\\ov.conf`（指向 D 盘另一工作区）。
 
 ## 9. 当前状态（2026-09-06）
-- git HEAD = `aad766f`（文档：修正 openviking 配置分裂说明）。
+- git HEAD = `7d2416e`（修复：识图视觉通道回退重新接线+英语解析全程预算+同步过期测试，CI 转绿）。
 - 后端 8000 运行中；前端 `frontend/dist` 已构建。
+- 2026-09-06 修复三处 d20d838 重构遗留：①`_vision_extract_text`/`ocr_image`/`analyze_english` 支持 `model/base_url/api_key` 通道透传（此前写死 DeepSeek，GLM/Agnes 回退失效）；②`/ai/english` 带图时按通道逐个回退；③英语整篇链内逐步扣减超时预算（防串行多次调用叠加超 300s）；④`test_regressions` 3 个用例同步新契约，40 测试全绿。
 - openviking 已修复并验证正常（记忆抽取走 DeepSeek VLM，`pending/` 已清理）。
