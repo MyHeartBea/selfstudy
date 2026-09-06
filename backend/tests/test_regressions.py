@@ -342,6 +342,16 @@ class TestPdfOcrFallback(unittest.TestCase):
         with self.assertRaises(ValueError):
             extract_text(Path("foo.txt"))
 
+    def test_is_math_subject_for_vision_first(self):
+        from app.services.exam_paper_service import _is_math
+        # 公式密集卷 → 视觉优先（LaTeX）
+        self.assertTrue(_is_math("数学二"))
+        self.assertTrue(_is_math("计算机408"))
+        self.assertTrue(_is_math("数学"))
+        # 文科目 → 本地 OCR 优先
+        self.assertFalse(_is_math("英语二"))
+        self.assertFalse(_is_math("政治"))
+
 
 if __name__ == "__main__":
     unittest.main()

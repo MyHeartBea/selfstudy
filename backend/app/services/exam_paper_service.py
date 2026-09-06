@@ -88,12 +88,12 @@ def scan_folder() -> List[dict]:
     return found
 
 
-def extract_text(path: Path) -> str:
+def extract_text(path: Path, subject: str = "") -> str:
     """提取 docx / pdf 的全文文本。
 
-    PDF 优先用 pypdf 提取文本层；文本层为空/过少（扫描版图片型 PDF）时，用
-    pypdfium2 把页面渲染成图，逐页走本地 Windows OCR 兜底（更快、免费、可离线），
-    OCR 仍失败的页再退视觉模型提取，尽量把题面文字捞回来。
+    PDF 优先用 pypdf 提取文本层；文本层为空/过少（扫描版图片型 PDF）时，用 pypdfium2
+    把页面渲染成图：**数学/408 等公式密集卷优先视觉模型（能输出准确 LaTeX）**，本地
+    Windows OCR 作兜底；文科目反之（本地 OCR 快、免费，视觉作兜底），尽量把题面文字捞回。
     """
     suffix = path.suffix.lower()
     if suffix == ".docx":
@@ -111,12 +111,18 @@ def extract_text(path: Path) -> str:
         text = _pdf_text_layer(path)
         if _pdf_text_usable(text):
             return text
-        # 文本层稀少/为空：扫描版 → 渲染成图走本地 OCR（必要时视觉兜底）。
-        ocr_text = _pdf_ocr(path)
+        # 文本层稀少/为空：扫描版 → 渲染成图，按科目选 视觉/OCR 兜底。
+        ocr_text = _pdf_ocr(path, subject)
         if ocr_text.strip():
             return ocr_text
         return text  # 兜底全失败，返回原文本（调用方给出明确报错）
     raise ValueError(f"不支持的文件类型：{suffix}")
+
+
+def _is_math(subject: str) -> bool:
+    """是否为公式密集卷（数学 / 计算机408），以决定优先视觉还是本地 OCR。"""
+    s = (subject or "").lower()
+    return ("数学" in s) or ("408" in s) or ("计算机" in s)
 
 
 def _pdf_text_layer(path: Path) -> str:
@@ -141,8 +147,12 @@ def _pdf_text_usable(text: str) -> bool:
     return len((text or "").strip()) >= settings.PDF_TEXT_MIN
 
 
-def _pdf_ocr(path: Path) -> str:
-    """扫描版 PDF 兜底：渲染页面为图，逐页本地 OCR；OCR 失败的页退视觉。"""
+def _pdf_ocr(path: Path, subject: str = "") -> str:
+    """扫描版 PDF 兜底：渲染页面为图，逐页提取文字。
+
+    数学/408：视觉模型优先（输出 LaTeX，公式准确），失败退本地 OCR；
+    其他科目：本地 Windows OCR 优先（快、免费），失败退视觉模型。
+    """
     import base64
     import io
 
@@ -158,29 +168,41 @@ def _pdf_ocr(path: Path) -> str:
     except Exception:
         return ""
 
+    math = _is_math(subject)
     limit = settings.PDF_OCR_PAGES or pages
     out: List[str] = []
-    # 正常试卷页数少，全量 OCR 才能覆盖全部题目；仅在累计文本足够拆题(约2段)时提前刹车，
-    # 避免 100+ 页的「解析/答案速查」类大文件被整本 OCR 拖慢。
+    # 正常试卷页数少，全量提取才能覆盖全部题目；仅在累计文本足够拆题(约2段)时提前刹车，
+    # 避免 100+ 页的「解析/答案速查」类大文件被整本拖慢。
     needed = _CHUNK_CHARS * 2
     for i in range(min(pages, limit)):
         try:
             page = pdf[i]
-            bmp = page.render(scale=2.0)
+            bmp = page.render(scale=2.2)
             pil = bmp.to_pil()
             buf = io.BytesIO()
             pil.save(buf, format="PNG")
             data = buf.getvalue()
         except Exception:
             continue
+        b64 = base64.b64encode(data).decode()
         text = ""
-        if local_ocr.is_available():
-            try:
-                text = local_ocr.recognize_base64(base64.b64encode(data).decode())
-            except Exception:
-                text = ""
-        if not text.strip():
-            text = _pdf_page_vision(pil, i)
+        if math:
+            # 公式密集：视觉优先（LaTeX），本地 OCR 兜底
+            text = _pdf_page_vision(pil, i, subject)
+            if not text.strip() and local_ocr.is_available():
+                try:
+                    text = local_ocr.recognize_base64(b64)
+                except Exception:
+                    text = ""
+        else:
+            # 文科目：本地 OCR 优先，视觉兜底
+            if local_ocr.is_available():
+                try:
+                    text = local_ocr.recognize_base64(b64)
+                except Exception:
+                    text = ""
+            if not text.strip():
+                text = _pdf_page_vision(pil, i, subject)
         if text.strip():
             out.append(text.strip())
         if sum(len(t) for t in out) >= needed:
@@ -188,8 +210,8 @@ def _pdf_ocr(path: Path) -> str:
     return "\n".join(out)
 
 
-def _pdf_page_vision(pil, index: int) -> str:
-    """单页视觉兜底：把渲染图交给 DeepSeek 视觉模型提取文字。"""
+def _pdf_page_vision(pil, index: int, subject: str = "") -> str:
+    """单页视觉提取：把渲染图交给 DeepSeek 视觉模型；数学/408 要求输出 LaTeX。"""
     import base64
     import io
 
@@ -201,11 +223,22 @@ def _pdf_page_vision(pil, index: int) -> str:
     except Exception:
         return ""
     b64 = base64.b64encode(buf.getvalue()).decode()
+    if _is_math(subject):
+        instruction = (
+            "这是一页考研数学/计算机408 真题。请完整、准确提取全部文字，"
+            "数学公式一律用 LaTeX（如 \\int、\\frac、\\lim、\\sum、\\sqrt、矩阵用 bmatrix/pmatrix）。"
+            "只输出内容本身，不要解释。"
+        )
+    else:
+        instruction = (
+            "请完整、准确提取这一页试卷的文字，保留段落与换行；如含数学公式请用 LaTeX。"
+            "只输出内容本身，不要解释。"
+        )
     try:
         return ai_service._vision_extract_text(
             [b64],
-            "请完整提取这一页试卷题目的文字，数学公式用 LaTeX 表示；只输出文字本身，不要解释。",
-            timeout=settings.AI_VISION_TIMEOUT,
+            instruction,
+            timeout=min(settings.AI_VISION_PRIMARY_TIMEOUT, 90),
         )
     except Exception:
         return ""
@@ -313,7 +346,7 @@ def _run_import(paper_id: int) -> None:
             return
 
         _set_status(conn, paper_id, "extracting", "正在提取试卷文本")
-        exam_text = extract_text(source)
+        exam_text = extract_text(source, paper["subject"])
         if not exam_text.strip():
             _set_status(conn, paper_id, "error", "未能从文件提取到文本（可能是扫描版 PDF，请换 Word/文本版）")
             return

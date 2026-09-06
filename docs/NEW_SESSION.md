@@ -35,4 +35,4 @@
 - **后端契约**：迁移已到 **v8**（v6=ease_factor/last_interval SM-2、v7=mock_records、v8=exam_papers/exam_questions）；新增 `/api/mocks`、`/ai/weekly-report`（按天缓存）、`/export/anki`、`/reviews/forecast`、`/images/thumb/{name}`；`/reviews/practice` 支持 `mistake_id` 与 `mode=mock`。
 - 测试：后端 41 + 前端 Vitest 10（`cd frontend && npm test`）全绿。
 - 后端 8000 运行中；前端 `frontend/dist` 已构建。openviking 正常（见上节，VLM=DeepSeek）。
-- 真题库已上线：真机验证英语二 2013 全链路（拆题 33 题 50 秒/答案配对 20/27/整卷模考/错题自动入本）；**扫描版 PDF 已支持 OCR 兜底**（pypdfium2 渲染+本地 Windows OCR 逐页，仍失败退 DeepSeek 视觉提字；数学拆题实测 2025 数二 22 题/配答案 10/10）。公式密集的数学题如不满意可走智能录入识图精修。
+- 真题库已上线：真机验证英语二 2013 全链路（拆题 33 题 50 秒/答案配对 20/27/整卷模考/错题自动入本）；**扫描版 PDF 已支持且公式更准**（数学/408 优先 DeepSeek 视觉输出 LaTeX，本地 Windows OCR 兜底；实测 2025 数二 22 题/配答案 10/10，公式/偏导/积分限/矩阵准确还原）。公式密集的数学题如不满意可走智能录入识图精修。
