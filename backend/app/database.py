@@ -499,8 +499,11 @@ def mistake_to_dict(row: sqlite3.Row) -> dict:
     else:
         data["images"] = []
 
-    # 英语整篇精读附加字段（JSON 字符串 → 数组）
+    # 英语整篇精读附加字段（JSON 字符串 → 数组）。
+    # 列表查询（LIST_COLUMNS）不含这些列，保持缺席以缩小响应体；其余路径全列输出。
     for column in ("english_sentences", "english_phrases", "english_words", "english_questions"):
+        if column not in data:
+            continue
         raw = data.get(column) or ""
         if raw:
             try:

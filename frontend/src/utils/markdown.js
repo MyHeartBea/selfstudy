@@ -63,7 +63,10 @@ export function renderInline(text) {
       }
       const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
       if (linkMatch) {
-        return `<a href="${escapeHtml(linkMatch[2])}" target="_blank" rel="noopener">${escapeHtml(
+        // 只放行安全协议，堵住 javascript:/vbscript: 等内联执行入口
+        const href = linkMatch[2].trim()
+        const safeHref = /^(https?:|mailto:|\/|#)/i.test(href) ? href : '#'
+        return `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener">${escapeHtml(
           linkMatch[1],
         )}</a>`
       }
@@ -155,8 +158,15 @@ export function renderBlocks(source) {
     }
     const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
     if (imageMatch) {
+      const imgSrc = imageMatch[2].trim()
+      // 与链接同样的协议白名单（data: 仅限图片），防内联执行
+      const safeSrc = /^(https?:|\/|#)/i.test(imgSrc)
+        ? imgSrc
+        : /^data:image\//i.test(imgSrc)
+          ? imgSrc
+          : '#'
       html.push(
-        `<img src="${escapeHtml(imageMatch[2])}" alt="${escapeHtml(
+        `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(
           imageMatch[1],
         )}" loading="lazy">`,
       )

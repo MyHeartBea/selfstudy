@@ -175,6 +175,47 @@ class TestApiSmoke(unittest.TestCase):
         self.assertNotIn("detail", body)
         self.assertEqual(body["code"], r.status_code)
 
+    def test_export_import_round_trip(self):
+        """导出 → 导入往返：字段与图片 data URL 完整保留，导入计为 created。
+
+        同时锁定列表接口瘦身契约：列表项不含英语整篇大 JSON 字段。
+        """
+        payload = {
+            "subject_id": 3,
+            "question_type": "fill",
+            "question": "往返测试 $\\int_0^1 x\\,dx$",
+            "correct_answer": "0.5",
+            "difficulty": 2,
+            "difficulty_points": "积分",
+            "analysis": "$\\int_0^1 x\\,dx=0.5$",
+            "knowledge_tags": ["定积分"],
+            "source_type": "mock",
+            "source_year": "2026",
+            "source_name": "往返模拟卷",
+            "images": ["data:image/png;base64,aGVsbG8="],
+        }
+        r = self.client.post("/api/mistakes", json=payload)
+        self.assertEqual(r.status_code, 200)
+        mid = r.json()["data"]["id"]
+
+        exported = self.client.get("/api/export").json()["data"]
+        match = [m for m in exported["mistakes"] if m["id"] == mid]
+        self.assertTrue(match, "导出必须包含新建错题")
+        self.assertTrue(match[0]["images"], "导出的错题应携带图片 data URL")
+
+        r2 = self.client.post("/api/import", json={"mistakes": [match[0]]})
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.json()["data"]["created"], 1)
+
+        # 列表可按题干搜回，且列表项不含英语大 JSON 字段（瘦身契约）
+        found = self.client.get(
+            "/api/mistakes", params={"search": "往返测试", "page": 1}
+        ).json()["data"]["items"]
+        self.assertTrue(found)
+        self.assertNotIn("english_questions", found[0])
+        self.assertNotIn("english_sentences", found[0])
+        self.client.delete(f"/api/mistakes/{mid}")
+
 
 if __name__ == "__main__":
     unittest.main()

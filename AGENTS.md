@@ -105,7 +105,8 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 - **已弃用，勿再使用**：`start-server.cmd`、启动文件夹里 `openviking-server.cmd`、`D:\\dsh-home\\openviking\\ov.conf`（指向 D 盘另一工作区）。
 
 ## 9. 当前状态（2026-09-06）
-- git HEAD = `7d2416e`（修复：识图视觉通道回退重新接线+英语解析全程预算+同步过期测试，CI 转绿）。
-- 后端 8000 运行中；前端 `frontend/dist` 已构建。
-- 2026-09-06 修复三处 d20d838 重构遗留：①`_vision_extract_text`/`ocr_image`/`analyze_english` 支持 `model/base_url/api_key` 通道透传（此前写死 DeepSeek，GLM/Agnes 回退失效）；②`/ai/english` 带图时按通道逐个回退；③英语整篇链内逐步扣减超时预算（防串行多次调用叠加超 300s）；④`test_regressions` 3 个用例同步新契约，40 测试全绿。
-- openviking 已修复并验证正常（记忆抽取走 DeepSeek VLM，`pending/` 已清理）。
+- git HEAD = `0ccb8d9` 之后的「质量保持+全面修复」提交（见 git log 最新一条）。
+- 后端 8000 运行中；前端 `frontend/dist` 已构建；41 个测试全绿。
+- 2026-09-06 修复三处 d20d838 重构遗留：①`_vision_extract_text`/`ocr_image`/`analyze_english` 支持 `model/base_url/api_key` 通道透传（此前写死 DeepSeek，GLM/Agnes 回退失效）；②`/ai/english` 带图时按通道逐个回退；③英语整篇链内逐步扣减超时预算（防串行多次调用叠加超 300s）；④`test_regressions` 3 个用例同步新契约。
+- 2026-09-06 第二轮（质量保持+全面修复）：⑤英语整篇改为**并行波次**（词汇‖题目清单、逐题并发，prompt/max_tokens 与串行一致，**质量不降只省墙钟**，超时兜底仅极端情况触发）；⑥`/api/mistakes` 列表瘦身（`LIST_COLUMNS` 排除英语大 JSON 字段，详情/编辑/复习仍 `SELECT *` 全量，`mistake_to_dict` 缺列不再补空键）；⑦新增 `test_export_import_round_trip`（41 测试）；⑧前端上传图片压缩 `utils/image.js`（长边 2000px，PNG 保持无损）+ 多图上限 5 张前端拦截；⑨`vocab_service` 弃用 `utcnow` 改时区感知；⑩`markdown.js` 链接/图片协议白名单（堵 `javascript:`）；⑪`docs/analysis-2026-08-14.md` 加归档标注（旧系统报告，勿据此改代码）。
+- openviking 已修复并验证正常（2026-09-06 复核：1933 监听、`embedding.dense`=智谱 embedding-3/2048/key 已配置、`vlm`=DeepSeek VLM/key 已配置、`OpenViking自启.vbs` 唯一条目、脚本 CONF 指向 `C:\Users\Administrator\.openviking\ov.conf`；弃用条目均已 `.disabled`）。

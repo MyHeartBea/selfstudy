@@ -7,6 +7,7 @@ import request from '../api/request'
 import MistakeForm from '../components/MistakeForm.vue'
 import EnglishAnalysisPanel from '../components/EnglishAnalysisPanel.vue'
 import { getClipboardImage } from '../utils/clipboard'
+import { compressImageFile } from '../utils/image'
 import { createMistakeDraft } from '../composables/mistakeDraft'
 import { toast } from '../ui/toast'
 import UiButton from '../ui/UiButton.vue'
@@ -30,8 +31,6 @@ const moreImages = ref([]) // 英语整篇多张原文/选项图（附加主图�
 const pasteTarget = ref('main') // 下张粘贴目标：main=继续加主图 / reference=参考图
 const ocrRawText = ref('')
 const aiWarning = ref('')
-const readerRef = ref(null)
-const referenceReaderRef = ref(null)
 let analysisRequestId = 0
 
 async function analyze() {
@@ -103,7 +102,7 @@ function onFileChange(event) {
   handleImageFile(file)
 }
 
-function handleImageFile(file) {
+async function handleImageFile(file) {
   if (!file || !file.type.startsWith('image/')) {
     toast.warning('剪贴板内容不是图片，请重新截图后粘贴')
     return
@@ -113,7 +112,7 @@ function handleImageFile(file) {
     addMoreImage(file)
     return
   }
-  // 粘贴/选择后先暂存预览，等待用户补充要求或参考图片后再点击分析
+  // 粘贴/选择后先暂存预览（超大图自动压缩），等待用户补充要求或参考图片后再点击分析
   const requestId = ++analysisRequestId
   analyzing.value = false
   analyzingText.value = ''
@@ -121,38 +120,36 @@ function handleImageFile(file) {
   ocrRawText.value = ''
   aiWarning.value = ''
   removeReference()
-  const reader = new FileReader()
-  readerRef.value = reader
-  reader.onload = () => {
-    if (requestId !== analysisRequestId) return
-    previewImage.value = String(reader.result)
-    imageBase64.value = String(reader.result).split(',')[1] || String(reader.result)
-  }
-  reader.onerror = () => {
-    if (requestId !== analysisRequestId) return
-    analyzing.value = false
-    analyzingText.value = ''
+  const compressed = await compressImageFile(file)
+  if (!compressed) {
     toast.error('图片读取失败，请重新截图后粘贴')
+    return
   }
-  reader.readAsDataURL(file)
+  if (requestId !== analysisRequestId) return
+  previewImage.value = compressed.dataUrl
+  imageBase64.value = compressed.dataUrl.split(',')[1] || compressed.dataUrl
 }
 
-function addMoreImage(file) {
+async function addMoreImage(file) {
   if (!file || !file.type.startsWith('image/')) {
     toast.warning('图片格式不正确，请重新选择')
     return
   }
-  const reader = new FileReader()
-  reader.onload = () => {
-    const preview = String(reader.result)
-    moreImages.value.push({
-      preview,
-      base64: String(reader.result).split(',')[1] || String(reader.result),
-    })
-    toast.success('已添加图片，可继续追加或开始识别')
+  // 与后端上限一致：主图 + 附图最多 5 张
+  if (moreImages.value.length >= 4) {
+    toast.warning('主图 + 附图最多 5 张，已达上限')
+    return
   }
-  reader.onerror = () => toast.error('图片读取失败')
-  reader.readAsDataURL(file)
+  const compressed = await compressImageFile(file)
+  if (!compressed) {
+    toast.error('图片读取失败')
+    return
+  }
+  moreImages.value.push({
+    preview: compressed.dataUrl,
+    base64: compressed.dataUrl.split(',')[1] || compressed.dataUrl,
+  })
+  toast.success('已添加图片，可继续追加或开始识别')
 }
 
 function removeMoreImage(index) {
@@ -170,14 +167,6 @@ function removeMainImage() {
   ocrRawText.value = ''
   aiWarning.value = ''
   removeReference()
-  if (readerRef.value) {
-    try {
-      readerRef.value.abort()
-    } catch (err) {
-      // 忽略中止异常
-    }
-    readerRef.value = null
-  }
 }
 
 function onReferenceFileChange(event) {
@@ -186,34 +175,23 @@ function onReferenceFileChange(event) {
   stageReferenceFile(file)
 }
 
-function stageReferenceFile(file) {
+async function stageReferenceFile(file) {
   if (!file || !file.type.startsWith('image/')) {
     toast.warning('参考图片格式不正确，请重新选择')
     return
   }
-  const reader = new FileReader()
-  referenceReaderRef.value = reader
-  reader.onload = () => {
-    referenceImage.value = String(reader.result)
-    referenceBase64.value = String(reader.result).split(',')[1] || String(reader.result)
-  }
-  reader.onerror = () => {
+  const compressed = await compressImageFile(file)
+  if (!compressed) {
     toast.error('参考图片读取失败')
+    return
   }
-  reader.readAsDataURL(file)
+  referenceImage.value = compressed.dataUrl
+  referenceBase64.value = compressed.dataUrl.split(',')[1] || compressed.dataUrl
 }
 
 function removeReference() {
   referenceImage.value = ''
   referenceBase64.value = ''
-  if (referenceReaderRef.value) {
-    try {
-      referenceReaderRef.value.abort()
-    } catch (err) {
-      // 忽略中止异常
-    }
-    referenceReaderRef.value = null
-  }
 }
 
 function onPaste(event) {
@@ -353,22 +331,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('paste', onPaste, true)
   analysisRequestId += 1
-  if (readerRef.value) {
-    try {
-      readerRef.value.abort()
-    } catch (err) {
-      // 忽略中止异常
-    }
-    readerRef.value = null
-  }
-  if (referenceReaderRef.value) {
-    try {
-      referenceReaderRef.value.abort()
-    } catch (err) {
-      // 忽略中止异常
-    }
-    referenceReaderRef.value = null
-  }
 })
 </script>
 

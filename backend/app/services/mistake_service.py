@@ -26,6 +26,40 @@ from app.services.knowledge_service import (
 
 SOURCE_TYPES = {"real_exam", "mock", "other"}
 
+# 列表查询排除英语整篇的大 JSON 字段（全文翻译/逐句/短语/生词/多题，单行可达十几 KB）。
+# 列表卡片只用到题干/首图/标签/元信息；详情、编辑、复习路径各自 SELECT * 取全量，不受影响。
+LIST_COLUMNS = (
+    "id",
+    "subject_id",
+    "sub_subject_id",
+    "question_type",
+    "question",
+    "option_a",
+    "option_b",
+    "option_c",
+    "option_d",
+    "correct_answer",
+    "answer_aliases",
+    "analysis",
+    "difficulty",
+    "difficulty_points",
+    "knowledge_tags",
+    "approach",
+    "source",
+    "source_type",
+    "source_year",
+    "source_name",
+    "review_count",
+    "wrong_count",
+    "mastery_level",
+    "last_reviewed_at",
+    "next_review_at",
+    "review_paused",
+    "images",
+    "passage_text",
+    "created_at",
+)
+
 IMAGE_DIR: Path = PROJECT_ROOT / "data" / "images"
 IMAGE_MAX_BYTES = 8 * 1024 * 1024  # 单张图片 base64 解码后上限 8MB
 IMAGE_MAX_COUNT = 5
@@ -384,7 +418,7 @@ def list_mistakes(
         params,
     ).fetchone()[0]
 
-    sql = "SELECT * FROM mistakes" + where_sql
+    sql = "SELECT " + ", ".join(LIST_COLUMNS) + " FROM mistakes" + where_sql
     sql += " ORDER BY " + order_by
     if page is not None:
         # 只传 page 不传 page_size 时兜底默认值，避免 (page-1)*None 抛 TypeError

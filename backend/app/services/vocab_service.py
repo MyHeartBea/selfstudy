@@ -9,7 +9,7 @@
 import random
 import re
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from app.database import local_day_bounds_utc
@@ -206,7 +206,7 @@ def review_vocab(conn: sqlite3.Connection, vocab_id: int, result: str) -> Option
 
     next_review = None
     if interval > 0:
-        next_review = (datetime.utcnow() + timedelta(days=interval)).strftime(
+        next_review = (datetime.now(timezone.utc) + timedelta(days=interval)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 

@@ -8,6 +8,7 @@ import socket
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 from app.config import settings
@@ -19,6 +20,12 @@ class AiNotConfigured(Exception):
 
 class AiRequestError(Exception):
     pass
+
+
+# 解析步骤并发执行器：词汇‖题目清单、逐题解析并行。各步的 prompt / max_tokens 与
+# 串行版完全一致，质量不减，只是把互不依赖的调用改为并发以缩短墙钟时间；
+# _chat 每次调用自建 opener、无共享可变状态，线程安全。
+_ANALYSIS_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="km-analysis")
 
 
 def is_configured() -> bool:
@@ -726,11 +733,12 @@ def analyze_english(
     base_url: str | None = None,
     api_key: str | None = None,
 ) -> dict:
-    """英语整篇精读（分段式，内容不减）：看图提字 + 阅读/翻译/拆解 + 词汇短语 + 多题解析，各段更小更稳。
+    """英语整篇精读（分段式+并行波次，内容不减）：看图提字 → 阅读/翻译/拆解 → （词汇‖题目清单）→ 逐题解析并发。
 
-    timeout 是整条链（提字 + 全部分析调用）的总预算，内部逐步扣减，
-    避免串行多次调用各自持有一份完整超时、叠加远超前端等待上限；
-    可选步骤（词汇/题目清单/逐题分析）在预算耗尽时自动跳过或退化为仅题干。
+    timeout 是整条链的总预算，内部逐步扣减，避免串行调用各自持有一份完整超时；
+    各步的 prompt / max_tokens 与输出规格不受预算影响（不为提速降低生成质量），
+    并发只用于缩短互不依赖调用（词汇‖清单、逐题）的墙钟时间；
+    仅当预算真的耗尽时，失败步骤才退化为兜底结果（词汇空/该题仅题干清单）。
     model/base_url/api_key 指定视觉通道（未指定时用 DeepSeek 首选通道）。
     """
     deadline = time.monotonic() + (timeout or settings.AI_TIMEOUT)
@@ -775,11 +783,11 @@ def analyze_english(
             [], source_text, standard_tags, instruction, timeout=_remaining()
         )
 
-    # ② 重点短语/生词（预算耗尽或失败则不阻塞，词汇可为空）
-    vocab = {}
-    if _remaining() > 5:
+    # ②+③清单 并行波次：重点短语/生词 与 题目清单互不依赖，同时请求。
+    # 每步输出规格（prompt/max_tokens）与串行版一致；失败各自兜底，不互相阻塞。
+    def _vocab_task() -> dict:
         try:
-            vocab = _chat_json(
+            return _chat_json(
                 [
                     {"role": "system", "content": _parse_english_vocab_prompt()},
                     {"role": "user", "content": source_text},
@@ -788,15 +796,14 @@ def analyze_english(
                 timeout=_remaining(),
             )
         except Exception:
-            vocab = {}
+            return {}
 
-    # ③ 题目与解析：先列清单（小、稳），再逐题完整分析（单题输出小，不易漏逗号）
     user_req = source_text
     if instruction and instruction.strip():
         user_req = f"{source_text}\n\n【要求】{instruction.strip()}"
 
-    questions_items = []
-    if _remaining() > 5:
+    def _titles_task() -> list:
+        # 先列题目清单（小、稳），逐题解析放下一波并发
         try:
             titles = _chat_json(
                 [
@@ -811,21 +818,20 @@ def analyze_english(
                 max_tokens=2500,
                 timeout=_remaining(),
             )
-            questions_items = titles.get("questions") or []
+            return titles.get("questions") or []
         except Exception:
-            questions_items = []
+            return []
 
-    full_questions = []
-    for q in questions_items:
-        if not isinstance(q, dict) or not q.get("question"):
-            continue
+    vocab = _ANALYSIS_EXECUTOR.submit(_vocab_task).result()
+    questions_items = _ANALYSIS_EXECUTOR.submit(_titles_task).result()
+
+    # ③ 逐题完整分析：并发执行（单题输出小，不易漏逗号；结果按清单顺序归位）
+    todo = [q for q in questions_items if isinstance(q, dict) and q.get("question")]
+
+    def _qa_task(q: dict) -> dict:
         opts = " ".join(str(q.get(k) or "") for k in ("option_a", "option_b", "option_c", "option_d"))
-        if _remaining() <= 5:
-            # 预算耗尽：保留题目清单兜底，不再逐题展开
-            full_questions.append(q)
-            continue
         try:
-            qa_one = _chat_json(
+            return _chat_json(
                 [
                     {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
                     {"role": "user", "content": (
@@ -837,9 +843,11 @@ def analyze_english(
                 max_tokens=3000,
                 timeout=_remaining(),
             )
-            full_questions.append(qa_one)
         except Exception:
-            full_questions.append(q)
+            # 单题分析失败时保留该题清单信息兜底，不影响其它题
+            return q
+
+    full_questions = [_ANALYSIS_EXECUTOR.submit(_qa_task, q).result() for q in todo]
 
     if not full_questions:
         qa = _chat_json(
