@@ -365,7 +365,6 @@ onUnmounted(() => {
           :mistake="item"
           :index="total - (page - 1) * pageSize - i"
           :pos="i"
-          :featured="i === 0"
           :selected="selectedIds.includes(item.id)"
           @open="openDetail"
           @toggle-select="toggleSelect"
@@ -610,11 +609,6 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 14px;
-}
-/* 杂志式节奏：首卡头条占双栏 */
-.card-grid > :first-child { grid-column: span 2; }
-@media (max-width: 720px) {
-  .card-grid > :first-child { grid-column: span 1; }
 }
 
 .load-error {

@@ -1,11 +1,10 @@
 <script setup>
 /**
- * 错题卡片 v3「宣纸笺」（墨韵 2.0）：
- * - 左缘科目色脊（一眼识别科目）
- * - 序号 = 朱砂印章（微旋）
- * - 首图 = 相纸贴片（白边相框 + 交错微倾角，悬停回正放大）
- * - 卡片级联入场 + 3D 倾斜 + 光泽 hover
- * - 行内勾选框 / 知识点标签 / 思路 chip / 底部信息（延续 v2.1 结构）
+ * 错题卡片 v4（墨韵 2.0 收敛版）：
+ * - 首图 = 卡片顶部通栏「图版」：等高裁齐、白底衬板、干净统一
+ * - 左缘科目色脊 + 朱砂印章序号
+ * - 3D 倾斜 + 光泽 hover + 级联入场
+ * - 行内勾选框 / 知识点标签 / 思路 chip / 底部信息
  */
 import { computed } from 'vue'
 import { formatTime, subjectColor } from '../composables/useBaseData'
@@ -19,9 +18,8 @@ import UiCheckbox from '../ui/UiCheckbox.vue'
 const props = defineProps({
   mistake: { type: Object, required: true },
   index: { type: Number, default: 0 }, // 展示序号（倒序编号）
-  pos: { type: Number, default: 0 }, // 页内位置（级联入场 / 相纸倾角）
+  pos: { type: Number, default: 0 }, // 页内位置（级联入场）
   selected: { type: Boolean, default: false },
-  featured: { type: Boolean, default: false }, // 头条卡：双栏放大，更多题干
 })
 
 const emit = defineEmits(['open', 'toggle-select'])
@@ -81,7 +79,7 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
 <template>
   <article
     class="mistake-card card tilt"
-    :class="{ picked: selected, 'featured-card': featured }"
+    :class="{ picked: selected }"
     :style="{ '--enter-delay': `${Math.min(pos, 11) * 55}ms`, '--spine': spineColor }"
     tabindex="0"
     role="button"
@@ -94,50 +92,52 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
     <i class="spine" aria-hidden="true"></i>
     <span class="card-sheen" aria-hidden="true"></span>
 
-    <div class="card-top">
-      <span class="seal-no">{{ String(index).padStart(4, '0') }}</span>
-      <MistakeMeta :mistake="mistake" compact />
-      <span class="top-end" @click.stop>
-        <UiStars :model-value="mistake.difficulty || 0" readonly :size="13" />
-        <UiCheckbox
-          :model-value="selected"
-          @click.stop
-          @update:model-value="onCheckboxChange"
-        />
-      </span>
+    <!-- 通栏图版：首图等高裁齐，白底衬板 -->
+    <div v-if="hasImage" class="shot-banner">
+      <QuestionImages :images="mistake.images" :max-width="480" :count="1" />
     </div>
 
-    <!-- 相纸贴片：白边相框 + 胶带贴角 + 交错微倾角，悬停回正 -->
-    <div v-if="hasImage" class="shot-frame" :class="[`rot-${pos % 3}`, { featured }]">
-      <QuestionImages :images="mistake.images" :max-width="featured ? 340 : 250" :count="1" />
-    </div>
+    <div class="card-body">
+      <div class="card-top">
+        <span class="seal-no">{{ String(index).padStart(4, '0') }}</span>
+        <MistakeMeta :mistake="mistake" compact />
+        <span class="top-end" @click.stop>
+          <UiStars :model-value="mistake.difficulty || 0" readonly :size="13" />
+          <UiCheckbox
+            :model-value="selected"
+            @click.stop
+            @update:model-value="onCheckboxChange"
+          />
+        </span>
+      </div>
 
-    <div class="question-text">
-      <template v-if="mistake.passage_text">
-        <p class="passage-preview">{{ cardText }}</p>
-        <span v-if="englishQuestionCount > 1" class="passage-count">英语整篇 · 共 {{ englishQuestionCount }} 题</span>
-      </template>
-      <RichText v-else :text="mistake.question" />
-    </div>
+      <div class="question-text">
+        <template v-if="mistake.passage_text">
+          <p class="passage-preview">{{ cardText }}</p>
+          <span v-if="englishQuestionCount > 1" class="passage-count">英语整篇 · 共 {{ englishQuestionCount }} 题</span>
+        </template>
+        <RichText v-else :text="mistake.question" />
+      </div>
 
-    <div
-      v-if="(mistake.knowledge_tags && mistake.knowledge_tags.length) || mistake.approach"
-      class="tag-row"
-    >
-      <UiTag v-for="t in mistake.knowledge_tags || []" :key="t" size="sm">{{ t }}</UiTag>
-      <span v-if="mistake.approach" class="approach-chip" :title="mistake.approach">
-        {{ approachSummary(mistake.approach) }}
-      </span>
-    </div>
+      <div
+        v-if="(mistake.knowledge_tags && mistake.knowledge_tags.length) || mistake.approach"
+        class="tag-row"
+      >
+        <UiTag v-for="t in mistake.knowledge_tags || []" :key="t" size="sm">{{ t }}</UiTag>
+        <span v-if="mistake.approach" class="approach-chip" :title="mistake.approach">
+          {{ approachSummary(mistake.approach) }}
+        </span>
+      </div>
 
-    <div class="card-foot">
-      <UiTag v-if="mistake.review_paused" size="sm">已暂停</UiTag>
-      <span v-else-if="mistake.next_review_at" class="foot-item" :title="'下次复习 ' + formatTime(mistake.next_review_at)">
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
-        {{ formatTime(mistake.next_review_at).slice(5) }}
-      </span>
-      <span v-if="mistake.source_name" class="foot-item grow" :title="mistake.source_name">{{ mistake.source_name }}</span>
-      <span class="foot-item">{{ formatTime(mistake.created_at).slice(0, 10) }}</span>
+      <div class="card-foot">
+        <UiTag v-if="mistake.review_paused" size="sm">已暂停</UiTag>
+        <span v-else-if="mistake.next_review_at" class="foot-item" :title="'下次复习 ' + formatTime(mistake.next_review_at)">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+          {{ formatTime(mistake.next_review_at).slice(5) }}
+        </span>
+        <span v-if="mistake.source_name" class="foot-item grow" :title="mistake.source_name">{{ mistake.source_name }}</span>
+        <span class="foot-item">{{ formatTime(mistake.created_at).slice(0, 10) }}</span>
+      </div>
     </div>
   </article>
 </template>
@@ -147,8 +147,7 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 16px 16px 14px 20px;
+  padding: 0;
   cursor: pointer;
   height: 100%;
   overflow: hidden;
@@ -172,19 +171,49 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   outline-offset: 2px;
 }
 
-/* 科目色脊：左缘垂直墨条 */
+/* 科目色脊：左缘垂直墨条（通高） */
 .spine {
   position: absolute;
   left: 0;
-  top: 14px;
-  bottom: 14px;
+  top: 0;
+  bottom: 0;
   width: 4px;
-  border-radius: 0 4px 4px 0;
+  border-radius: 4px 0 0 4px;
   background: linear-gradient(180deg, var(--spine), color-mix(in srgb, var(--spine) 35%, transparent));
-  opacity: 0.85;
-  transition: width 0.25s var(--spring), opacity 0.25s var(--ease);
+  opacity: 0.9;
+  transition: width 0.25s var(--spring);
+  z-index: 2;
 }
-.mistake-card:hover .spine { width: 6px; opacity: 1; }
+.mistake-card:hover .spine { width: 6px; }
+
+/* 通栏图版 */
+.shot-banner {
+  height: 148px;
+  flex: none;
+  background: #fffdf9;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 6px;
+}
+.shot-banner :deep(.question-images) { margin: 0; }
+.shot-banner :deep(.question-image) { border: none; background: transparent; padding: 0; }
+.shot-banner :deep(.question-image img) {
+  max-width: 100% !important;
+  max-height: 130px !important;
+  object-fit: contain;
+}
+
+.card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 16px 13px 21px;
+  min-width: 0;
+}
 
 .card-top {
   display: flex;
@@ -205,11 +234,11 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   font-weight: 800;
   font-style: italic;
   letter-spacing: 0.06em;
-  transform: rotate(-3deg);
+  transform: rotate(-2deg);
   box-shadow: 0 2px 6px color-mix(in srgb, var(--accent-hover) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transition: transform 0.25s var(--spring);
 }
-.mistake-card:hover .seal-no { transform: rotate(-1deg) scale(1.06); }
+.mistake-card:hover .seal-no { transform: rotate(0deg) scale(1.05); }
 
 /* 星级 + 勾选框作为整体靠右，永远不与标签重叠 */
 .top-end {
@@ -218,48 +247,6 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   align-items: center;
   gap: 9px;
   flex: none;
-}
-
-/* 相纸贴片 */
-.shot-frame {
-  position: relative;
-  align-self: center;
-  background: #fffdf9;
-  border-radius: 8px;
-  padding: 7px 7px 9px;
-  box-shadow: 0 4px 14px rgba(30, 24, 16, 0.18), 0 1px 3px rgba(30, 24, 16, 0.12);
-  transition: transform 0.35s var(--spring), box-shadow 0.35s var(--ease);
-}
-/* 朱砂胶带贴角 */
-.shot-frame::before {
-  content: '';
-  position: absolute;
-  top: -9px;
-  left: 50%;
-  width: 84px;
-  height: 20px;
-  transform: translateX(-50%) rotate(-2.5deg);
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  border-left: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
-  border-right: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
-  backdrop-filter: blur(1px);
-  pointer-events: none;
-}
-.shot-frame img { display: block; }
-.rot-0 { transform: rotate(-1.2deg); }
-.rot-1 { transform: rotate(0.9deg); }
-.rot-2 { transform: rotate(-0.45deg); }
-.mistake-card:hover .shot-frame {
-  transform: rotate(0deg) scale(1.025);
-  box-shadow: 0 10px 24px rgba(30, 24, 16, 0.24), 0 2px 6px rgba(30, 24, 16, 0.14);
-}
-.mistake-card:hover .shot-frame::before { transform: translateX(-50%) rotate(-1deg); }
-
-/* 头条卡：更多题干 */
-.featured-card .question-text {
-  -webkit-line-clamp: 6;
-  font-size: 14.5px;
-  line-height: 27px;
 }
 
 .question-text {
