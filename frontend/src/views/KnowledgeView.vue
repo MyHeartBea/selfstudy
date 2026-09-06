@@ -7,11 +7,13 @@ import request from '../api/request'
 import {
   baseData,
   formatTime,
+  subjectColor,
   subjectName,
   subSubjectName,
 } from '../composables/useBaseData'
 import { useSubSubject } from '../composables/useSubSubject'
 import KnowledgeEditModal from '../components/KnowledgeEditModal.vue'
+import MathText from '../components/MathText.vue'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
 import UiButton from '../ui/UiButton.vue'
@@ -19,6 +21,7 @@ import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiPagination from '../ui/UiPagination.vue'
+import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
 
 const loading = ref(false)
@@ -166,7 +169,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="card card-pad filter-bar">
+    <div class="filter-bar">
       <UiSelect
         v-model="filters.subjectId"
         :options="baseData.subjects.map((s) => ({ label: s.name, value: s.id }))"
@@ -194,59 +197,56 @@ onMounted(() => {
       <UiButton variant="ghost" @click="resetFilters">重置</UiButton>
     </div>
 
-    <div class="card table-card">
-      <div v-if="loading && !items.length" style="padding: 16px">
-        <div class="skeleton" style="height: 40px; margin-bottom: 8px"></div>
-        <div class="skeleton" style="height: 40px; margin-bottom: 8px"></div>
-        <div class="skeleton" style="height: 40px"></div>
+    <template v-if="loading && !items.length">
+      <div class="k-grid">
+        <div v-for="n in 6" :key="n" class="k-card card sk-card">
+          <Skeleton variant="text" :width="'55%'" />
+          <Skeleton variant="text" :count="2" />
+        </div>
       </div>
-      <UiEmpty v-else-if="!items.length" text="暂无知识点，录入错题或手动添加" icon="book" />
-      <table v-else class="plain-table">
-        <thead>
-          <tr>
-            <th>标签名</th>
-            <th>所属科目</th>
-            <th>二级科目</th>
-            <th>关联知识点</th>
-            <th>创建时间</th>
-            <th class="op-col">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in items" :key="row.id">
-            <td class="strong">{{ row.tag_name }}</td>
-            <td>{{ subjectName(row.subject_id) }}</td>
-            <td>{{ subSubjectName(row.sub_subject_id) || '—' }}</td>
-            <td>
-              <template v-if="row.related_tags && row.related_tags.length">
-                <UiTag
-                  v-for="t in row.related_tags"
-                  :key="t"
-                  :color="'#a16207'"
-                  size="sm"
-                  clickable
-                  style="margin: 2px 4px 2px 0"
-                  @click="() => { filters.tag = t; searchKnowledge() }"
-                >
-                  {{ t }}
-                </UiTag>
-              </template>
-              <span v-else class="muted">—</span>
-            </td>
-            <td class="muted time">{{ formatTime(row.created_at) }}</td>
-            <td class="op-col">
-              <div class="ops">
-                <button class="op-link primary" @click="practiceTag(row.tag_name)">练习</button>
-                <button class="op-link primary" @click="openEdit(row)">编辑</button>
-                <button class="op-link warning" :disabled="summarizingId === row.id" @click="autoSummarize(row)">
-                  {{ summarizingId === row.id ? '总结中…' : 'AI 总结' }}
-                </button>
-                <button class="op-link danger" @click="remove(row)">删除</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    </template>
+    <UiEmpty v-else-if="!items.length" text="暂无知识点，录入错题或手动添加" icon="book" />
+    <template v-else>
+      <div class="k-grid">
+        <article
+          v-for="(row, i) in items"
+          :key="row.id"
+          class="k-card card"
+          :style="{ '--enter-delay': Math.min(i, 11) * 50 + 'ms', '--kcol': subjectColor(row.subject_id) }"
+        >
+          <i class="k-spine" aria-hidden="true"></i>
+          <div class="k-head">
+            <h3 class="k-name">{{ row.tag_name }}</h3>
+            <span class="k-time num">{{ formatTime(row.created_at).slice(0, 10) }}</span>
+          </div>
+          <div class="k-chips">
+            <UiTag size="sm" color="var(--teal)" soft>{{ subjectName(row.subject_id) }}</UiTag>
+            <UiTag v-if="subSubjectName(row.sub_subject_id)" size="sm" soft>{{ subSubjectName(row.sub_subject_id) }}</UiTag>
+          </div>
+          <p v-if="row.summary" class="k-summary"><MathText :text="row.summary" /></p>
+          <div v-if="row.related_tags && row.related_tags.length" class="k-rel">
+            <span class="k-rel-label">关联</span>
+            <UiTag
+              v-for="t in row.related_tags"
+              :key="t"
+              color="var(--gold)"
+              size="sm"
+              clickable
+              @click="() => { filters.tag = t; searchKnowledge() }"
+            >
+              {{ t }}
+            </UiTag>
+          </div>
+          <div class="k-ops">
+            <button class="op-link primary" @click="practiceTag(row.tag_name)"><Icon name="play" :size="12" /> 练习</button>
+            <button class="op-link primary" @click="openEdit(row)">编辑</button>
+            <button class="op-link warning" :disabled="summarizingId === row.id" @click="autoSummarize(row)">
+              {{ summarizingId === row.id ? '总结中…' : 'AI 总结' }}
+            </button>
+            <button class="op-link danger" @click="remove(row)"><Icon name="trash" :size="12" /></button>
+          </div>
+        </article>
+      </div>
       <div class="pagination-wrap">
         <UiPagination
           v-model:page="page"
@@ -256,7 +256,7 @@ onMounted(() => {
           @change="loadKnowledge"
         />
       </div>
-    </div>
+    </template>
 
     <KnowledgeEditModal v-model="editVisible" :row="editing" @saved="onSaved" />
     <KnowledgeEditModal v-model="createVisible" :row="null" is-create @saved="onSaved" />
@@ -264,53 +264,117 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* 玻璃筛选栏 */
 .filter-bar {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 14px;
+  padding: 14px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
+    linear-gradient(135deg, color-mix(in srgb, var(--teal) 16%, transparent), transparent 45%, color-mix(in srgb, var(--gold) 14%, transparent)) border-box;
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(10px) saturate(1.15);
 }
 .tag-input { width: 220px; }
 
-.table-card { overflow-x: auto; }
-
-.plain-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-  min-width: 860px;
+/* 知识笺卡片墙 */
+.k-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
 }
-.plain-table th {
-  text-align: left;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
-  font-size: 11.5px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-  background: var(--surface-2);
+.k-card {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 15px 16px 13px 21px;
+  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease), transform 0.25s var(--spring);
+  animation: kcard-in 0.5s var(--ease) both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+@keyframes kcard-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.k-card:hover {
+  border-color: color-mix(in srgb, var(--kcol) 45%, var(--line));
+  box-shadow: var(--shadow-2);
+  transform: translateY(-3px);
+}
+.k-spine {
+  position: absolute;
+  left: 0;
+  top: 13px;
+  bottom: 13px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, var(--kcol), color-mix(in srgb, var(--kcol) 35%, transparent));
+  opacity: 0.85;
+  transition: width 0.25s var(--spring);
+}
+.k-card:hover .k-spine { width: 6px; opacity: 1; }
+.sk-card { animation: none; }
+
+.k-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.k-name {
+  font-family: var(--font-display);
+  font-size: 15.5px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.plain-table td {
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--line);
+.k-card:hover .k-name { color: var(--kcol); }
+.k-time { font-size: 11.5px; color: var(--ink-3); flex: none; }
+.k-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.k-summary {
+  margin: 0;
+  font-size: 12.8px;
   color: var(--ink-2);
-  vertical-align: middle;
+  line-height: 1.7;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.plain-table tr:last-child td { border-bottom: none; }
-.plain-table .strong { color: var(--ink); font-weight: 650; }
-.plain-table .time { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.op-col { width: 250px; }
-.ops { display: flex; gap: 4px; flex-wrap: wrap; }
+.k-rel { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.k-rel-label { font-size: 11px; font-weight: 700; color: var(--ink-3); letter-spacing: 0.08em; }
+
+.k-ops {
+  margin-top: auto;
+  padding-top: 9px;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .op-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: none;
   background: transparent;
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  padding: 3px 7px;
-  border-radius: 6px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  transition: background 0.14s var(--ease);
 }
 .op-link:disabled { opacity: 0.5; cursor: not-allowed; }
 .op-link.primary { color: var(--accent-ink); }
@@ -323,6 +387,6 @@ onMounted(() => {
 .pagination-wrap {
   display: flex;
   justify-content: flex-end;
-  padding: 14px;
+  padding-bottom: 8px;
 }
 </style>

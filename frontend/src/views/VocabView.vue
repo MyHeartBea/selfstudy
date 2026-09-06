@@ -407,13 +407,14 @@ function onKeydown(event) {
 
       <UiEmpty v-if="!items.length && !loading" text="生词本还是空的，粘贴词表批量导入或逐个添加" icon="book" />
       <div v-else class="vocab-grid">
-        <article v-for="row in items" :key="row.id" class="vocab-card card">
+        <article v-for="(row, i) in items" :key="row.id" class="vocab-card card" :style="{ '--enter-delay': Math.min(i, 11) * 45 + 'ms' }">
+          <span class="v-mark serif" aria-hidden="true">{{ (row.word || 'A').slice(0, 1).toUpperCase() }}</span>
           <div class="vocab-head">
             <span class="vocab-word serif">{{ row.word }}</span>
             <span v-if="row.kind === 'phrase'" class="vocab-kind">词语</span>
-            <UiTag size="sm" :color="row.mastery_level >= 5 ? 'var(--green)' : row.mastery_level >= 1 ? 'var(--gold)' : ''">
-              {{ masteryLabel(row.mastery_level) }}
-            </UiTag>
+            <span class="m-dots" :title="masteryLabel(row.mastery_level)" :class="{ mastered: row.mastery_level >= 5 }">
+              <i v-for="d in 5" :key="d" :class="{ on: d <= row.mastery_level }"></i>
+            </span>
           </div>
           <p class="vocab-meaning">{{ row.meaning || '—' }}</p>
           <p v-if="row.example" class="vocab-example">{{ row.example }}</p>
@@ -646,21 +647,33 @@ function onKeydown(event) {
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 14px;
+  padding: 14px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 45%, color-mix(in srgb, var(--teal) 14%, transparent)) border-box;
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(10px) saturate(1.15);
 }
-.kind-tabs { display: inline-flex; gap: 4px; }
+.kind-tabs { display: inline-flex; gap: 4px; padding: 3px; background: var(--surface-2); border-radius: 999px; }
 .kind-tab {
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  color: var(--ink-2);
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
   font-size: 12.5px;
   font-weight: 600;
-  padding: 5px 13px;
+  padding: 5px 14px;
   border-radius: 999px;
   cursor: pointer;
-  transition: all 0.13s;
+  transition: all 0.18s var(--ease);
 }
-.kind-tab:hover { border-color: var(--accent); color: var(--accent-ink); }
-.kind-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.kind-tab:hover { color: var(--ink); }
+.kind-tab.active {
+  background: var(--accent-grad);
+  color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-hover) 40%, transparent);
+}
 .filter-search { position: relative; display: flex; align-items: center; }
 .search-icon { position: absolute; left: 11px; color: var(--ink-3); pointer-events: none; }
 .filter-search .field-input { width: 220px; padding-left: 33px; }
@@ -671,16 +684,38 @@ function onKeydown(event) {
   gap: 12px;
 }
 .vocab-card {
+  position: relative;
+  overflow: hidden;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 7px;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease), transform 0.25s var(--spring);
+  animation: vcard-in 0.5s var(--ease) both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+@keyframes vcard-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .vocab-card:hover {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
-  box-shadow: var(--shadow-1);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-3px);
+}
+/* 首字母水墨水印 */
+.v-mark {
+  position: absolute;
+  right: 8px;
+  bottom: -12px;
+  font-size: 58px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+  opacity: 0.06;
+  transform: rotate(-6deg);
+  pointer-events: none;
+  user-select: none;
 }
 .vocab-head {
   display: flex;
@@ -697,6 +732,18 @@ function onKeydown(event) {
   padding: 2px 7px;
   border-radius: 6px;
 }
+/* 掌握度墨点 */
+.m-dots { display: inline-flex; gap: 3.5px; flex: none; }
+.m-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  transition: background 0.2s var(--ease), transform 0.2s var(--spring);
+}
+.m-dots i.on { background: var(--gold); }
+.m-dots.mastered i.on { background: var(--green); }
+.vocab-card:hover .m-dots i.on { transform: scale(1.25); }
 .vocab-meaning {
   font-size: 13px;
   color: var(--ink-2);

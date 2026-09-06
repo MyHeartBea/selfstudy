@@ -112,15 +112,23 @@ onMounted(loadProfiles)
       <div class="skeleton" style="height: 64px"></div>
     </div>
     <div v-else class="subject-grid">
-      <article v-for="row in profiles" :key="row.subject_id" class="card card-pad subject-card">
+      <article
+        v-for="(row, i) in profiles"
+        :key="row.subject_id"
+        class="card card-pad subject-card"
+        :style="{ '--enter-delay': i * 80 + 'ms', '--scol': subjectColor(row.subject_id) }"
+      >
+        <i class="s-topbar" aria-hidden="true"></i>
         <div class="subject-head">
-          <span class="subject-dot" :style="{ background: subjectColor(row.subject_id) }"></span>
-          <h3 class="subject-name" :style="{ color: subjectColor(row.subject_id) }">{{ row.name }}</h3>
+          <span class="s-seal serif">{{ row.name.slice(0, 1) }}</span>
+          <div class="s-head-text">
+            <h3 class="subject-name">{{ row.name }}</h3>
+            <p class="sub-subjects">二级：{{ subSubjectNames(row.subject_id) }}</p>
+          </div>
           <UiButton size="sm" variant="outline" @click="openEdit(row)">编辑</UiButton>
         </div>
-        <p class="sub-subjects">二级科目：{{ subSubjectNames(row.subject_id) }}</p>
 
-        <div class="section-label" style="margin-top: 14px">复习重点</div>
+        <div class="section-label" style="margin-top: 16px">复习重点</div>
         <div class="focus-wrap">
           <UiTag v-for="area in row.focus_areas" :key="area" size="sm" style="margin: 0 4px 6px 0">
             {{ area }}
@@ -181,27 +189,64 @@ onMounted(loadProfiles)
 }
 @media (max-width: 860px) { .subject-grid { grid-template-columns: 1fr; } }
 
+.subject-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.25s var(--spring), box-shadow 0.3s var(--ease), border-color 0.2s var(--ease);
+  animation: subj-in 0.55s var(--ease) both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+@keyframes subj-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.subject-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-2); border-color: color-mix(in srgb, var(--scol) 40%, var(--line)); }
+/* 顶部科目色条 */
+.s-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--scol), color-mix(in srgb, var(--scol) 25%, transparent));
+}
 .subject-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
-.subject-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 4px;
+/* 科目首字印章 */
+.s-seal {
+  width: 46px;
+  height: 46px;
   flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--scol) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--scol) 30%, transparent);
+  color: var(--scol);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 21px;
+  transform: rotate(-3deg);
+  transition: transform 0.3s var(--spring);
 }
+.subject-card:hover .s-seal { transform: rotate(-1deg) scale(1.06); }
+.s-head-text { min-width: 0; margin-right: auto; }
 .subject-name {
   font-family: var(--font-display);
   font-size: 19px;
   font-weight: 700;
-  margin-right: auto;
+  color: var(--ink);
 }
 .sub-subjects {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--ink-3);
-  margin-top: 4px;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .focus-wrap { display: flex; flex-wrap: wrap; }
 .tips {

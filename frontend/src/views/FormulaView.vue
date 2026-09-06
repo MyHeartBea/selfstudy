@@ -97,6 +97,15 @@ function plainPreview(item) {
   return line.replace(/[$*`]/g, '').slice(0, 80)
 }
 
+// 分类印章配色：按分类名稳定散列到五色
+const CAT_COLORS = ['var(--accent)', 'var(--teal)', 'var(--gold)', 'var(--violet)', 'var(--blue)']
+function catColor(category) {
+  const name = String(category || '')
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return CAT_COLORS[h % CAT_COLORS.length]
+}
+
 function openMemorize() {
   // 过卡循环：没记住的排到队尾，直到全部记住
   reciteQueue.value = filteredItems.value.slice()
@@ -224,12 +233,14 @@ onMounted(loadFormulas)
     />
     <div v-else class="formula-grid">
       <article
-        v-for="item in filteredItems"
+        v-for="(item, i) in filteredItems"
         :key="item.id"
         class="formula-card card"
+        :style="{ '--enter-delay': Math.min(i, 11) * 50 + 'ms', '--fcol': catColor(item.category) }"
       >
+        <span class="f-mark" aria-hidden="true">∑</span>
         <div class="formula-head">
-          <UiTag size="sm">{{ item.category }}</UiTag>
+          <span class="cat-seal">{{ item.category }}</span>
           <span class="formula-title" role="button" tabindex="0" @click="openDetail(item)" @keydown.enter="openDetail(item)">
             {{ item.title }}
           </span>
@@ -347,27 +358,76 @@ onMounted(loadFormulas)
 }
 
 .formula-card {
+  position: relative;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 16px;
+  padding: 16px 16px 14px 20px;
   cursor: default;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease), transform 0.25s var(--spring);
+  animation: fcard-in 0.5s var(--ease) both;
+  animation-delay: var(--enter-delay, 0ms);
 }
-.formula-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
-  box-shadow: var(--shadow-2);
-  transform: translateY(-2px);
+@keyframes fcard-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.formula-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, var(--fcol), color-mix(in srgb, var(--fcol) 30%, transparent));
+  opacity: 0.8;
+  transition: width 0.25s var(--spring);
+}
+.formula-card:hover { border-color: color-mix(in srgb, var(--fcol) 45%, var(--line)); box-shadow: var(--shadow-2); transform: translateY(-3px); }
+.formula-card:hover::before { width: 6px; }
+/* 水墨 ∑ 水印 */
+.f-mark {
+  position: absolute;
+  right: 10px;
+  bottom: -14px;
+  font-family: var(--font-display);
+  font-size: 74px;
+  line-height: 1;
+  color: var(--fcol);
+  opacity: 0.07;
+  transform: rotate(-8deg);
+  pointer-events: none;
+  user-select: none;
 }
 
 .formula-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
+}
+/* 分类印章 */
+.cat-seal {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--fcol) 13%, transparent);
+  color: var(--fcol);
+  border: 1px solid color-mix(in srgb, var(--fcol) 28%, transparent);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  transform: rotate(-2deg);
+  white-space: nowrap;
 }
 .formula-title {
+  font-family: var(--font-display);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 14.5px;
   color: var(--ink);
   cursor: pointer;
   overflow: hidden;
