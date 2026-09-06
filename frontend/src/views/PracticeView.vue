@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 
 import { baseData, loadBaseData, questionTypeFilterOptions, sourceTypes } from '../composables/useBaseData'
 import { useSubSubject } from '../composables/useSubSubject'
+import { toast } from '../ui/toast'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import GlassCard from '../ui/GlassCard.vue'
@@ -49,7 +50,17 @@ const modes = [
     desc: '从所有错题中随机抽取',
     icon: 'sparkles',
   },
+  {
+    value: 'mock',
+    title: '真题模考',
+    desc: '按年份组卷倒计时，交卷统一判分',
+    icon: 'calendar',
+  },
 ]
+
+// 模考配置：年份（必填）+ 时长
+const mockYear = ref(String(new Date().getFullYear()))
+const mockDuration = ref(60)
 
 const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
 
@@ -63,6 +74,17 @@ function start() {
   const query = {
     mode: mode.value,
     count: count.value,
+  }
+  if (mode.value === 'mock') {
+    // 真题模考：年份必填，固定真题来源 + 时长
+    const year = String(mockYear.value || '').trim()
+    if (!/^(19|20)\d{2}$/.test(year)) {
+      toast.warning('真题模考请先填写四位年份，如 2021')
+      return
+    }
+    query.source_type = 'real_exam'
+    query.source_year = year
+    query.duration = mockDuration.value
   }
   if (filters.subjectId) query.subject_id = filters.subjectId
   if (filters.subSubjectId) query.sub_subject_id = filters.subSubjectId
@@ -125,9 +147,35 @@ onMounted(loadBaseData)
               {{ n }} 题
             </button>
           </div>
+
+          <!-- 模考配置：年份 + 时长 -->
+          <template v-if="mode === 'mock'">
+            <div class="section-label" style="margin-top: 4px">模考年份 · 时长</div>
+            <div class="mock-config">
+              <input
+                v-model="mockYear"
+                class="field-input year-input"
+                placeholder="如 2021"
+                maxlength="4"
+              />
+              <div class="count-seg">
+                <button
+                  v-for="m in [30, 60, 90, 120]"
+                  :key="m"
+                  type="button"
+                  class="count-btn"
+                  :class="{ active: mockDuration === m }"
+                  @click="mockDuration = m"
+                >
+                  {{ m }} 分
+                </button>
+              </div>
+            </div>
+          </template>
+
           <div class="deploy-brief">
             <span class="brief-line"><Icon name="zap" :size="14" />今日出征</span>
-            <b class="serif">{{ activeMode.title }} · {{ count }} 题</b>
+            <b class="serif">{{ activeMode.title }} · {{ count }} 题<template v-if="mode === 'mock'"> · {{ mockYear }} 年 · {{ mockDuration }} 分钟</template></b>
           </div>
           <UiButton variant="primary" size="lg" block @click="start">
             <Icon name="play" :size="16" />
@@ -375,6 +423,16 @@ onMounted(loadBaseData)
   color: #fff;
   box-shadow: 0 3px 10px color-mix(in srgb, var(--accent-hover) 40%, transparent);
 }
+
+/* 模考配置 */
+.mock-config {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+.mock-config .year-input { width: 130px; }
+.mock-config .count-seg { flex-wrap: wrap; }
 
 .filter-grid {
   display: grid;

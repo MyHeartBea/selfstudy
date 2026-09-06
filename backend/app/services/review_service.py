@@ -105,7 +105,8 @@ def get_practice_mistakes(
     source_year: Optional[str] = None,
 ) -> List[dict]:
     """按记忆曲线、错误时间或随机方式抽取错题进行自主练习。"""
-    if mode == "real_exam":
+    if mode in ("real_exam", "mock"):
+        # 真题专项与真题模考同源：只取真题，其余条件照常生效
         mode = "curve"
         source_type = source_type or "real_exam"
     conditions = ["COALESCE(m.review_paused, 0) = 0"]

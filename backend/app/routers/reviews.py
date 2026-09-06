@@ -83,7 +83,7 @@ def get_review_forecast(days: int = Query(30, ge=7, le=90)):
 
 @router.get("/reviews/practice")
 def get_practice_reviews(
-    mode: str = Query("curve", pattern="^(curve|wrong_time|random|real_exam)$"),
+    mode: str = Query("curve", pattern="^(curve|wrong_time|random|real_exam|mock)$"),
     count: int = Query(10, ge=1, le=100),
     subject_id: Optional[int] = Query(None),
     sub_subject_id: Optional[int] = Query(None),
