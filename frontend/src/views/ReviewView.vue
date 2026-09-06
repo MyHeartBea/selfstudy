@@ -706,11 +706,11 @@ onUnmounted(() => {
         <template v-if="isMock">
           <p v-if="displayPassage" class="mock-passage"><MathText :text="displayPassage" /></p>
           <p class="mock-note">模考模式：作答不立即判分，交卷后统一判分并计入复习记录。卷面仅含客观题（单选/多选/填空）。</p>
+          <div v-if="current.diagram_image" class="mock-diagram" @click="openDiagram(current.diagram_image)">
+            <img :src="current.diagram_image" alt="原卷图示（点击放大）" />
+            <span class="mock-diagram-hint">原卷图示 · 点击放大</span>
+          </div>
           <template v-if="isChoice">
-            <div v-if="current.diagram_image" class="mock-diagram" @click="openDiagram(current.diagram_image)">
-              <img :src="current.diagram_image" alt="原卷图示（点击放大）" />
-              <span class="mock-diagram-hint">原卷图示 · 点击放大</span>
-            </div>
             <div
               v-for="opt in mockOptionList"
               :key="opt.key"

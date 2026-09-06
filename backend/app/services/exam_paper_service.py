@@ -263,6 +263,7 @@ def _pdf_page_vision(pil, index: int, subject: str = "") -> str:
 
 _IMAGE_ROOT = PROJECT_ROOT / "data" / "images" / "exam_papers"
 _DIAGRAM_RE = re.compile(r"\[[^\]]*(?:图|示|表|树)[^\]]*\]")
+_FIGURE_HINTS = ("页表", "如下表", "如表", "表格如下", "如图所示", "如下图", "示意图", "下图", "如右图")
 
 
 def _pdf_pages(path: Path, subject: str) -> list:
@@ -325,11 +326,15 @@ def _paper_img_dir(paper_id: int) -> Path:
 
 
 def _has_diagram_option(q: dict) -> bool:
-    """选项是否为图示（树/图/流程/表等，无文字，以 [图] 类占位）。"""
-    for key in ("option_a", "option_b", "option_c", "option_d"):
-        if _DIAGRAM_RE.search(q.get(key) or ""):
-            return True
-    return False
+    """题目是否含图示/表格，需要保存该页原图。
+
+    选项为 [图] 类占位，或题干/段落明确引用 页表/表格/如图所示 等，都判为有图。
+    """
+    opts = " ".join(q.get(k) or "" for k in ("option_a", "option_b", "option_c", "option_d"))
+    if _DIAGRAM_RE.search(opts):
+        return True
+    qtext = (q.get("question") or "") + " " + (q.get("passage") or "")
+    return any(h in qtext for h in _FIGURE_HINTS)
 
 
 def _page_diagram_image(paper_id: int, source: Path, page_idx: int, cache: dict, pil=None) -> str:

@@ -31,18 +31,27 @@ const props = defineProps({
 })
 
 const html = computed(() => {
-  const parts = cleanPlainText(props.text).split(
-    /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g,
+  // 支持 $...$ / $$...$$ 与 \(...\) / \[...\] 四种 LaTeX 定界符（扫描版 AI 输出常用 \(\)）。
+  // 先按定界符拆分，只对非公式部分 cleanPlainText，避免把公式里的 \times 等替换掉。
+  const parts = String(props.text || '').split(
+    /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^$\n]+?\$)/g,
   )
   return parts
     .map((part) => {
-      if (part.startsWith('$$') && part.endsWith('$$') && part.length > 4) {
+      const block = part.startsWith('$$') && part.endsWith('$$') && part.length > 4
+      const blockSq = part.startsWith('\\[') && part.endsWith('\\]') && part.length > 4
+      if (block || blockSq) {
         return `<span class="math-block">${renderMath(part.slice(2, -2), true)}</span>`
       }
-      if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
+      const inlineParen = part.startsWith('\\(') && part.endsWith('\\)') && part.length > 4
+      const inlineDollar = part.startsWith('$') && part.endsWith('$') && part.length > 2
+      if (inlineParen) {
+        return renderMath(part.slice(2, -2), false)
+      }
+      if (inlineDollar) {
         return renderMath(part.slice(1, -1), false)
       }
-      return escapeHtml(part.replace(/\$/g, ''))
+      return escapeHtml(cleanPlainText(part).replace(/\$/g, ''))
     })
     .join('')
 })

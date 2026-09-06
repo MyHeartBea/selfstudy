@@ -44,13 +44,19 @@ export function renderMath(expr, displayMode) {
 
 export function renderInline(text) {
   const parts = String(text).split(
-    /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g,
+    /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^$\n]+?\$|\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g,
   )
   return parts
     .map((part) => {
       if (!part) return ''
       if (part.startsWith('$$') && part.endsWith('$$') && part.length > 4) {
         return `<span class="math-block">${renderMath(part.slice(2, -2), true)}</span>`
+      }
+      if (part.startsWith('\\[') && part.endsWith('\\]') && part.length > 4) {
+        return `<span class="math-block">${renderMath(part.slice(2, -2), true)}</span>`
+      }
+      if (part.startsWith('\\(') && part.endsWith('\\)') && part.length > 4) {
+        return renderMath(part.slice(2, -2), false)
       }
       if (part.startsWith('$') && part.endsWith('$') && part.length > 2) {
         return renderMath(part.slice(1, -1), false)
