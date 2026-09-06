@@ -1,5 +1,5 @@
 <script setup>
-/** 学习统计 · 墨韵 2.0 Bento：英雄卡 + 瓷砖 + SVG 趋势 + 热力图 + 薄弱点直通 */
+/** 学习统计 · 墨韵 2.0 Bento：英雄卡 + 瓷砖 + SVG 趋势 + 墨阶掌握度 + 热力图 + 科目分析 */
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -10,13 +10,11 @@ import { reveal } from '../directives/reveal'
 import ReviewHeatmap from '../components/ReviewHeatmap.vue'
 import Icon from '../ui/Icon.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
-import UiProgress from '../ui/UiProgress.vue'
 import UiButton from '../ui/UiButton.vue'
 import GlassCard from '../ui/GlassCard.vue'
 import MetricTile from '../ui/MetricTile.vue'
 import RingProgress from '../ui/RingProgress.vue'
 import AreaChart from '../ui/AreaChart.vue'
-import BarRow from '../ui/BarRow.vue'
 
 const loading = ref(false)
 const router = useRouter()
@@ -24,7 +22,6 @@ const stats = ref({
   total_mistakes: 0,
   today_new: 0,
   by_subject: [],
-  by_sub_subject: [],
   by_question_type: [],
   by_source_type: [],
 })
@@ -59,13 +56,19 @@ const ringPercent = computed(() => {
   return due ? Math.min(100, Math.round(((Number(reviewStats.value.reviewed_today) || 0) / due) * 100)) : 0
 })
 
-// —— 今日速览（保留全部 8 指标）——
-const todayMini = computed(() => [
-  { key: 'done', label: '今日已复习', value: nReviewed.value, unit: `/ ${reviewStats.value.due_today}`, icon: 'check', tone: 'green' },
-  { key: 'acc', label: '今日正确率', value: nAccToday.value, unit: '%', icon: 'target', tone: 'accent' },
-  { key: 'mastery', label: '平均掌握度', value: nMastery.value, unit: '', icon: 'sparkles', tone: 'violet' },
-  { key: 'streak', label: '连续复习', value: nStreak.value, unit: ' 天', icon: 'flame', tone: 'gold' },
-])
+// —— 英雄卡轻倾斜（原型同款；触屏 / 减弱动效时关闭） ——
+function onHeroMove(event) {
+  if (!window.matchMedia('(pointer: fine)').matches) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const el = event.currentTarget
+  const rect = el.getBoundingClientRect()
+  const x = (event.clientX - rect.left) / rect.width - 0.5
+  const y = (event.clientY - rect.top) / rect.height - 0.5
+  el.style.transform = `perspective(900px) rotateY(${(x * 3.5).toFixed(2)}deg) rotateX(${(-y * 3.5).toFixed(2)}deg) translateY(-2px)`
+}
+function onHeroLeave(event) {
+  event.currentTarget.style.transform = ''
+}
 
 // —— 7 天趋势（SVG 面积图） ——
 const dayList = computed(() => reviewStats.value.last_7_days || [])
@@ -74,15 +77,20 @@ const trendSeries = computed(() => [
   { name: '完成次数', color: 'var(--accent)', values: dayList.value.map((d) => d.count) },
 ])
 
-// —— 掌握度分布（条形） ——
-const masteryRows = computed(() => {
-  const list = reviewStats.value.mastery_distribution || []
-  const max = Math.max(1, ...list.map((i) => i.count))
-  return list.map((item) => ({
-    label: item.mastery === 0 ? '新题' : `${item.mastery} 级`,
-    count: item.count,
-    percent: Math.round((item.count / max) * 100),
+// —— 掌握度墨阶：六档墨色由浅入深，满级为朱砂 ——
+const masterySteps = computed(() => {
+  const map = new Map(
+    (reviewStats.value.mastery_distribution || []).map((i) => [Number(i.mastery), Number(i.count) || 0]),
+  )
+  const depths = [14, 26, 42, 58, 76]
+  const rows = [0, 1, 2, 3, 4, 5].map((level) => ({
+    level,
+    label: level === 0 ? '新题' : `${level} 级`,
+    count: map.get(level) || 0,
+    color: level === 5 ? 'var(--accent)' : `color-mix(in srgb, var(--ink) ${depths[level - 1] || 14}%, var(--surface-2))`,
   }))
+  const max = Math.max(1, ...rows.map((r) => r.count))
+  return rows.map((r, i) => ({ ...r, percent: Math.round((r.count / max) * 100), delay: i * 70 }))
 })
 
 // —— 题型分布环形图（SVG 生长动画） ——
@@ -111,15 +119,34 @@ const typeDonut = computed(() => {
 const donutGrown = ref(false)
 
 function percentOf(count, max) {
-  // max 为该列表预计算的最大值（见 subjectMax 等 computed）
+  // max 为该列表预计算的最大值
   return Math.round((count / Math.max(1, max)) * 100)
 }
 
-// 各分布列表的最大值只算一次
-const subjectMax = computed(() => Math.max(1, ...stats.value.by_subject.map((s) => s.count)))
-const subSubjectMax = computed(() => Math.max(1, ...stats.value.by_sub_subject.map((s) => s.count)))
 const sourceMax = computed(() => Math.max(1, ...(stats.value.by_source_type || []).map((s) => s.count)))
+const subjectMax = computed(() => Math.max(1, ...stats.value.by_subject.map((s) => s.count)))
 const weakMax = computed(() => Math.max(1, ...(reviewStats.value.weakest_tags || []).map((w) => w.wrong_count)))
+
+// —— 科目分析：合并「题目规模」与「复习效果」两张表（按科目名关联，数据不丢） ——
+const subjectMerged = computed(() => {
+  const map = new Map()
+  for (const s of stats.value.by_subject || []) {
+    map.set(s.name, {
+      name: s.name,
+      subject_id: s.subject_id,
+      count: Number(s.count) || 0,
+      avg_difficulty: Number(s.avg_difficulty) || 0,
+    })
+  }
+  for (const r of reviewStats.value.by_subject || []) {
+    const row = map.get(r.name) || { name: r.name, subject_id: null, count: Number(r.mistake_count) || 0, avg_difficulty: 0 }
+    row.review_count = Number(r.review_count) || 0
+    row.accuracy = Number(r.accuracy) || 0
+    row.wrong_count = Number(r.wrong_count) || 0
+    map.set(r.name, row)
+  }
+  return [...map.values()]
+})
 
 async function loadStats() {
   loading.value = true
@@ -174,18 +201,25 @@ onMounted(loadStats)
       </div>
     </div>
 
-    <!-- Bento 主网格 -->
-    <div class="bento">
-      <!-- 英雄卡：今日待复习 -->
-      <GlassCard class="b-hero" :hover="false">
+    <!-- 顶部区：英雄卡 + 两张瓷砖（子网格两行强制等高，卡片对齐） -->
+    <div class="bento-top">
+      <GlassCard class="b-hero" :hover="false" @mousemove="onHeroMove" @mouseleave="onHeroLeave">
         <span class="hero-seal" aria-hidden="true">今</span>
         <div class="hero-bg" aria-hidden="true"></div>
+        <span v-if="reviewStats.streak_days" class="streak-chip" :title="`最长连续纪录见「连续复习」`">
+          <Icon name="flame" :size="14" />
+          连续 <b class="num">{{ nStreak }}</b> 天
+        </span>
         <div class="hero-label"><Icon name="clock" :size="15" /> 今日待复习</div>
         <div class="hero-body">
           <div class="hero-left">
             <div class="hero-value num">{{ nDue }}</div>
             <div class="hero-delta">今日新增 <b>{{ nTodayNew }}</b> 题 · 新错题优先</div>
-            <UiButton variant="primary" @click="router.push('/review')">
+            <div class="hero-chips">
+              <span class="h-chip"><Icon name="target" :size="13" />今日正确率 <b class="num">{{ nAccToday }}<i>%</i></b></span>
+              <span class="h-chip"><Icon name="sparkles" :size="13" />平均掌握度 <b class="num">{{ nMastery }}</b></span>
+            </div>
+            <UiButton variant="primary" class="hero-cta" @click="router.push('/review')">
               开始今日复习
               <Icon name="chevron-right" :size="15" />
             </UiButton>
@@ -199,26 +233,16 @@ onMounted(loadStats)
         </div>
       </GlassCard>
 
-      <!-- 瓷砖 -->
       <GlassCard class="b-tile">
         <MetricTile icon="layers" :value="nTotal" label="累计错题" tone="accent" />
       </GlassCard>
       <GlassCard class="b-tile">
         <MetricTile icon="chart" :value="nTotalAcc" unit="%" label="累计正确率 · 总复习" tone="teal" />
       </GlassCard>
+    </div>
 
-      <!-- 今日速览（4 指标细条） -->
-      <GlassCard class="b-strip span3" :hover="false" :pad="false">
-        <div class="strip-inner">
-          <div v-for="m in todayMini" :key="m.key" class="strip-item">
-            <span class="strip-icon" :class="`tone-${m.tone}`"><Icon :name="m.icon" :size="16" /></span>
-            <b class="num">{{ m.value }}</b><i v-if="m.unit" class="num">{{ m.unit }}</i>
-            <span class="strip-label">{{ m.label }}</span>
-          </div>
-        </div>
-      </GlassCard>
-
-      <!-- 趋势 + 掌握度 -->
+    <!-- 主 Bento：趋势 + 墨阶 / 热力图 + 薄弱点 -->
+    <div class="bento">
       <GlassCard class="span2">
         <div class="panel-head">
           <h3 class="panel-title">复习趋势</h3>
@@ -229,21 +253,22 @@ onMounted(loadStats)
       </GlassCard>
 
       <GlassCard>
-        <h3 class="panel-title">掌握度分布</h3>
-        <p class="cap">{{ stats.total_mistakes }} 道错题 · 0-5 级</p>
-        <div v-if="masteryRows.length" class="mastery-bars">
-          <BarRow
-            v-for="row in masteryRows"
-            :key="row.label"
-            :label="row.label"
-            :percentage="row.percent"
-            :value="row.count"
-          />
+        <h3 class="panel-title">掌握度墨阶</h3>
+        <p class="cap">{{ stats.total_mistakes }} 道错题 · 墨色越深掌握越牢</p>
+        <div class="m-steps">
+          <div v-for="s in masterySteps" :key="s.level" class="m-step" :style="{ '--d': s.delay + 'ms' }">
+            <b class="num">{{ s.count }}</b>
+            <div class="m-pill">
+              <i
+                class="m-fill"
+                :style="{ '--h': s.percent, '--mcol': s.color, animationDelay: s.delay + 'ms' }"
+              ></i>
+            </div>
+            <span class="m-label">{{ s.label }}</span>
+          </div>
         </div>
-        <UiEmpty v-else text="暂无掌握度数据" icon="layers" />
       </GlassCard>
 
-      <!-- 热力图 + 薄弱点 -->
       <GlassCard class="span2">
         <div class="panel-head">
           <h3 class="panel-title">复习热力图</h3>
@@ -256,10 +281,10 @@ onMounted(loadStats)
 
       <GlassCard>
         <h3 class="panel-title">薄弱知识点</h3>
-        <p class="cap">按累计答错排序</p>
+        <p class="cap">按累计答错排序 · 点击直通练习</p>
         <div v-if="reviewStats.weakest_tags.length" class="weak-list">
           <button
-            v-for="(row, i) in reviewStats.weakest_tags.slice(0, 5)"
+            v-for="(row, i) in reviewStats.weakest_tags"
             :key="row.tag_name"
             type="button"
             class="weak-item"
@@ -270,7 +295,7 @@ onMounted(loadStats)
               <b>{{ row.tag_name }}</b>
               <span>错 {{ row.wrong_count }} 次 · 关联 {{ row.mistake_count }} 题</span>
             </span>
-            <span class="w-bar"><BarRow :percentage="percentOf(row.wrong_count, weakMax)" :bar-height="6" /></span>
+            <span class="w-bar"><span class="w-track"><i :style="{ width: percentOf(row.wrong_count, weakMax) + '%' }"></i></span></span>
           </button>
         </div>
         <UiEmpty v-else text="暂无薄弱知识点" icon="target" />
@@ -280,7 +305,7 @@ onMounted(loadStats)
       </GlassCard>
     </div>
 
-    <!-- 分布与明细 -->
+    <!-- 分布 -->
     <div class="grid-2">
       <GlassCard>
         <h3 class="panel-title">题型分布</h3>
@@ -318,95 +343,62 @@ onMounted(loadStats)
       <GlassCard>
         <h3 class="panel-title">题目来源分布</h3>
         <div v-if="stats.by_source_type && stats.by_source_type.length">
-          <div v-for="s in stats.by_source_type" :key="s.source_type" class="bar-row">
-            <div class="bar-name">{{ s.name }}</div>
-            <UiProgress :percentage="percentOf(s.count, sourceMax)" :color="sourceTypeColor(s.source_type)" />
-            <div class="bar-nums">{{ s.count }} 题</div>
+          <div v-for="s in stats.by_source_type" :key="s.source_type" class="src-row">
+            <span class="s-name">{{ s.name }}</span>
+            <span class="src-track"><i :style="{ width: percentOf(s.count, sourceMax) + '%', background: sourceTypeColor(s.source_type) }"></i></span>
+            <span class="s-nums num">{{ s.count }} 题</span>
           </div>
         </div>
         <UiEmpty v-else text="暂无题目来源数据" icon="tag" />
       </GlassCard>
     </div>
 
+    <!-- 科目分析：规模 × 效果 合并一张图 -->
     <GlassCard class="block-card">
-      <h3 class="panel-title">各科目统计</h3>
-      <div v-for="s in stats.by_subject" :key="s.subject_id" class="bar-row">
-        <div class="bar-name">{{ s.name }}</div>
-        <UiProgress :percentage="percentOf(s.count, subjectMax)" :color="subjectColor(s.subject_id)" />
-        <div class="bar-nums">
-          {{ s.count }} 题 <span class="avg">均难 {{ Number(s.avg_difficulty).toFixed(1) }}</span>
+      <div class="panel-head">
+        <h3 class="panel-title">科目分析</h3>
+        <span class="cap">错题规模 × 复习效果 · 墨条越长征题越多</span>
+      </div>
+      <div v-if="subjectMerged.length" class="subj-list">
+        <div v-for="s in subjectMerged" :key="s.name" class="subj-row">
+          <span class="s-name">{{ s.name }}</span>
+          <span class="s-bar">
+            <i
+              class="s-fill"
+              :style="{
+                '--w': percentOf(s.count, subjectMax),
+                '--scol': s.subject_id ? subjectColor(s.subject_id) : 'var(--ink-3)',
+                animationDelay: '80ms',
+              }"
+            ></i>
+          </span>
+          <span class="s-nums num">
+            <b>{{ s.count }}</b> 题
+            <em>复习 {{ s.review_count || 0 }}</em>
+            <em :class="{ good: (s.accuracy || 0) >= 70, warn: (s.accuracy || 0) < 50 }">{{ s.accuracy || 0 }}%</em>
+            <em>错 {{ s.wrong_count || 0 }}</em>
+            <em v-if="s.avg_difficulty > 0">均难 {{ s.avg_difficulty.toFixed(1) }}</em>
+          </span>
         </div>
       </div>
-      <UiEmpty v-if="!stats.by_subject.length" text="暂无科目数据" icon="book" />
-    </GlassCard>
-
-    <div class="grid-2">
-      <GlassCard>
-        <h3 class="panel-title">薄弱知识点</h3>
-        <table v-if="reviewStats.weakest_tags.length" class="plain-table">
-          <thead>
-            <tr>
-              <th>知识点</th>
-              <th class="num">累计答错</th>
-              <th class="num">关联错题</th>
-              <th class="op"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in reviewStats.weakest_tags" :key="row.tag_name">
-              <td class="tag-cell">{{ row.tag_name }}</td>
-              <td class="num">{{ row.wrong_count }}</td>
-              <td class="num">{{ row.mistake_count }}</td>
-              <td class="op">
-                <UiButton size="sm" variant="outline" @click="practiceTag(row.tag_name)">练这组题</UiButton>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <UiEmpty v-else text="暂无薄弱知识点" icon="target" />
-      </GlassCard>
-
-      <GlassCard>
-        <h3 class="panel-title">各科目复习情况</h3>
-        <table v-if="reviewStats.by_subject && reviewStats.by_subject.length" class="plain-table">
-          <thead>
-            <tr>
-              <th>科目</th>
-              <th class="num">错题数</th>
-              <th class="num">复习次数</th>
-              <th class="num">正确率</th>
-              <th class="num">累计答错</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in reviewStats.by_subject" :key="row.name">
-              <td class="tag-cell">{{ row.name }}</td>
-              <td class="num">{{ row.mistake_count }}</td>
-              <td class="num">{{ row.review_count }}</td>
-              <td class="num acc">{{ row.accuracy }}%</td>
-              <td class="num">{{ row.wrong_count }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <UiEmpty v-else text="暂无复习数据" icon="refresh" />
-      </GlassCard>
-    </div>
-
-    <GlassCard v-if="stats.by_sub_subject && stats.by_sub_subject.length" class="block-card">
-      <h3 class="panel-title">各二级科目统计</h3>
-      <div v-for="s in stats.by_sub_subject" :key="s.sub_subject_id" class="bar-row">
-        <div class="bar-name">{{ s.subject_name }} · {{ s.name }}</div>
-        <UiProgress :percentage="percentOf(s.count, subSubjectMax)" :color="subjectColor(s.subject_id)" />
-        <div class="bar-nums">
-          {{ s.count }} 题 <span class="avg">均难 {{ Number(s.avg_difficulty).toFixed(1) }}</span>
-        </div>
-      </div>
+      <UiEmpty v-else text="暂无科目数据" icon="book" />
     </GlassCard>
   </div>
 </template>
 
 <style scoped>
-/* ---------- Bento ---------- */
+/* ---------- 顶部区（子网格：两行强制等高 → 卡片对齐） ---------- */
+.bento-top {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-rows: repeat(2, minmax(158px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.b-tile { display: flex; }
+.b-tile :deep(.gcard-body) { flex: 1; display: flex; align-items: center; }
+
+/* ---------- 主 Bento ---------- */
 .bento {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -414,12 +406,9 @@ onMounted(loadStats)
   margin-bottom: 16px;
 }
 .span2 { grid-column: span 2; }
-.span3 { grid-column: span 3; }
-
-.b-hero { grid-column: span 2; grid-row: span 2; display: flex; flex-direction: column; }
-.b-tile { display: flex; align-items: center; }
 
 /* 英雄卡 */
+.b-hero { grid-row: 1 / 3; display: flex; flex-direction: column; transition: transform 0.3s var(--ease); }
 .hero-seal {
   position: absolute;
   right: -6px;
@@ -442,6 +431,26 @@ onMounted(loadStats)
     radial-gradient(420px 260px at 8% 0%, var(--accent-soft), transparent 70%),
     radial-gradient(380px 240px at 100% 100%, var(--teal-soft), transparent 70%);
 }
+.streak-chip {
+  position: absolute;
+  top: 22px;
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 700;
+}
+.streak-chip svg { animation: flame-flicker 2.2s ease-in-out infinite; }
+@keyframes flame-flicker {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  30% { transform: scale(1.14) rotate(-4deg); }
+  60% { transform: scale(1.06) rotate(3deg); }
+}
 .hero-label {
   position: relative;
   display: flex;
@@ -460,6 +469,7 @@ onMounted(loadStats)
   gap: 24px;
   margin-top: 10px;
 }
+.hero-left { min-width: 0; }
 .hero-value {
   font-family: var(--font-display);
   font-weight: 900;
@@ -469,43 +479,69 @@ onMounted(loadStats)
   letter-spacing: -0.02em;
   text-shadow: 0 2px 24px color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.hero-delta { font-size: 13px; color: var(--ink-3); margin: 6px 0 20px; }
+.hero-delta { font-size: 13px; color: var(--ink-3); margin: 6px 0 14px; }
 .hero-delta b { color: var(--green); font-weight: 700; }
+.hero-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.h-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 13px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.h-chip svg { color: var(--accent); }
+.h-chip b { color: var(--ink); font-weight: 800; }
+.h-chip i { font-style: normal; font-size: 11px; color: var(--ink-3); }
 .ring-center-text b { display: block; font-family: var(--font-display); font-size: 26px; font-weight: 900; line-height: 1.1; }
 .ring-center-text span { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
 
-/* 今日速览细条 */
-.strip-inner {
+/* ---------- 墨阶掌握度 ---------- */
+.m-steps {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  padding: 14px 20px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+  height: 172px;
 }
-.strip-item {
+.m-step {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding: 2px 8px;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 0;
 }
-.strip-item + .strip-item { border-left: 1px solid var(--line); }
-.strip-icon {
-  width: 30px;
-  height: 30px;
+.m-step > b { font-family: var(--font-display); font-weight: 900; font-size: 16px; }
+.m-pill {
+  width: 100%;
+  flex: 1;
   border-radius: 9px;
-  flex: none;
-  display: grid;
-  place-items: center;
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface-2));
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
 }
-.strip-item b { font-family: var(--font-display); font-size: 21px; font-weight: 900; }
-.strip-item i { font-style: normal; font-size: 12px; color: var(--ink-3); }
-.strip-label { font-size: 12px; color: var(--ink-3); margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tone-accent { background: var(--accent-soft); color: var(--accent); }
-.tone-teal { background: var(--teal-soft); color: var(--teal); }
-.tone-gold { background: var(--gold-soft); color: var(--gold); }
-.tone-green { background: var(--green-soft); color: var(--green); }
-.tone-violet { background: var(--violet-soft); color: var(--violet); }
+.m-fill {
+  display: block;
+  width: 100%;
+  height: calc(var(--h) * 1%);
+  border-radius: 9px;
+  background: var(--mcol);
+  transform-origin: bottom;
+  animation: m-grow 0.9s var(--spring) both;
+}
+@keyframes m-grow {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+.m-label { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
 
-/* 面板通用 */
+/* ---------- 面板通用 ---------- */
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .panel-title {
   font-family: var(--font-display);
@@ -515,16 +551,14 @@ onMounted(loadStats)
 }
 .cap { font-size: 12.5px; color: var(--ink-3); }
 
-.mastery-bars { display: flex; flex-direction: column; gap: 13px; margin-top: 12px; }
-
-/* 薄弱点列表 */
-.weak-list { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+/* ---------- 薄弱点列表 ---------- */
+.weak-list { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
 .weak-item {
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 9px 10px;
+  padding: 8px 10px;
   border: none;
   border-radius: 12px;
   background: transparent;
@@ -559,9 +593,11 @@ onMounted(loadStats)
 }
 .w-name span { font-size: 11.5px; color: var(--ink-3); }
 .w-bar { width: 64px; flex: none; }
+.w-track { display: block; height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.w-track i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width 1.1s var(--spring); }
 .weak-more { margin-top: 12px; }
 
-/* 下部布局 */
+/* ---------- 下部布局 ---------- */
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -570,7 +606,7 @@ onMounted(loadStats)
 }
 .block-card { margin-bottom: 16px; }
 
-/* 环形图 */
+/* ---------- 环形图 ---------- */
 .donut-wrap {
   position: relative;
   display: flex;
@@ -606,15 +642,24 @@ onMounted(loadStats)
 .legend-num { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .legend-pct { color: var(--ink-3); font-size: 12px; width: 38px; text-align: right; }
 
-/* 条形行 */
-.bar-row {
+/* ---------- 来源 / 科目条形行 ---------- */
+.src-row,
+.subj-row {
   display: grid;
-  grid-template-columns: 150px 1fr 110px;
   align-items: center;
   gap: 12px;
-  padding: 7px 0;
+  padding: 8px 0;
 }
-.bar-name {
+.src-row { grid-template-columns: 150px 1fr 64px; }
+.subj-row {
+  grid-template-columns: 150px 1fr minmax(300px, auto);
+  transition: background 0.16s var(--ease);
+  border-radius: 10px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.subj-row:hover { background: var(--accent-soft); }
+.s-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink);
@@ -622,45 +667,42 @@ onMounted(loadStats)
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.bar-nums { font-size: 12px; color: var(--ink-3); text-align: right; white-space: nowrap; }
-.bar-nums .avg { margin-left: 6px; }
-
-/* 表格 */
-.plain-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.plain-table th {
-  text-align: left;
-  font-size: 11.5px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+.src-track { display: block; height: 9px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.src-track i { display: block; height: 100%; border-radius: 99px; transition: width 1.1s var(--spring); }
+.s-bar { display: block; height: 12px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.s-fill {
+  display: block;
+  height: 100%;
+  width: calc(var(--w) * 1%);
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--scol), color-mix(in srgb, var(--scol) 45%, transparent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  transition: width 1.1s var(--spring);
+}
+.s-nums {
+  font-size: 12px;
   color: var(--ink-3);
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
 }
-.plain-table td {
-  padding: 9px 8px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink-2);
-}
-.plain-table tr:last-child td { border-bottom: none; }
-.plain-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.plain-table th.num { text-align: right; }
-.plain-table .acc { color: var(--green); font-weight: 700; }
-.plain-table .tag-cell { color: var(--ink); font-weight: 600; }
-.plain-table .op { text-align: right; width: 90px; }
+.subj-row .s-nums em { font-style: normal; margin-left: 12px; }
+.subj-row .s-nums b { font-family: var(--font-display); font-size: 15px; color: var(--ink); }
+.subj-row .s-nums .good { color: var(--green); font-weight: 700; }
+.subj-row .s-nums .warn { color: var(--red); font-weight: 700; }
 
 @media (max-width: 1100px) {
   .bento { grid-template-columns: repeat(2, 1fr); }
-  .b-hero { grid-column: span 2; }
-  .strip-inner { grid-template-columns: repeat(2, 1fr); gap: 10px 0; }
-  .strip-item:nth-child(3) { border-left: none; }
 }
 @media (max-width: 860px) {
   .bento { grid-template-columns: 1fr; }
-  .span2, .span3, .b-hero { grid-column: span 1; }
+  .span2 { grid-column: span 1; }
+  .bento-top { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+  .b-hero { grid-row: auto; }
   .b-hero .hero-body { flex-direction: column; align-items: flex-start; }
   .hero-value { font-size: 56px; }
   .grid-2 { grid-template-columns: 1fr; }
-  .bar-row { grid-template-columns: 100px 1fr 90px; }
-  .strip-inner { grid-template-columns: 1fr 1fr; }
+  .subj-row { grid-template-columns: 96px 1fr; }
+  .subj-row .s-nums { grid-column: 1 / 3; text-align: left; }
+  .subj-row .s-nums em:first-child { margin-left: 0; }
 }
 </style>
