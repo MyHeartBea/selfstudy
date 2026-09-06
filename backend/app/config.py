@@ -35,6 +35,8 @@ class Settings:
     BACKUP_DIR = PROJECT_ROOT / "data" / "backups"
     MAX_BACKUPS = 20
     FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+    # 历年真题文件夹（真题库扫描根目录，可用 .env PAPERS_DIR 覆盖）
+    PAPERS_DIR = os.environ.get("PAPERS_DIR", str(PROJECT_ROOT / "真题"))
 
     # AI 服务（OpenAI 兼容接口，可在 backend/.env 中配置）
     AI_API_KEY = os.environ.get("AI_API_KEY", "")

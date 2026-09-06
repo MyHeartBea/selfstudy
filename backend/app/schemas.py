@@ -66,6 +66,14 @@ class ImportPayload(BaseModel):
     mistakes: List[MistakeCreate] = Field(min_length=1, max_length=5000)
 
 
+class PaperCreate(BaseModel):
+    subject: str = ''
+    year: str = ''
+    title: str = ''
+    source_path: str
+    answer_path: str = ''
+
+
 class MockCreate(BaseModel):
     exam_year: str = ''
     total: int = 0

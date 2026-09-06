@@ -83,7 +83,20 @@ const mockAnswers = ref({})
 const mockLeft = ref(0)
 const mockSubmitting = ref(false)
 const mockReport = ref(null)
+const paperTitle = ref('')
+const paperYear = ref('')
+const paperSubject = ref('')
 let mockTimer = 0
+
+// 卷面题的阅读原文：优先本题自带，否则沿用上一题的（完形/阅读题组共用）
+const displayPassage = computed(() => {
+  if (!isMock.value || !current.value) return ''
+  if (current.value.passage) return current.value.passage
+  for (let i = index.value - 1; i >= 0; i--) {
+    if (queue.value[i]?.passage) return queue.value[i].passage
+  }
+  return ''
+})
 
 const mockClock = computed(() => {
   const s = mockLeft.value
@@ -145,6 +158,20 @@ function fmtDuration(sec) {
   return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`
 }
 
+/** 真题库科目名（如 英语二/数学二/计算机408/政治）→ 错题本 subject_id（按名称包含关系匹配）。 */
+async function subjectIdFor(paperSubject) {
+  try {
+    const res = await request.get('/subjects', { silent: true })
+    const subs = res.data.data || []
+    const map = { 英语二: '英语', 数学二: '数学', 计算机408: '408', 政治: '政治' }
+    const want = map[paperSubject] || paperSubject || ''
+    const hit = subs.find((s) => s.name && want && s.name.includes(want))
+    return hit ? hit.id : null
+  } catch (err) {
+    return null
+  }
+}
+
 async function submitMock(auto = false) {
   if (!isMock.value || mockSubmitting.value || done.value || !queue.value.length) return
   if (!auto) {
@@ -179,8 +206,10 @@ async function submitMock(auto = false) {
         result = scoreLetters(ans, q.correct_answer)
       }
       if (result) correct += 1
-      // 每题结果计入复习记录（SM-2 调度），模考即复习
-      await request.post(`/mistakes/${q.id}/review`, { result, user_answer: ans })
+      // 错题库的题：结果写入 SM-2 复习记录；真题库的题：不写错题记录，交卷后错题入错题本
+      if (!q.paperQuestion) {
+        await request.post(`/mistakes/${q.id}/review`, { result, user_answer: ans })
+      }
       details.push({
         id: q.id,
         snippet: (q.question || '').slice(0, 64),
@@ -198,13 +227,51 @@ async function submitMock(auto = false) {
       usedSec: mockDuration.value * 60 - mockLeft.value,
       overtime: auto === true,
       details: details.filter((d) => !d.result),
+      savedToMistakes: 0,
+    }
+    // 真题库整卷：错题自动收进错题本（仅收「作答了且错」的——未作答只是没做完，不进错题本）
+    if (route.query.paper_id) {
+      const wrongQs = queue.value.filter((q) => {
+        const ans = String(mockAnswers.value[q.id] || '').trim()
+        return ans && !scoreLetters(ans, q.correct_answer)
+      })
+      const subjectId = await subjectIdFor(paperSubject.value)
+      for (const q of wrongQs) {
+        try {
+          await request.post(
+            '/mistakes',
+            {
+              subject_id: subjectId,
+              question_type: q.question_type,
+              question: q.question,
+              option_a: q.option_a || '',
+              option_b: q.option_b || '',
+              option_c: q.option_c || '',
+              option_d: q.option_d || '',
+              correct_answer: q.correct_answer || '',
+              analysis: q.analysis || `模考答错（正确答案 ${q.correct_answer || '见解析'}），解析待整理。`,
+              difficulty_points: q.difficulty_points || `模考错题 · ${q.section || '客观题'}`,
+              difficulty: 3,
+              knowledge_tags: [],
+              source_type: 'real_exam',
+              source_year: paperYear.value,
+              source_name: paperTitle.value,
+              images: [],
+            },
+            { silent: true },
+          )
+          mockReport.value.savedToMistakes += 1
+        } catch (err) {
+          // 单题入库失败不阻塞其余
+        }
+      }
     }
     done.value = true
     window.dispatchEvent(new CustomEvent('km:review-saved'))
     // 成绩存档（统计页绘制模考趋势；失败静默——复习记录已提交不受影响）
     request
       .post('/mocks', {
-        exam_year: String(route.query.source_year || ''),
+        exam_year: paperYear.value || String(route.query.source_year || ''),
         total: mockReport.value.total,
         correct: mockReport.value.correct,
         score: mockReport.value.score,
@@ -224,7 +291,33 @@ async function loadQueue() {
   loading.value = true
   try {
     let res
-    if (isPractice.value) {
+    if (route.query.paper_id) {
+      // 真题库整卷模考：题目来自真题库
+      const paperRes = await request.get(`/papers/${route.query.paper_id}`, { silent: true })
+      const paper = paperRes.data.data
+      paperTitle.value = paper.title || ''
+      paperYear.value = paper.year || ''
+      paperSubject.value = paper.subject || ''
+      queue.value = (paper.questions || []).map((q) => ({
+        id: q.id,
+        paperQuestion: true,
+        no: q.no,
+        section: q.section,
+        question_type: q.question_type,
+        passage: q.passage,
+        question: q.question,
+        option_a: q.option_a,
+        option_b: q.option_b,
+        option_c: q.option_c,
+        option_d: q.option_d,
+        correct_answer: q.correct_answer,
+        analysis: q.analysis,
+        images: [],
+        knowledge_tags: [],
+        subject_id: null,
+        difficulty: 0,
+      }))
+    } else if (isPractice.value) {
       const params = {
         mode: practiceMode.value,
         count: Number(route.query.count) || 10,
@@ -242,14 +335,16 @@ async function loadQueue() {
     } else {
       res = await request.get('/reviews/today')
     }
-    queue.value = res.data.data || []
+    if (!route.query.paper_id) {
+      queue.value = res.data.data || []
+      if (!queue.value.length) done.value = !isPractice.value
+    }
     if (isMock.value) {
       // 模考仅含客观题（选择/多选/填空），主观题与英语整篇不进卷面
       queue.value = queue.value.filter(
         (q) => ['choice', 'multi', 'fill'].includes(q.question_type) && !q.passage_text,
       )
     }
-    if (!queue.value.length) done.value = !isPractice.value
     if (isMock.value && queue.value.length) startMockTimer()
   } catch (err) {
     // 错误提示由请求拦截器统一处理
@@ -514,6 +609,11 @@ onUnmounted(() => {
             </div>
             <div class="mr-line"><span>答对</span><b class="num mr-ok">{{ mockReport.correct }}</b></div>
             <div class="mr-line"><span>答错</span><b class="num mr-bad">{{ mockReport.total - mockReport.correct }}</b></div>
+            <div v-if="mockReport.savedToMistakes" class="mr-line">
+              <span>错题入本</span>
+              <b class="num">{{ mockReport.savedToMistakes }}</b>
+              <i class="mr-overtime saved">已自动收进错题本</i>
+            </div>
             <p class="mr-note">每题结果已计入复习记录（SM-2 自适应调度），错题将按计划再次推送。</p>
           </div>
         </div>
@@ -565,7 +665,10 @@ onUnmounted(() => {
           <StageBadge :text="`第 ${index + 1} / ${queue.length} 题`" />
         </template>
         <div class="detail-meta">
-          <MistakeMeta :mistake="current" />
+          <template v-if="current.paperQuestion">
+            <span class="count-tip">{{ paperTitle }}{{ current.section ? ' · ' + current.section : '' }}<i v-if="current.no"> · 第 {{ current.no }} 题</i></span>
+          </template>
+          <MistakeMeta v-else :mistake="current" />
           <span v-if="current.days_since_wrong != null" class="count-tip">
             错于 {{ current.days_since_wrong === 0 ? '今天' : current.days_since_wrong + ' 天前' }}
           </span>
@@ -596,6 +699,7 @@ onUnmounted(() => {
 
         <!-- 模考：暂存作答，不即时判分 -->
         <template v-if="isMock">
+          <p v-if="displayPassage" class="mock-passage"><MathText :text="displayPassage" /></p>
           <p class="mock-note">模考模式：作答不立即判分，交卷后统一判分并计入复习记录。卷面仅含客观题（单选/多选/填空）。</p>
           <template v-if="isChoice">
             <div
@@ -931,6 +1035,19 @@ onUnmounted(() => {
   font-size: 12.5px;
   color: var(--gold);
 }
+.mock-passage {
+  margin: 0 0 14px;
+  padding: 16px 20px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  line-height: 1.9;
+  color: var(--ink);
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
+}
 .mock-report { padding-bottom: 26px; }
 .mr-body {
   display: flex;
@@ -954,6 +1071,7 @@ onUnmounted(() => {
   padding: 2px 9px;
   border-radius: 999px;
 }
+.mr-overtime.saved { color: var(--green); background: var(--green-soft); }
 .mr-note {
   margin: 4px 0 0;
   font-size: 12px;

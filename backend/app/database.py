@@ -78,7 +78,7 @@ def init_database() -> None:
 
 
 # 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描
-MIGRATION_VERSION = 7
+MIGRATION_VERSION = 8
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
@@ -184,6 +184,47 @@ def migrate_database(conn: sqlite3.Connection) -> None:
             created_at DATETIME
         )
         """
+    )
+
+    # 真题库（v8）
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS exam_papers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            subject TEXT DEFAULT '',
+            year TEXT DEFAULT '',
+            title TEXT DEFAULT '',
+            source_path TEXT DEFAULT '',
+            answer_path TEXT DEFAULT '',
+            question_count INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            status_note TEXT DEFAULT '',
+            created_at DATETIME
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS exam_questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paper_id INTEGER NOT NULL REFERENCES exam_papers(id) ON DELETE CASCADE,
+            no TEXT DEFAULT '',
+            section TEXT DEFAULT '',
+            question_type TEXT DEFAULT 'choice',
+            passage TEXT DEFAULT '',
+            question TEXT DEFAULT '',
+            option_a TEXT DEFAULT '',
+            option_b TEXT DEFAULT '',
+            option_c TEXT DEFAULT '',
+            option_d TEXT DEFAULT '',
+            correct_answer TEXT DEFAULT '',
+            analysis TEXT DEFAULT '',
+            knowledge_tags TEXT DEFAULT ''
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_exam_questions_paper ON exam_questions(paper_id)"
     )
 
     _ensure_math_categories(conn)

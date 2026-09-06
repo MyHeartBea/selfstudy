@@ -63,6 +63,11 @@ const routes = [
         component: () => import('../views/SubjectView.vue'),
       },
       {
+        path: 'papers',
+        name: 'paper-bank',
+        component: () => import('../views/PapersView.vue'),
+      },
+      {
         path: 'design',
         name: 'design-gallery',
         component: () => import('../views/DesignView.vue'),

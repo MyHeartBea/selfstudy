@@ -1,10 +1,11 @@
 <script setup>
 /** 自主练习配置：模式选择 + 抽题数量 + 筛选条件 → 跳转 /review */
-import { onMounted, reactive, ref, computed, toRef } from 'vue'
+import { onMounted, reactive, ref, computed, watch, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { baseData, loadBaseData, questionTypeFilterOptions, sourceTypes } from '../composables/useBaseData'
 import { useSubSubject } from '../composables/useSubSubject'
+import request from '../api/request'
 import { toast } from '../ui/toast'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
@@ -58,13 +59,44 @@ const modes = [
   },
 ]
 
-// 模考配置：年份（必填）+ 时长
+// 模考配置：来源（错题库/真题库）+ 年份（错题库）+ 选题（真题库）+ 时长
 const mockYear = ref(String(new Date().getFullYear()))
 const mockDuration = ref(60)
+const mockSource = ref('mistakes') // mistakes | paper
+const papers = ref([])
+const mockPaperId = ref(null)
+const papersLoading = ref(false)
+
+const donePapers = computed(() => papers.value.filter((p) => p.status === 'done' && p.question_count > 0))
+
+async function loadPapers() {
+  papersLoading.value = true
+  try {
+    const res = await request.get('/papers', { params: { status: 'done' }, silent: true })
+    papers.value = res.data.data || []
+    if (!mockPaperId.value && donePapers.value.length) mockPaperId.value = donePapers.value[0].id
+  } catch (err) {
+    // 静默
+  } finally {
+    papersLoading.value = false
+  }
+}
+
+watch(mockSource, (v) => {
+  if (v === 'paper' && !papers.value.length) loadPapers()
+})
 
 const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
 
 const activeMode = computed(() => modes.find((m) => m.value === mode.value) || modes[0])
+
+const mockBriefTail = computed(() => {
+  if (mockSource.value === 'paper') {
+    const paper = papers.value.find((p) => p.id === mockPaperId.value)
+    return `${paper ? paper.title : '真题卷'} · ${mockDuration.value} 分钟`
+  }
+  return `${mockYear.value} 年 · ${mockDuration.value} 分钟`
+})
 
 function onSubjectChange() {
   filters.subSubjectId = null
@@ -76,14 +108,24 @@ function start() {
     count: count.value,
   }
   if (mode.value === 'mock') {
-    // 真题模考：年份必填，固定真题来源 + 时长
-    const year = String(mockYear.value || '').trim()
-    if (!/^(19|20)\d{2}$/.test(year)) {
-      toast.warning('真题模考请先填写四位年份，如 2021')
-      return
+    if (mockSource.value === 'paper') {
+      // 真题库整卷模考
+      const paper = papers.value.find((p) => p.id === mockPaperId.value)
+      if (!paper) {
+        toast.warning('请选择一份已入库的真题卷（没有就先去「真题库」导入）')
+        return
+      }
+      query.paper_id = paper.id
+    } else {
+      // 错题库真题模考：年份必填
+      const year = String(mockYear.value || '').trim()
+      if (!/^(19|20)\d{2}$/.test(year)) {
+        toast.warning('真题模考请先填写四位年份，如 2021')
+        return
+      }
+      query.source_type = 'real_exam'
+      query.source_year = year
     }
-    query.source_type = 'real_exam'
-    query.source_year = year
     query.duration = mockDuration.value
   }
   if (filters.subjectId) query.subject_id = filters.subjectId
@@ -148,34 +190,65 @@ onMounted(loadBaseData)
             </button>
           </div>
 
-          <!-- 模考配置：年份 + 时长 -->
+          <!-- 模考配置：来源 + 年份/选卷 + 时长 -->
           <template v-if="mode === 'mock'">
-            <div class="section-label" style="margin-top: 4px">模考年份 · 时长</div>
-            <div class="mock-config">
-              <input
-                v-model="mockYear"
-                class="field-input year-input"
-                placeholder="如 2021"
-                maxlength="4"
-              />
-              <div class="count-seg">
-                <button
-                  v-for="m in [30, 60, 90, 120]"
-                  :key="m"
-                  type="button"
-                  class="count-btn"
-                  :class="{ active: mockDuration === m }"
-                  @click="mockDuration = m"
-                >
-                  {{ m }} 分
-                </button>
+            <div class="section-label" style="margin-top: 4px">卷面来源</div>
+            <div class="src-toggle">
+              <button type="button" :class="{ active: mockSource === 'mistakes' }" @click="mockSource = 'mistakes'">
+                错题库 · 按年份
+              </button>
+              <button type="button" :class="{ active: mockSource === 'paper' }" @click="mockSource = 'paper'">
+                真题库 · 整卷
+              </button>
+            </div>
+
+            <template v-if="mockSource === 'mistakes'">
+              <div class="section-label" style="margin-top: 4px">模考年份</div>
+              <div class="mock-config">
+                <input
+                  v-model="mockYear"
+                  class="field-input year-input"
+                  placeholder="如 2021"
+                  maxlength="4"
+                />
               </div>
+            </template>
+            <template v-else>
+              <div class="section-label" style="margin-top: 4px">选择试卷</div>
+              <div class="mock-config">
+                <UiSelect
+                  v-model="mockPaperId"
+                  :options="donePapers.map((p) => ({ label: `${p.title}（${p.question_count} 题）`, value: p.id }))"
+                  placeholder="选择已入库真题"
+                  :disabled="papersLoading"
+                />
+                <p class="cap">
+                  真题库只有 {{ donePapers.length }} 份可用卷——
+                  <router-link to="/papers" class="mock-link">去真题库导入更多</router-link>
+                </p>
+              </div>
+            </template>
+
+            <div class="section-label" style="margin-top: 6px">考试时长</div>
+            <div class="count-seg">
+              <button
+                v-for="m in [30, 60, 90, 120, 180]"
+                :key="m"
+                type="button"
+                class="count-btn"
+                :class="{ active: mockDuration === m }"
+                @click="mockDuration = m"
+              >
+                {{ m }} 分
+              </button>
             </div>
           </template>
 
           <div class="deploy-brief">
             <span class="brief-line"><Icon name="zap" :size="14" />今日出征</span>
-            <b class="serif">{{ activeMode.title }} · {{ count }} 题<template v-if="mode === 'mock'"> · {{ mockYear }} 年 · {{ mockDuration }} 分钟</template></b>
+            <b class="serif">
+              {{ activeMode.title }} · {{ count }} 题<template v-if="mode === 'mock'"> · {{ mockBriefTail }}</template>
+            </b>
           </div>
           <UiButton variant="primary" size="lg" block @click="start">
             <Icon name="play" :size="16" />
@@ -433,6 +506,31 @@ onMounted(loadBaseData)
 }
 .mock-config .year-input { width: 130px; }
 .mock-config .count-seg { flex-wrap: wrap; }
+.mock-config .mock-link { color: var(--accent-ink); font-weight: 700; text-decoration: underline; }
+.src-toggle {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: 999px;
+}
+.src-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 15px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.18s var(--ease);
+}
+.src-toggle button:hover { color: var(--ink); }
+.src-toggle button.active {
+  background: var(--accent-grad);
+  color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-hover) 40%, transparent);
+}
 
 .filter-grid {
   display: grid;

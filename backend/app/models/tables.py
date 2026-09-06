@@ -142,6 +142,37 @@ CREATE TABLE IF NOT EXISTS mock_records (
     created_at DATETIME
 );
 
+-- 真题库（v8）：历年真题套卷与题目
+CREATE TABLE IF NOT EXISTS exam_papers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject TEXT DEFAULT '',
+    year TEXT DEFAULT '',
+    title TEXT DEFAULT '',
+    source_path TEXT DEFAULT '',
+    answer_path TEXT DEFAULT '',
+    question_count INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'pending',
+    status_note TEXT DEFAULT '',
+    created_at DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS exam_questions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paper_id INTEGER NOT NULL REFERENCES exam_papers(id) ON DELETE CASCADE,
+    no TEXT DEFAULT '',
+    section TEXT DEFAULT '',
+    question_type TEXT DEFAULT 'choice',
+    passage TEXT DEFAULT '',
+    question TEXT DEFAULT '',
+    option_a TEXT DEFAULT '',
+    option_b TEXT DEFAULT '',
+    option_c TEXT DEFAULT '',
+    option_d TEXT DEFAULT '',
+    correct_answer TEXT DEFAULT '',
+    analysis TEXT DEFAULT '',
+    knowledge_tags TEXT DEFAULT ''
+);
+
 -- 错题-知识点标签关联表：让"按标签检索"走索引，替代 instr(',tags,', ?) 全表扫描。
 -- knowledge_tags 逗号串仍保留（展示用），此表只负责高效检索，由 service 层同步维护。
 CREATE TABLE IF NOT EXISTS mistake_tag_map (
