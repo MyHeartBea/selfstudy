@@ -84,10 +84,12 @@ onUnmounted(() => {
 
 .modal-panel {
   width: 100%;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  background: linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
+    linear-gradient(160deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 42%, color-mix(in srgb, var(--gold) 16%, transparent)) border-box;
+  border: 1px solid transparent;
+  border-radius: var(--r-xl);
   box-shadow: var(--shadow-3);
+  backdrop-filter: blur(18px) saturate(1.2);
   display: flex;
   flex-direction: column;
   max-height: 88vh;
@@ -98,7 +100,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 20px 12px;
+  padding: 18px 22px 14px;
   border-bottom: 1px solid var(--line);
   flex: none;
 }
@@ -113,15 +115,16 @@ onUnmounted(() => {
   display: inline-flex;
   padding: 6px;
   border: none;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
   color: var(--ink-3);
   cursor: pointer;
+  transition: all 0.15s var(--ease);
 }
-.modal-close:hover { background: var(--surface-2); color: var(--ink); }
+.modal-close:hover { background: var(--surface-2); color: var(--ink); transform: rotate(90deg); }
 
 .modal-body {
-  padding: 18px 20px;
+  padding: 18px 22px;
   overflow-y: auto;
 }
 
@@ -129,13 +132,13 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 12px 20px 16px;
+  padding: 12px 22px 16px;
   border-top: 1px solid var(--line);
   flex: none;
 }
 
 .modal-enter-active, .modal-leave-active { transition: opacity 0.2s ease; }
-.modal-enter-active .modal-panel, .modal-leave-active .modal-panel { transition: transform 0.22s cubic-bezier(0.22, 0.8, 0.36, 1); }
+.modal-enter-active .modal-panel, .modal-leave-active .modal-panel { transition: transform 0.3s var(--spring); }
 .modal-enter-from, .modal-leave-to { opacity: 0; }
-.modal-enter-from .modal-panel, .modal-leave-to .modal-panel { transform: translateY(14px) scale(0.985); }
+.modal-enter-from .modal-panel, .modal-leave-to .modal-panel { transform: translateY(18px) scale(0.96); }
 </style>

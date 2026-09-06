@@ -48,9 +48,10 @@ const ICON_MAP = {
   width: 100%;
   padding: 11px 14px;
   border-radius: var(--r-md);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box;
+  border: 1px solid transparent;
   box-shadow: var(--shadow-3);
+  backdrop-filter: blur(16px) saturate(1.2);
   font-size: 13.5px;
 }
 

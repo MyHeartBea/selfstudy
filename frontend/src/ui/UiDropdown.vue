@@ -58,10 +58,11 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
   right: 0;
   z-index: 60;
   min-width: 150px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow-2);
+  background: linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  box-shadow: var(--shadow-3);
+  backdrop-filter: blur(16px) saturate(1.2);
   padding: 5px;
 }
 
@@ -72,16 +73,17 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
   width: 100%;
   padding: 8px 11px;
   border: none;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
   color: var(--ink);
   font-size: 13px;
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.14s var(--ease);
 }
 .dropdown-item:hover { background: var(--surface-2); }
 
-.drop-enter-active, .drop-leave-active { transition: opacity 0.14s, transform 0.14s; }
-.drop-enter-from, .drop-leave-to { opacity: 0; transform: translateY(-4px); }
+.drop-enter-active, .drop-leave-active { transition: opacity 0.18s var(--ease), transform 0.22s var(--spring); }
+.drop-enter-from, .drop-leave-to { opacity: 0; transform: translateY(-6px) scale(0.98); }
 </style>

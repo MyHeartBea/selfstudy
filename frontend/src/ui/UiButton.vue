@@ -105,15 +105,20 @@ function spawnRipple(event) {
 .btn-block { width: 100%; }
 
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(145deg, var(--accent), var(--accent-hover));
   color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 6px 16px -8px color-mix(in srgb, var(--accent) 70%, transparent);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent-hover) 36%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: transform 0.25s var(--spring), box-shadow 0.25s var(--ease), filter 0.2s var(--ease);
+  will-change: transform;
 }
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.14), 0 10px 24px -8px color-mix(in srgb, var(--accent) 80%, transparent);
+  background: linear-gradient(145deg, var(--accent), var(--accent-hover));
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-hover) 46%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
+.btn-primary:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 
 .btn-outline {
   background: var(--surface);
@@ -124,6 +129,7 @@ function spawnRipple(event) {
   border-color: var(--accent);
   color: var(--accent-ink);
   background: var(--accent-soft);
+  box-shadow: var(--e-glow);
 }
 
 .btn-ghost {

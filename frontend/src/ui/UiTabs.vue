@@ -27,23 +27,22 @@ defineEmits(['update:modelValue'])
 <style scoped>
 .seg-tabs {
   display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--bg-soft);
-  border: 1px solid var(--line);
-  border-radius: 12px;
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: 11px;
 }
 
 .seg-tab {
-  padding: 7px 16px;
+  padding: 6px 15px;
   border: none;
   border-radius: 9px;
   background: transparent;
-  color: var(--ink-2);
-  font-size: 13px;
+  color: var(--ink-3);
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s var(--ease);
   white-space: nowrap;
 }
 .seg-tab:hover { color: var(--ink); }
@@ -51,6 +50,5 @@ defineEmits(['update:modelValue'])
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow-1);
-  border: 1px solid var(--line);
 }
 </style>

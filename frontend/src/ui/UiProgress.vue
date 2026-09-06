@@ -20,13 +20,13 @@ const width = computed(() => `${Math.min(100, Math.max(0, props.percentage))}%`)
 <style scoped>
 .progress {
   width: 100%;
-  background: var(--bg-soft);
+  background: var(--surface-2);
   border-radius: 999px;
   overflow: hidden;
 }
 .progress-inner {
   height: 100%;
   border-radius: 999px;
-  transition: width 0.4s cubic-bezier(0.22, 0.8, 0.36, 1);
+  transition: width 0.9s var(--spring);
 }
 </style>

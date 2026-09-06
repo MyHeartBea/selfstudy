@@ -95,17 +95,22 @@ function onSizeChange() {
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 9px;
   background: transparent;
   color: var(--ink-2);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.12s;
+  transition: all 0.15s var(--ease);
 }
 .page-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
-.page-btn.active { background: var(--accent); color: #fff; }
+.page-btn.active {
+  background: var(--accent-grad);
+  color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-hover) 40%, transparent);
+}
 .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .page-ellipsis { color: var(--ink-3); padding: 0 2px; }
+.count-tip { font-size: 12.5px; color: var(--ink-3); }
 </style>

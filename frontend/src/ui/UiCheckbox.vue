@@ -42,11 +42,13 @@ defineEmits(['update:modelValue'])
   border: 1.5px solid var(--line-strong);
   border-radius: 5.5px;
   background: var(--surface);
-  transition: all 0.13s;
+  transition: all 0.2s var(--spring);
 }
 .checkbox input:checked + .box {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-grad);
+  border-color: transparent;
+  transform: scale(1.08);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent-hover) 36%, transparent);
 }
 .checkbox input:focus-visible + .box {
   outline: 2px solid var(--accent);
