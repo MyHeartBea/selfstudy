@@ -4,6 +4,7 @@
 import { computed, reactive, ref } from 'vue'
 
 import request from '../api/request'
+import MathText from './MathText.vue'
 import { toast } from '../ui/toast'
 import UiButton from '../ui/UiButton.vue'
 import UiModal from '../ui/UiModal.vue'
@@ -298,7 +299,7 @@ async function saveAll() {
                 <button v-else type="button" class="ep-word" :class="{ known: isExtracted(t.value) }" @click="openWord(t.value)">{{ t.value }}</button>
               </span>
             </p>
-            <p v-if="item.translation" class="ep-bi-cn">{{ item.translation }}</p>
+            <p v-if="item.translation" class="ep-bi-cn"><MathText :text="item.translation" /></p>
             <p v-else class="ep-bi-cn muted">—</p>
           </template>
         </div>
@@ -336,16 +337,16 @@ async function saveAll() {
               <button type="button" class="ep-toggle-btn ok" :class="{ active: getMark(q) === 'right' }" @click="setMark(q, 'right')">对</button>
             </span>
           </div>
-          <p class="ep-question-text">{{ q.question }}</p>
+          <p class="ep-question-text"><MathText :text="q.question" /></p>
           <div v-if="q.question_type === 'choice'" class="ep-options">
             <div v-for="(ok, k) in ['option_a', 'option_b', 'option_c', 'option_d']" :key="k" class="ep-option">
               <span class="ep-option-letter">{{ 'ABCD'[k] }}</span>
-              <span class="ep-option-text">{{ q[ok] }}</span>
+              <span class="ep-option-text"><MathText :text="q[ok]" /></span>
               <span v-if="q.correct_answer === 'ABCD'[k]" class="ep-correct">✓</span>
             </div>
           </div>
-          <p v-else class="ep-answer">答案：{{ q.correct_answer }}</p>
-          <div v-if="q.analysis" class="ep-analysis">{{ q.analysis }}</div>
+          <p v-else class="ep-answer">答案：<MathText :text="q.correct_answer" /></p>
+          <div v-if="q.analysis" class="ep-analysis"><MathText :text="q.analysis" /></div>
         </div>
       </div>
     </div>

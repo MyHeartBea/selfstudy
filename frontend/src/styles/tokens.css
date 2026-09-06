@@ -57,7 +57,6 @@
   --aurora-o: 0.5;
   --vig: rgba(60, 50, 30, 0.08);
   --deco: 0.85;
-  --grain-opacity: 0.028;
 
   /* ── 海拔（柔和多层阴影，替代 1px 边框的层次） ── */
   --shadow-1: 0 1px 2px rgba(44, 40, 34, 0.04), 0 4px 14px rgba(44, 40, 34, 0.05);
@@ -78,9 +77,6 @@
   --r-lg: 18px;
   --r-xl: 22px;
 
-  --paper-line: rgba(44, 40, 34, 0.045);
-  --masthead-h: 76px;   /* 顶部 Dock 区域高度 */
-
   /* ── 字体（显示 = 本地子集思源宋体） ── */
   --font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'SimSun', serif;
   --font-body: 'Noto Sans SC', 'PingFang SC', 'Segoe UI', system-ui, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
@@ -96,8 +92,6 @@
 
   /* ── 布局 ── */
   --content-max: 1150px;
-  --sidebar-w: 248px;   /* v1 遗留，Phase 1 移除 */
-  --topbar-h: 64px;     /* v1 遗留，Phase 1 移除 */
 
   color-scheme: light;
 }
@@ -147,14 +141,11 @@
   --aurora-o: 0.55;
   --vig: rgba(0, 0, 0, 0.34);
   --deco: 0.7;
-  --grain-opacity: 0.032;
 
   --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 18px rgba(0, 0, 0, 0.28);
   --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.4);
   --shadow-3: 0 4px 10px rgba(0, 0, 0, 0.4), 0 20px 48px rgba(0, 0, 0, 0.5);
   --e-glow: 0 6px 28px rgba(224, 88, 61, 0.22), 0 2px 8px rgba(224, 88, 61, 0.12);
-
-  --paper-line: rgba(236, 229, 213, 0.035);
 
   color-scheme: dark;
 }

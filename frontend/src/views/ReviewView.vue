@@ -352,10 +352,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <!-- 英语整篇：先给原文与参考译文，再做题 -->
         <div v-if="current.passage_text" class="review-passage">
           <div class="block-label">原文</div>
-          <div class="rp-text">{{ current.passage_text }}</div>
+          <div class="rp-text"><MathText :text="current.passage_text" /></div>
           <details v-if="current.passage_translation" class="rp-trans">
             <summary>查看全文翻译</summary>
-            <div class="rp-trans-text">{{ current.passage_translation }}</div>
+            <div class="rp-trans-text"><MathText :text="current.passage_translation" /></div>
           </details>
         </div>
 
