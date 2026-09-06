@@ -79,11 +79,48 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 - 其它 services：`mistake / review / knowledge / formula / stats / answer`；routers：`mistakes / reviews / knowledge / formulas / vocab / subjects / stats / transfer / ai / system`。
 
 前端（`frontend/src/`）：
+- `styles/tokens.css` + `styles/base.css`：墨韵 2.0 令牌与全局（见 6.5 节）。
+- `views/AppLayout.vue` + `ui/AmbientLayer.vue` + `ui/DockNav.vue`：外壳三件套（氛围层/Dock/换肤）。
+- `ui/`：基件库（GlassCard/MetricTile/RingProgress/AreaChart/BarRow/Heatmap/Skeleton/StageBadge + 全套表单反馈件）。
+- `views/DesignView.vue`：/design 画廊（全组件双主题打磨场，不入导航）。
 - `components/EnglishAnalysisPanel.vue`：整篇精读（核心）。
-- `views/CaptureView.vue`：多图 / 粘贴目标 / 自动检测。
+- `views/CaptureView.vue`：多图 / 粘贴目标 / 自动检测 / 分析进度叙事。
+- `views/StatsView.vue`：Bento 统计；`views/ReviewView.vue`：复习沉浸舞台。
 - `components/MistakeCard.vue`：列表首图；`components/DetailMeta.vue` + `ui/QuestionImages.vue`：详情全图 / 首图。
 - `utils/markdown.js` + `components/RichText.vue`：Markdown 表格 / hex-dump。
 - `ui/UiModal.vue`：加宽弹窗；设计系统「墨纸印」：`src/ui/`。
+
+## 6.5 前端 v2 架构「墨韵 2.0」（2026-09 重构完成，改前端必读）
+
+设计语言：宣纸 · 松烟墨 · 朱砂印 · 洒金。视觉基准原型 = `D:\temp\km-redesign\ink2-prototype.html`（仓库外，丢失可按本节重建）。
+
+**令牌**（`src/styles/tokens.css`，变量名沿用 v1，全站即时换值）：
+- 色彩：`--bg/--surface/--surface-2/--surface-glass/--glass`、`--ink/--ink-2/--ink-3`、`--accent(+soft/ink/ring/grad)`、辅助 `--teal/--gold/--green/--violet/--blue/--red`；
+- 氛围层：`--wash1..3/--blob1..3/--aurora-o/--vig/--deco`；海拔：`--shadow-1/2/3`、`--e-glow`；动效：`--spring/--ease`；圆角 `--r-sm..xl`；字阶 `--fs-display 42/h1 32/h2 20/h3 16.5/body 15`；布局 `--content-max 1150px`。深浅主题 = `[data-theme='dark']` 覆盖同名变量。
+
+**四条硬规则**：
+1. **骑缝外挂**：徽章/悬浮 chip 放 `GlassCard` 的 `#badge` 插槽（外层包裹 overflow:visible）；卡片自身 overflow:hidden 只用于流光裁切。新卡片基件必须保持此结构。
+2. **文本三通道**：AI 产出文本（题干/选项/答案/解析/翻译/原文）一律走 `MathText`（$..$ KaTeX+转义）或 `RichText`（Markdown 表格/hex-dump），**禁止裸插值**；英语点词逐字 token 化的句子除外。
+3. **8pt 网格**：间距/尺寸取 4/8 倍数；chip 高 28px、圆角 999px；长标签一律 ellipsis、表格横向滚动。
+4. **双主题审计**：每个页面改动后在 8000 生产上浅/深两主题各截图自查（深色切 `localStorage['km-theme']='dark'`）。全站遵循 `prefers-reduced-motion`。
+
+**外壳**（`views/AppLayout.vue` v4 + `ui/AmbientLayer.vue` + `ui/DockNav.vue`）：
+- 氛围层：底纱/旋转极光/视差光斑（单 rAF 循环）/呼吸墨渍/远山/墨字水印/纸纹噪点/暗角/浮尘/鼠标柔光，纯展示 fixed 层；
+- 顶部悬浮玻璃 Dock：滑动 pill（`.dock-ind`）、悬浮标签（data-label+::after）、复习进度环、后端健康点；窄屏 ≤1100px 切换紧凑顶栏+抽屉；
+- 换肤「墨漫纸面」：rAF+clip-path 圆形扩散（`theme-veil`，防重入锁 themeBusy），**不要改回 View Transitions**（用户浏览器实测有半途跳变 bug）；
+- 开场编排：字体就绪（`document.fonts.ready`，700ms 兜底）后 `body.app-ready` 触发「氛围显影→Dock 落下→页面级联」。
+
+**ui/ 基件一览**（全部零依赖，API 与 v1 兼容）：
+- `UiButton`（variant=primary|ghost|outline|danger|success|subtle；primary=印章渐变+涟漪）、`UiModal`（玻璃+渐变描边，zIndex 可叠）、`UiTabs/UiSelect/UiDropdown/UiCheckbox/UiPagination/UiProgress/UiStars/UiTag/UiEmpty/ToastHost/ConfirmHost/CommandPalette/Icon(icons.js 内联 SVG)`；
+- v2 新增：`GlassCard`（渐变描边玻璃+流光，#badge 骑缝）、`MetricTile`（tone=accent|teal|gold|green|violet|blue，#spark 插槽）、`RingProgress`（渐变环+生长动画）、`AreaChart`（手写 SVG 面积图，颜色传 `var(--xxx)` 自动跟主题）、`BarRow`、`Heatmap`（data=[{date,count}]，级联入场）、`Skeleton`（variant=text|rect|circle）、`StageBadge`（骑缝徽章，top:-15px）。
+- ⚠️ scoped CSS 教训：`:global(A) B` 会被错编译成「把 B 的样式套到 A」（Phase 1 曾把 Dock 的 transform 套到 body 导致整页左移）；组合选择器要写 `:global(A B)`。
+- ⚠️ 路由过渡必须带显式 `:duration`（AppLayout 已配）：后台标签页 transitionend 被浏览器推迟，否则切路由卡死白屏。
+
+**门面页**：`StatsView`=Bento 网格（英雄卡+进度环+速览条+AreaChart+Heatmap+薄弱点直通）；`ReviewView`=沉浸舞台（流光进度线+StageBadge+玻璃题卡+落章完成页）；生词闪卡=真 3D 翻面（preserve-3d 双面卡）；公式背诵=翻卡 reveal 动效。四题型作答/全键盘流/判分反馈链（脉冲/抖动）逻辑层未动。
+
+**字体**：`@fontsource/noto-serif-sc` 本地子集（按 unicode-range 分片按需加载，约 411 片 woff2），`main.js` 引 500/600/700/900 四字重；**已移除 Google Fonts CDN**。更新字体 = `npm update @fontsource/noto-serif-sc`。`/design` 画廊页（不入导航）是全组件双主题打磨场，改基件先在画廊验证。
+
+**PowerShell 教训**：改含中文的文件**禁止** `Get-Content | Set-Content`（GBK/UTF-8 双重编码会把 `</title>` 等吃掉导致整页空白——Phase 6 实际翻过车）；一律用 Edit 工具或 `[System.IO.File]::ReadAllText/WriteAllText` 显式 UTF-8 无 BOM。
 
 ## 7. 功能备忘（改功能时留意）
 - **错题库**：题型按科目感知（数学 / 408：选择·填空·解答；政治：单选·多选·分析；英语：客观题·翻译·作文）；筛选 / 排序 / 分页 / 批量操作 / URL 同步筛选状态 / 导入导出 JSON。
@@ -105,8 +142,7 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 - **已弃用，勿再使用**：`start-server.cmd`、启动文件夹里 `openviking-server.cmd`、`D:\\dsh-home\\openviking\\ov.conf`（指向 D 盘另一工作区）。
 
 ## 9. 当前状态（2026-09-06）
-- git HEAD = `0ccb8d9` 之后的「质量保持+全面修复」提交（见 git log 最新一条）。
-- 后端 8000 运行中；前端 `frontend/dist` 已构建；41 个测试全绿。
-- 2026-09-06 修复三处 d20d838 重构遗留：①`_vision_extract_text`/`ocr_image`/`analyze_english` 支持 `model/base_url/api_key` 通道透传（此前写死 DeepSeek，GLM/Agnes 回退失效）；②`/ai/english` 带图时按通道逐个回退；③英语整篇链内逐步扣减超时预算（防串行多次调用叠加超 300s）；④`test_regressions` 3 个用例同步新契约。
-- 2026-09-06 第二轮（质量保持+全面修复）：⑤英语整篇改为**并行波次**（词汇‖题目清单、逐题并发，prompt/max_tokens 与串行一致，**质量不降只省墙钟**，超时兜底仅极端情况触发）；⑥`/api/mistakes` 列表瘦身（`LIST_COLUMNS` 排除英语大 JSON 字段，详情/编辑/复习仍 `SELECT *` 全量，`mistake_to_dict` 缺列不再补空键）；⑦新增 `test_export_import_round_trip`（41 测试）；⑧前端上传图片压缩 `utils/image.js`（长边 2000px，PNG 保持无损）+ 多图上限 5 张前端拦截；⑨`vocab_service` 弃用 `utcnow` 改时区感知；⑩`markdown.js` 链接/图片协议白名单（堵 `javascript:`）；⑪`docs/analysis-2026-08-14.md` 加归档标注（旧系统报告，勿据此改代码）。
-- openviking 已修复并验证正常（2026-09-06 复核：1933 监听、`embedding.dense`=智谱 embedding-3/2048/key 已配置、`vlm`=DeepSeek VLM/key 已配置、`OpenViking自启.vbs` 唯一条目、脚本 CONF 指向 `C:\Users\Administrator\.openviking\ov.conf`；弃用条目均已 `.disabled`）。
+- **前端「墨韵 2.0」全面重构已完成**（7 个 Phase，commits：`2c1e52b` 地基→`5b47665` 外壳→`7f7331f` 基件库→`a7b16c7` 门面两页→`96619bc` 列表+录入→`d6b08b5` 生词/公式→`1458fdc` 全局审计）。架构与硬规则见第 6.5 节；视觉基准原型在 `D:\temp\km-redesign\ink2-prototype.html`。
+- 后端契约零改动：41 个测试全绿；路由与 API 完全未动；零新增 npm 依赖（图表手写 SVG、字体走 @fontsource 包）。
+- 真实验收已过：完整录入链路（粘贴文本→AI 解析→表单→保存→列表可见）、复习答题流（对/错/多选空态）、键盘流、换肤连点 10 次、窄屏 860px 抽屉、Ctrl+K、生词 3D 闪卡；10 路由深浅双主题巡检通过。
+- 此前状态（AI 链路修复等）见 git log `9e4d887` 及更早；openviking 正常（见第 8 节）。

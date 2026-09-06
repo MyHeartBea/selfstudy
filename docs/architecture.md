@@ -25,17 +25,29 @@ SQLite（sqlite3 + 表结构 models/）
 - `routers/`：路由与参数解析，统一返回 `{code, data, message}`。
 - `main.py`：应用装配，CORS、参数校验异常包装、静态资源挂载。
 
-## 前端
+## 前端（墨韵 2.0，2026-09 重构）
+
+设计系统「墨韵 2.0」：宣纸 · 松烟墨 · 朱砂印 · 洒金；令牌集中在 `styles/tokens.css`
+（v1 变量名沿用，深浅主题 = `[data-theme='dark']` 覆盖），硬规则与组件 API 见根 `AGENTS.md` 第 6.5 节。
 
 - `api/request.js`：axios 实例与统一错误提示（支持 `silent` 选项抑制全局 toast）。
+- `styles/tokens.css + base.css`：设计令牌（色彩/氛围/海拔/动效/字阶）与全局样式（选项判分反馈链等）。
+- `views/AppLayout.vue + ui/AmbientLayer.vue + ui/DockNav.vue`：外壳三件套——
+  环境氛围层（底纱/极光/视差光斑/墨渍/浮尘，单 rAF 循环，reduced-motion 全关）、
+  顶部悬浮玻璃 Dock（滑动 pill/悬浮标签/复习环）、「墨漫纸面」rAF 换肤（clip-path 圆形扩散，防重入锁）。
+- `ui/`：自建基件库（零 UI 框架依赖）——按钮（印章渐变+涟漪）、玻璃弹窗/下拉、
+  GlassCard（渐变描边+流光+#badge 骑缝）、MetricTile、RingProgress、AreaChart（手写 SVG，
+  颜色用 CSS 变量自动跟主题）、BarRow、Heatmap、Skeleton、StageBadge（骑缝徽章）等。
+- `views/`：10 个页面 + `/design` 组件画廊（不入导航）。统计=Bento 网格；复习=沉浸舞台
+  （流光进度线/骑缝徽章/落章完成）；生词闪卡=真 3D 翻面；公式背诵=翻卡 reveal。
 - `composables/`：useBaseData（科目数据单例）、useMistakeFilters、useBulkActions、
-  useImportExport、useSubSubject、useTagInput、mistakeDraft 等逻辑复用单元。
-- `router/`：错题列表、智能录入、今日复习、自主练习、知识点库、公式背诵、
-  科目指南、学习统计、错题编辑（共 9 个路由，全部懒加载，嵌套在 Layout 下）。
-- `components/`：错题卡片、详情对话框、录入表单、三种题型作答组件、知识点编辑对话框、
-  公式/表格渲染（MathText/RichText）等 13 个组件。
-- `views/`：10 个页面级组件（Layout、MistakeList、CaptureView、ReviewView、PracticeView、
-  KnowledgeBase、FormulaView、SubjectGuide、Stats、MistakeCreate）。
+  useImportExport、useSubSubject、useTagInput、mistakeDraft 等逻辑复用单元（重构未动）。
+- `router/`：10 个路由全部懒加载，嵌套在 AppLayout 下；路由过渡带显式 duration
+  （后台标签页 transitionend 被推迟，防切页卡死）。
+- `components/`：错题卡片、详情对话框、录入表单、三种题型作答组件、EnglishAnalysisPanel
+  精读面板、MathText/RichText 文本渲染通道（AI 文本禁止裸插值）等。
+- 字体：`@fontsource/noto-serif-sc` 本地子集（unicode-range 分片按需加载，离线可用，
+  无 CDN）；开场编排等字体就绪后触发（`body.app-ready`）。
 
 ## 关键联动
 

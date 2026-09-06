@@ -19,7 +19,7 @@
 
 ## 主要文件
 - 后端：`app/services/ai_service.py`（英语/标准分析、OCR→文本、JSON 修复、自动科目）、`app/routers/ai.py`（`/ai/english`、`/ai/ocr`、`/ai/analyze`、`/ai/sense`、`_auto_subject_ids`）、`app/services/vocab_service.py`（kind）、`app/models/tables.py`+`app/database.py`（迁移）。
-- 前端：`components/EnglishAnalysisPanel.vue`（整篇精读，核心）、`views/CaptureView.vue`（多图/粘贴目标/自动检测）、`components/MistakeCard.vue`（列表首图）、`components/DetailMeta.vue`+`ui/QuestionImages.vue`（详情全图/首图）、`utils/markdown.js`+`components/RichText.vue`（表格/hex）、`ui/UiModal.vue`（加宽）。
+- 前端：**墨韵 2.0 重构已完成**——`styles/tokens.css`（设计令牌）、`views/AppLayout.vue`+`ui/AmbientLayer.vue`+`ui/DockNav.vue`（外壳三件套）、`ui/` 基件库（GlassCard/MetricTile/RingProgress/AreaChart/Heatmap/StageBadge 等）、`views/DesignView.vue`（/design 画廊）、`views/StatsView.vue`（Bento）、`views/ReviewView.vue`（沉浸舞台）、`components/EnglishAnalysisPanel.vue`（整篇精读）、`views/CaptureView.vue`（多图/粘贴目标/进度叙事）。**改前端先读 `AGENTS.md` 第 6.5 节**（四条硬规则：骑缝外挂/文本三通道/8pt 网格/双主题审计；以及 `:global(A) B` 编译坑、路由过渡显式 duration）。视觉基准原型：`D:\temp\km-redesign\ink2-prototype.html`。
 
 ## openviking（已跑通，勿动坏；2026-09-06 修复配置分裂）
 - **规范配置 = `~\.openviking\ov.conf`**（JSON）。工作区 = `C:\Users\Administrator\.openviking`（记忆库 `pending/vectordb/viking` 都在此）。
@@ -31,6 +31,6 @@
 - 备份：`~\.openviking\ov.conf.bak`（原始）、`.bak-ds`（DeepSeek 改前）。`ov` CLI 已配置 `local`。
 
 ## 现状（2026-09-06）
-- git HEAD = `aad766f`（修正 openviking 配置分裂说明）。历史：`d20d838`（大功能）、`d4fc2ab`（列表首图）、`93b261b`（hex 等宽）、`f60464c`（文档）。
+- **前端「墨韵 2.0」全面重构完成并推送**（7 Phase 提交链至 `1458fdc`）：tokens v2 + 本地子集思源宋体（@fontsource，已去 CDN）+ 氛围层/玻璃 Dock/墨漫纸面换肤 + 全套基件 + 各页换肤 + 全局审计。后端契约零改动，41 测试全绿。架构/硬规则 → `AGENTS.md` 第 6.5 节。
 - 后端 8000 运行中；前端 `frontend/dist` 已构建。
-- openviking 已修复并验证正常：VLM = DeepSeek `deepseek-v4-flash-vision-exp`；规范配置 C 盘 `~\.openviking\ov.conf`；自启 vbs→`start_openviking.py`（其 CONF 指向规范配置）；`pending/` 已清理。
+- openviking 正常（见上节）。历史 AI 链路修复见 git log（`9e4d887` 及更早）。
