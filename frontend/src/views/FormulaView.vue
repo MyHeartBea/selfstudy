@@ -258,8 +258,8 @@ onMounted(loadFormulas)
         <div class="recite-progress">
           <div class="recite-progress-inner" :style="{ width: (reciteKnown / Math.max(1, reciteTotal)) * 100 + '%' }"></div>
         </div>
-        <h3 class="memorize-title">{{ reciteQueue[0].title }}</h3>
-        <div v-if="reciteRevealed" class="knowledge-preview">
+        <h3 class="memorize-title serif">{{ reciteQueue[0].title }}</h3>
+        <div v-if="reciteRevealed" class="knowledge-preview flip-reveal">
           <RichText :text="reciteQueue[0].content" />
         </div>
         <UiButton
@@ -454,6 +454,15 @@ onMounted(loadFormulas)
   border-radius: var(--r-md);
   padding: 14px 16px;
   background: var(--surface-2);
+}
+/* 翻卡感：内容像卡片背面一样翻入 */
+.flip-reveal {
+  perspective: 1200px;
+  animation: flip-in 0.5s var(--spring) both;
+}
+@keyframes flip-in {
+  from { opacity: 0; transform: rotateX(-55deg) translateY(10px); }
+  to { opacity: 1; transform: rotateX(0) translateY(0); }
 }
 
 .f-form { display: flex; flex-direction: column; gap: 14px; }

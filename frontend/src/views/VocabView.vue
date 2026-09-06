@@ -333,20 +333,19 @@ function onKeydown(event) {
           </UiTag>
           <UiButton size="sm" variant="ghost" @click="mode = 'list'">退出</UiButton>
         </div>
-        <div
-          ref="cardEl"
-          class="flash-card"
-          :class="{ flipped }"
-          @click="flipped = !flipped"
-        >
-          <div class="flash-word serif">{{ currentCard.word }}</div>
-          <div v-if="currentCard.phonetic" class="flash-phonetic">{{ currentCard.phonetic }}</div>
-          <div v-if="flipped" class="flash-back">
-            <p class="flash-meaning">{{ currentCard.meaning || '（未填写释义）' }}</p>
-            <p v-if="currentCard.example" class="flash-example">{{ currentCard.example }}</p>
-            <p v-if="currentCard.note" class="flash-note">{{ currentCard.note }}</p>
+        <div ref="cardEl" class="flash-stage" @click="flipped = !flipped">
+          <div class="flash-card" :class="{ flipped }">
+            <div class="flash-face flash-front">
+              <div class="flash-word serif">{{ currentCard.word }}</div>
+              <div v-if="currentCard.phonetic" class="flash-phonetic">{{ currentCard.phonetic }}</div>
+              <span class="flash-tip">点击卡片或按空格查看释义</span>
+            </div>
+            <div class="flash-face flash-back">
+              <p class="flash-meaning">{{ currentCard.meaning || '（未填写释义）' }}</p>
+              <p v-if="currentCard.example" class="flash-example">{{ currentCard.example }}</p>
+              <p v-if="currentCard.note" class="flash-note">{{ currentCard.note }}</p>
+            </div>
           </div>
-          <span v-else class="flash-tip">点击卡片或按空格查看释义</span>
         </div>
         <div class="grade-row" :class="{ disabled: !flipped }">
           <button type="button" class="grade-btn unknown" :disabled="!flipped" @click="grade('unknown')">
@@ -540,43 +539,47 @@ function onKeydown(event) {
 }
 .flash-head .count-tip { flex: 1; }
 .flash-head .ui-button { margin-left: 0; }
+/* 真 3D 翻面：perspective 舞台 + 双面卡（backface 隐藏） */
+.flash-stage {
+  perspective: 1400px;
+}
 .flash-card {
   position: relative;
   min-height: 260px;
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--r-xl);
-  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  transform-style: preserve-3d;
+  transition: transform 0.55s var(--spring);
+  cursor: pointer;
+  user-select: none;
+}
+.flash-card.flipped { transform: rotateY(180deg); }
+.flash-face {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
   padding: 34px 28px;
-  cursor: pointer;
-  transition: border-color 0.2s, box-shadow 0.2s, transform 0.12s;
-  user-select: none;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r-xl);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.flash-card:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-2);
+.flash-stage:hover .flash-face { border-color: var(--accent); box-shadow: var(--shadow-2); }
+.flash-face.flash-back {
+  transform: rotateY(180deg);
+  border-color: var(--teal);
 }
-.flash-card:active { transform: scale(0.995); }
-.flash-card.flipped { border-color: var(--teal); }
+.flash-stage:active .flash-card { transform: scale(0.995); }
+.flash-card.flipped:active { transform: rotateY(180deg) scale(0.995); }
 .flash-word { font-size: 42px; font-weight: 700; letter-spacing: 0.02em; }
 .flash-phonetic { color: var(--ink-3); font-size: 15px; }
-.flash-back {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  animation: reveal-in 0.3s ease both;
-}
-@keyframes reveal-in {
-  from { opacity: 0; transform: translateY(6px); }
-}
-.flash-meaning { font-size: 19px; text-align: center; font-weight: 600; }
-.flash-example { font-size: 13px; color: var(--ink-2); text-align: center; font-style: italic; }
-.flash-note { font-size: 12.5px; color: var(--gold); text-align: center; }
+.flash-meaning { font-size: 19px; text-align: center; font-weight: 600; margin: 0; }
+.flash-example { font-size: 13px; color: var(--ink-2); text-align: center; font-style: italic; margin: 0; }
+.flash-note { font-size: 12.5px; color: var(--gold); text-align: center; margin: 0; }
 .flash-tip { position: absolute; bottom: 14px; font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.06em; }
 
 .grade-row {
