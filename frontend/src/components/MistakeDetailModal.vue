@@ -14,6 +14,7 @@ import { confirmDialog } from '../ui/confirm'
 import UiModal from '../ui/UiModal.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiTag from '../ui/UiTag.vue'
+import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
 
 const props = defineProps({
@@ -182,9 +183,9 @@ async function deleteCurrent() {
 <template>
   <UiModal v-model="visible" title="错题详情" size="xl">
     <div v-if="loading" class="detail-loading">
-      <span class="skeleton" style="height: 18px; width: 40%"></span>
-      <span class="skeleton" style="height: 90px"></span>
-      <span class="skeleton" style="height: 60px"></span>
+      <Skeleton variant="text" :width="'45%'" />
+      <Skeleton variant="rect" :height="110" :radius="14" />
+      <Skeleton variant="text" :count="2" />
     </div>
     <template v-else-if="detail">
       <!-- 英语整篇：用整篇精读视图（原文逐句对照+各题解析+句型+词汇），不再显示通用框 -->
@@ -279,14 +280,19 @@ async function deleteCurrent() {
 .ed-chip.phrase { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); }
 
 .review-info {
-  margin-top: 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
+  margin-top: 22px;
+  padding: 14px 18px;
+  border: 1px solid transparent;
   border-radius: var(--r-md);
-  background: var(--surface-2);
+  background:
+    linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 50%, color-mix(in srgb, var(--teal) 12%, transparent)) border-box;
+  box-shadow: var(--shadow-1);
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .review-chips {
@@ -298,12 +304,12 @@ async function deleteCurrent() {
 .chip {
   font-size: 12.5px;
   color: var(--ink-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--surface-2);
+  border: none;
   border-radius: 999px;
-  padding: 3px 10px;
+  padding: 4px 12px;
 }
-.chip b { color: var(--ink); }
+.chip b { color: var(--ink); font-family: var(--font-display); }
 
 .review-actions {
   display: flex;
