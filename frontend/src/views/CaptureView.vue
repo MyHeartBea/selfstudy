@@ -12,6 +12,7 @@ import { createMistakeDraft } from '../composables/mistakeDraft'
 import { toast } from '../ui/toast'
 import UiButton from '../ui/UiButton.vue'
 import UiTabs from '../ui/UiTabs.vue'
+import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
 
 const router = useRouter()
@@ -33,6 +34,35 @@ const ocrRawText = ref('')
 const aiWarning = ref('')
 let analysisRequestId = 0
 
+// —— 分析进度叙事：分步提示（视觉叙事，不承诺精确进度） ——
+const analyzeStep = ref(0)
+let stepTimer = 0
+const TEXT_STEPS = [
+  { icon: 'notebook', label: '读取题干与选项' },
+  { icon: 'sparkles', label: '解析考点 · 生成答案' },
+  { icon: 'pencil', label: '整理解析与思路' },
+]
+const IMAGE_STEPS = [
+  { icon: 'image', label: '看图提字（视觉通道）' },
+  { icon: 'layers', label: '检测科目与语言' },
+  { icon: 'sparkles', label: '拆解考点 / 英语精读' },
+  { icon: 'pencil', label: '组装错题卡' },
+]
+
+function startStepNarrative() {
+  stopStepNarrative()
+  analyzeStep.value = 0
+  stepTimer = setInterval(() => {
+    if (analyzeStep.value < 3) analyzeStep.value += 1
+  }, 7000)
+}
+function stopStepNarrative() {
+  if (stepTimer) {
+    clearInterval(stepTimer)
+    stepTimer = 0
+  }
+}
+
 async function analyze() {
   if (!text.value.trim()) {
     toast.warning('请先粘贴题干内容')
@@ -40,6 +70,7 @@ async function analyze() {
   }
   const requestId = ++analysisRequestId
   analyzing.value = true
+  startStepNarrative()
   analyzingText.value = '正在解析题干并生成答案与解析，约需 30-60 秒，请稍候…'
   try {
     const res = await request.post(
@@ -72,6 +103,7 @@ async function analyze() {
     if (requestId === analysisRequestId) {
       analyzing.value = false
       analyzingText.value = ''
+      stopStepNarrative()
     }
   }
 }
@@ -80,6 +112,7 @@ function useManual() {
   analysisRequestId += 1
   analyzing.value = false
   analyzingText.value = ''
+  stopStepNarrative()
   parsed.value = createMistakeDraft(text.value)
   ocrRawText.value = ''
   formKey.value += 1
@@ -89,6 +122,7 @@ function useManualImage() {
   analysisRequestId += 1
   analyzing.value = false
   analyzingText.value = ''
+  stopStepNarrative()
   parsed.value = createMistakeDraft('')
   ocrRawText.value = ''
   moreImages.value = []
@@ -160,6 +194,7 @@ function removeMainImage() {
   analysisRequestId += 1
   analyzing.value = false
   analyzingText.value = ''
+  stopStepNarrative()
   previewImage.value = ''
   imageBase64.value = ''
   moreImages.value = []
@@ -225,6 +260,7 @@ async function analyzeImage() {
   }
   const requestId = ++analysisRequestId
   analyzing.value = true
+  startStepNarrative()
   analyzingText.value = '正在识别图片并解析，约需 30-90 秒，请稍候…'
   try {
     let res
@@ -291,6 +327,7 @@ async function analyzeImage() {
     if (requestId === analysisRequestId) {
       analyzing.value = false
       analyzingText.value = ''
+      stopStepNarrative()
     }
   }
 }
@@ -331,6 +368,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('paste', onPaste, true)
   analysisRequestId += 1
+  stopStepNarrative()
 })
 </script>
 
@@ -447,7 +485,29 @@ onUnmounted(() => {
 
     <div v-if="analyzing" class="notice card analyzing">
       <span class="spinner"></span>
-      <p>{{ analyzingText }}</p>
+      <div class="analyze-narrative">
+        <p class="analyzing-title">{{ analyzingText }}</p>
+        <div class="step-chain">
+          <div
+            v-for="(step, i) in (activeTab === 'image' ? IMAGE_STEPS : TEXT_STEPS)"
+            :key="step.label"
+            class="step-item"
+            :class="{ done: i < analyzeStep, active: i === analyzeStep }"
+          >
+            <span class="step-icon">
+              <Icon v-if="i < analyzeStep" name="check" :size="12" />
+              <Icon v-else :name="step.icon" :size="12" />
+            </span>
+            <span class="step-label">{{ step.label }}</span>
+            <span v-if="i < (activeTab === 'image' ? IMAGE_STEPS : TEXT_STEPS).length - 1" class="step-link"></span>
+          </div>
+        </div>
+        <div class="analyze-skeleton">
+          <Skeleton variant="text" :width="'55%'" />
+          <Skeleton variant="text" :count="2" />
+          <Skeleton variant="rect" :height="64" :radius="12" />
+        </div>
+      </div>
     </div>
 
     <div v-if="ocrRawText" class="notice card warn">
@@ -582,11 +642,52 @@ onUnmounted(() => {
   object-fit: contain;
 }
 
-.analyzing { align-items: center; }
+.analyzing { align-items: flex-start; }
+.analyzing-title { margin: 0 0 12px; font-weight: 600; color: var(--ink); }
+.analyze-narrative { flex: 1; min-width: 0; }
+
+.step-chain { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.step-item { display: inline-flex; align-items: center; gap: 6px; }
+.step-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  transition: all 0.3s var(--ease);
+}
+.step-item.active .step-icon {
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: #fff;
+  animation: step-pulse 1.6s var(--ease) infinite;
+}
+.step-item.done .step-icon { background: var(--green-soft); border-color: transparent; color: var(--green); }
+@keyframes step-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-ring); }
+  50% { box-shadow: 0 0 0 5px transparent; }
+}
+.step-label { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
+.step-item.active .step-label { color: var(--accent-ink); }
+.step-item.done .step-label { color: var(--ink-2); }
+.step-link { width: 18px; height: 1.5px; background: var(--line-strong); margin: 0 2px; }
+
+.analyze-skeleton {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
 .spinner {
   flex: none;
   width: 15px;
   height: 15px;
+  margin-top: 3px;
   border-radius: 50%;
   border: 2px solid var(--accent-soft);
   border-top-color: var(--accent);

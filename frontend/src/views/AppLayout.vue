@@ -226,7 +226,8 @@ onUnmounted(() => {
 
     <main class="deck">
       <router-view v-slot="{ Component }">
-        <Transition name="route" mode="out-in">
+        <!-- duration 显式声明：后台标签页 transitionend 会被浏览器推迟，JS 计时兜底保证路由切换不被卡住 -->
+        <Transition name="route" mode="out-in" :duration="{ enter: 320, leave: 180 }">
           <component :is="Component" :key="route.fullPath" />
         </Transition>
       </router-view>

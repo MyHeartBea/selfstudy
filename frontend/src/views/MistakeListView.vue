@@ -30,6 +30,7 @@ import UiEmpty from '../ui/UiEmpty.vue'
 import UiPagination from '../ui/UiPagination.vue'
 import UiModal from '../ui/UiModal.vue'
 import UiDropdown from '../ui/UiDropdown.vue'
+import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
 
 const router = useRouter()
@@ -221,7 +222,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="list-toolbar card card-pad">
+    <div class="list-toolbar">
       <div class="toolbar-row">
         <div class="toolbar-filters">
           <div class="filter-search">
@@ -339,7 +340,11 @@ onUnmounted(() => {
     </div>
 
     <div v-if="loading && !items.length" class="card-grid">
-      <div v-for="n in 8" :key="n" class="skeleton" style="height: 210px; border-radius: var(--r-lg)"></div>
+      <div v-for="n in 8" :key="n" class="sk-card">
+        <Skeleton variant="text" :width="'42%'" />
+        <Skeleton variant="rect" :height="120" :radius="12" />
+        <Skeleton variant="text" :count="2" />
+      </div>
     </div>
     <template v-else>
       <div v-if="loadError" class="load-error card card-pad">
@@ -423,6 +428,25 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 12px;
   margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 45%, color-mix(in srgb, var(--gold) 14%, transparent)) border-box;
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(10px) saturate(1.15);
+}
+
+.sk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 .toolbar-row {
   display: flex;
