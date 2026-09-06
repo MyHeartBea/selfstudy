@@ -152,6 +152,10 @@ function mockPicked(key) {
   return q ? String(mockAnswers.value[q.id] || '').includes(key) : false
 }
 
+function openDiagram(url) {
+  if (url) window.open(url, '_blank')
+}
+
 function fmtDuration(sec) {
   const m = Math.floor(sec / 60)
   const s = sec % 60
@@ -312,6 +316,7 @@ async function loadQueue() {
         option_d: q.option_d,
         correct_answer: q.correct_answer,
         analysis: q.analysis,
+        diagram_image: q.diagram_image || '',
         images: [],
         knowledge_tags: [],
         subject_id: null,
@@ -702,6 +707,10 @@ onUnmounted(() => {
           <p v-if="displayPassage" class="mock-passage"><MathText :text="displayPassage" /></p>
           <p class="mock-note">模考模式：作答不立即判分，交卷后统一判分并计入复习记录。卷面仅含客观题（单选/多选/填空）。</p>
           <template v-if="isChoice">
+            <div v-if="current.diagram_image" class="mock-diagram" @click="openDiagram(current.diagram_image)">
+              <img :src="current.diagram_image" alt="原卷图示（点击放大）" />
+              <span class="mock-diagram-hint">原卷图示 · 点击放大</span>
+            </div>
             <div
               v-for="opt in mockOptionList"
               :key="opt.key"
@@ -1034,6 +1043,26 @@ onUnmounted(() => {
   margin: 0 0 12px;
   font-size: 12.5px;
   color: var(--gold);
+}
+.mock-diagram {
+  margin: 0 0 14px;
+  cursor: zoom-in;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.mock-diagram img {
+  display: block;
+  width: 100%;
+  max-width: 460px;
+  max-height: 320px;
+  object-fit: contain;
+  background: #f7f3ea;
+}
+.mock-diagram-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--ink-3);
 }
 .mock-passage {
   margin: 0 0 14px;

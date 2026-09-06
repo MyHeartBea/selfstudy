@@ -78,7 +78,7 @@ def init_database() -> None:
 
 
 # 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描
-MIGRATION_VERSION = 8
+MIGRATION_VERSION = 9
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
@@ -219,7 +219,9 @@ def migrate_database(conn: sqlite3.Connection) -> None:
             option_d TEXT DEFAULT '',
             correct_answer TEXT DEFAULT '',
             analysis TEXT DEFAULT '',
-            knowledge_tags TEXT DEFAULT ''
+            knowledge_tags TEXT DEFAULT '',
+            page_idx INTEGER DEFAULT 0,
+            diagram_image TEXT DEFAULT ''
         )
         """
     )
@@ -281,6 +283,13 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         "ELSE 0 END "
         "WHERE last_interval IS NULL OR last_interval <= 0"
     )
+
+    # v9：exam_questions 加 页码/题图（旧库升级补列；新库建表已带，跳过）
+    _eq_cols = {c["name"] for c in conn.execute("PRAGMA table_info(exam_questions)").fetchall()}
+    if "page_idx" not in _eq_cols:
+        conn.execute("ALTER TABLE exam_questions ADD COLUMN page_idx INTEGER DEFAULT 0")
+    if "diagram_image" not in _eq_cols:
+        conn.execute("ALTER TABLE exam_questions ADD COLUMN diagram_image TEXT DEFAULT ''")
 
     _set_meta(conn, "migration_version", str(MIGRATION_VERSION))
 

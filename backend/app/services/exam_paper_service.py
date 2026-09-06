@@ -220,7 +220,8 @@ def _pdf_ocr(path: Path, subject: str = "") -> str:
             if not text.strip():
                 text = _pdf_page_vision(pil, i, subject)
         if text.strip():
-            out.append(text.strip())
+            # 在每页文本前插入页码标记 [[PAGE:i]]，供 AI 拆题定位该题所在页（图表题用）
+            out.append(f"[[PAGE:{i}]]\n{text.strip()}")
         if sum(len(t) for t in out) >= needed:
             break
     return "\n".join(out)
@@ -260,6 +261,107 @@ def _pdf_page_vision(pil, index: int, subject: str = "") -> str:
         return ""
 
 
+_IMAGE_ROOT = PROJECT_ROOT / "data" / "images" / "exam_papers"
+_DIAGRAM_RE = re.compile(r"\[[^\]]*(?:图|示|表|树)[^\]]*\]")
+
+
+def _pdf_pages(path: Path, subject: str) -> list:
+    """扫描/公式 PDF 按页提取。返回 [(page_idx, text, pil)]，页码由我直接给定（可靠）。
+
+    数学/408 优先视觉(LaTeX)，本地 OCR 兜底；文科目反之。只保留能提取出文字的页。
+    """
+    import base64
+    import io
+
+    try:
+        import pypdfium2 as pdfium
+    except Exception:
+        return []
+    from app.services import local_ocr
+
+    try:
+        pdf = pdfium.PdfDocument(str(path))
+        pages = len(pdf)
+    except Exception:
+        return []
+    math = _is_math(subject)
+    limit = settings.PDF_OCR_PAGES or pages
+    result: list = []
+    for i in range(min(pages, limit)):
+        pil = None
+        text = ""
+        try:
+            bmp = pdf[i].render(scale=2.2)
+            pil = bmp.to_pil()
+            buf = io.BytesIO()
+            pil.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode()
+        except Exception:
+            continue
+        if math:
+            text = _pdf_page_vision(pil, i, subject)
+            if not text.strip() and local_ocr.is_available():
+                try:
+                    text = local_ocr.recognize_base64(b64)
+                except Exception:
+                    text = ""
+        else:
+            if local_ocr.is_available():
+                try:
+                    text = local_ocr.recognize_base64(b64)
+                except Exception:
+                    text = ""
+            if not text.strip():
+                text = _pdf_page_vision(pil, i, subject)
+        if text.strip():
+            result.append((i, text.strip(), pil))
+    return result
+
+
+def _paper_img_dir(paper_id: int) -> Path:
+    d = _IMAGE_ROOT / str(paper_id)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _has_diagram_option(q: dict) -> bool:
+    """选项是否为图示（树/图/流程/表等，无文字，以 [图] 类占位）。"""
+    for key in ("option_a", "option_b", "option_c", "option_d"):
+        if _DIAGRAM_RE.search(q.get(key) or ""):
+            return True
+    return False
+
+
+def _page_diagram_image(paper_id: int, source: Path, page_idx: int, cache: dict, pil=None) -> str:
+    """渲染第 page_idx 页为 WebP 图，存 data/images/exam_papers/<pid>/，返回 /images/... URL。
+
+    用于「图示选项」题：把该页截图留存，前端模考/详情可查看原图（同页复用缓存）。
+    扫描路径已渲染过该页时，传入 pil 避免重复渲染。
+    """
+    try:
+        key = int(page_idx)
+        if key in cache:
+            return cache[key]
+        import pypdfium2 as pdfium
+        from PIL import Image
+
+        if pil is None:
+            pdf = pdfium.PdfDocument(str(source))
+            if key < 0 or key >= len(pdf):
+                return ""
+            pil = pdf[key].render(scale=2.4).to_pil()
+        pil = pil.convert("RGB")
+        if pil.width > 900:
+            pil = pil.resize((900, int(pil.height * 900 / pil.width)), Image.LANCZOS)
+        out = _paper_img_dir(paper_id) / f"p{key}.webp"
+        pil.save(out, format="WEBP", quality=86)
+        url = f"/images/exam_papers/{paper_id}/p{key}.webp"
+        cache[key] = url
+        return url
+    except Exception:
+        return ""
+
+
 def _chunk_text(text: str, size: int = _CHUNK_CHARS) -> List[str]:
     chunks = []
     buf = []
@@ -285,13 +387,17 @@ def _structure_prompt(subject: str, year: str, chunk: str) -> str:
         '"passage": "该题组共用原文（完形填空的文章、阅读理解的全文；只在该题组第一题填写，其他题留空串），无原文则空串", '
         '"question": "题干（选择题为问题句；完形填空为空格所在句；翻译/写作为题目要求全文）", '
         '"option_a": "A 选项", "option_b": "B 选项", "option_c": "C 选项", "option_d": "D 选项", '
-        '"analysis": "解析（若文本中带有）"}]}\n'
+        '"analysis": "解析（若文本中带有）", "page": 0, "has_diagram": false}]}\n'
         "规则：\n"
         "1. type 判断：四选项的选 choice；英译汉/翻译与写作选 solution；其余选 fill。\n"
-        "2. 只整理试题，跳过考生须知、条形码说明等一切噪声。\n"
+        "2. 只整理试题，跳过考生须知、条形码说明、`[[PAGE:n]]` 页码标记等一切噪声。\n"
         "3. choice 必须带四个选项；选项文本保持原样（LaTeX/公式原样保留）。\n"
         "4. correct_answer 一律留空串（答案由系统从答案文件另行匹配）。\n"
-        "5. 文本不完整（被截断）时，只整理能完整识别的题目，不要编造。\n\n"
+        "5. 文本不完整（被截断）时，只整理能完整识别的题目，不要编造。\n"
+        "6. 文本中的 `[[PAGE:n]]` 是页码标记：请把该题所在的页码 n 填入 `page` 字段（整数，无标记填 0）。\n"
+        "7. 若某选项是图示（树、二叉树、流程图、表格、示意图等，无文字内容），该选项字段填 `[图]`，并置 `has_diagram:true`；"
+        "选项有真实文字则如实填写，不要用占位符。\n"
+        "8. 请紧凑输出：**每个题目对象单独一行**（不要展开成多行美化），务必是合法 JSON。\n\n"
         f"试卷文本：\n{chunk}"
     )
 
@@ -362,7 +468,17 @@ def _run_import(paper_id: int) -> None:
             return
 
         _set_status(conn, paper_id, "extracting", "正在提取试卷文本")
-        exam_text = extract_text(source, paper["subject"])
+        text_layer = _pdf_text_layer(source)
+        scanned = not _pdf_text_usable(text_layer)
+        page_pils: dict = {}
+        if scanned:
+            pages = _pdf_pages(source, paper["subject"])
+        else:
+            pages = []
+        if scanned and not pages:
+            _set_status(conn, paper_id, "error", "未能从文件提取到文本（扫描版且 OCR/视觉均失败）")
+            return
+        exam_text = text_layer if not scanned else ("\n".join(t for _, t, _ in pages) or text_layer)
         if not exam_text.strip():
             _set_status(conn, paper_id, "error", "未能从文件提取到文本（可能是扫描版 PDF，请换 Word/文本版）")
             return
@@ -377,15 +493,11 @@ def _run_import(paper_id: int) -> None:
                     answer_text = ""
 
         _set_status(conn, paper_id, "structuring", "AI 正在拆题")
-        chunks = _chunk_text(exam_text)
         questions: List[dict] = []
         seen_nos = set()
-        for idx, chunk in enumerate(chunks):
-            parsed = ai_service._chat_json(
-                [{"role": "user", "content": _structure_prompt(paper["subject"], paper["year"], chunk)}],
-                max_tokens=8000,
-            )
-            for q in parsed.get("questions", []) or []:
+
+        def _collect(raw_questions, page_idx: int | None = None) -> None:
+            for q in raw_questions:
                 no = str(q.get("no") or "").strip()
                 qtype = str(q.get("type") or "choice")
                 if qtype not in ("choice", "fill", "solution"):
@@ -396,6 +508,7 @@ def _run_import(paper_id: int) -> None:
                 if key in seen_nos:
                     continue
                 seen_nos.add(key)
+                q_page = page_idx if page_idx is not None else int(q.get("page") or 0)
                 questions.append(
                     {
                         "no": no,
@@ -409,9 +522,30 @@ def _run_import(paper_id: int) -> None:
                         "option_d": str(q.get("option_d") or ""),
                         "correct_answer": "",
                         "analysis": str(q.get("analysis") or ""),
+                        "page_idx": q_page,
+                        "diagram_image": "",
                     }
                 )
-            _set_status(conn, paper_id, "structuring", f"AI 拆题中 {idx + 1}/{len(chunks)} 段")
+
+        if scanned:
+            # 逐页拆题：页码可靠，图示题可定位到页
+            for i, page_text, pil in pages:
+                page_pils[i] = pil
+                parsed = ai_service._chat_json(
+                    [{"role": "user", "content": _structure_prompt(paper["subject"], paper["year"], page_text)}],
+                    max_tokens=12000,
+                )
+                _collect(parsed.get("questions", []) or [], i)
+                _set_status(conn, paper_id, "structuring", f"AI 拆题中 第{i + 1}/{len(pages)}页")
+        else:
+            chunks = _chunk_text(exam_text)
+            for idx, chunk in enumerate(chunks):
+                parsed = ai_service._chat_json(
+                    [{"role": "user", "content": _structure_prompt(paper["subject"], paper["year"], chunk)}],
+                    max_tokens=12000,
+                )
+                _collect(parsed.get("questions", []) or [])
+                _set_status(conn, paper_id, "structuring", f"AI 拆题中 {idx + 1}/{len(chunks)} 段")
 
         if not questions:
             _set_status(conn, paper_id, "error", "AI 未能从文本中整理出试题")
@@ -443,13 +577,24 @@ def _run_import(paper_id: int) -> None:
                 except (AiRequestError, Exception):
                     pass  # 答案匹配失败不阻塞入库，答案可后续补
 
+        # 图示选项题：保存该页题图（树/图/流程等原图），供模考/详情查看
+        if any(_has_diagram_option(q) for q in questions):
+            _img_cache: dict = {}
+            for q in questions:
+                if scanned and _has_diagram_option(q):
+                    page = q.get("page_idx", 0)
+                    q["diagram_image"] = _page_diagram_image(
+                        paper_id, source, page, _img_cache, page_pils.get(page)
+                    )
+
         conn.execute("DELETE FROM exam_questions WHERE paper_id = ?", (paper_id,))
         now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         for q in questions:
             conn.execute(
                 "INSERT INTO exam_questions (paper_id, no, section, question_type, passage, "
-                "question, option_a, option_b, option_c, option_d, correct_answer, analysis) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "question, option_a, option_b, option_c, option_d, correct_answer, analysis, "
+                "page_idx, diagram_image) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     paper_id,
                     q["no"],
@@ -463,6 +608,8 @@ def _run_import(paper_id: int) -> None:
                     q["option_d"],
                     q["correct_answer"],
                     q["analysis"],
+                    q.get("page_idx", 0),
+                    q.get("diagram_image", ""),
                 ),
             )
         answered = sum(1 for q in questions if q["type"] == "choice" and q["correct_answer"])
