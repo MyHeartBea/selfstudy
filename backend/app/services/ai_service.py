@@ -632,8 +632,15 @@ def _vision_extract_text(
     images: List[str],
     instruction: str = "",
     timeout: int | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
 ) -> str:
-    """用视觉模型把图片里的文字提取成纯文本（小输出、快、稳，供后续文本分析）。"""
+    """用视觉模型把图片里的文字提取成纯文本（小输出、快、稳，供后续文本分析）。
+
+    未指定通道时默认走 DeepSeek 视觉首选；指定 model/base_url/api_key 时使用
+    调用方通道（多通道回退由路由层逐个尝试），保证回退链真正生效。
+    """
     content = []
     head = "请识别这几张图片中的文字，原样完整输出（保留段落与换行）；只输出文字本身，不要解释。"
     if instruction and instruction.strip():
@@ -646,7 +653,9 @@ def _vision_extract_text(
         content.append({"type": "image_url", "image_url": {"url": data_url}})
     result = _chat(
         [{"role": "user", "content": content}],
-        model=settings.AI_VISION_DS_MODEL,
+        model=model or settings.AI_VISION_DS_MODEL,
+        base_url=base_url,
+        api_key=api_key,
         max_tokens=4000,
         timeout=timeout,
     )
@@ -712,13 +721,41 @@ def analyze_english(
     standard_tags: List[str] | None = None,
     instruction: str = "",
     timeout: int | None = None,
+    vision_timeout: int | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
 ) -> dict:
-    """英语整篇精读（分段式，内容不减）：看图提字 + 阅读/翻译/拆解 + 词汇短语 + 多题解析，各段更小更稳。"""
+    """英语整篇精读（分段式，内容不减）：看图提字 + 阅读/翻译/拆解 + 词汇短语 + 多题解析，各段更小更稳。
+
+    timeout 是整条链（提字 + 全部分析调用）的总预算，内部逐步扣减，
+    避免串行多次调用各自持有一份完整超时、叠加远超前端等待上限；
+    可选步骤（词汇/题目清单/逐题分析）在预算耗尽时自动跳过或退化为仅题干。
+    model/base_url/api_key 指定视觉通道（未指定时用 DeepSeek 首选通道）。
+    """
+    deadline = time.monotonic() + (timeout or settings.AI_TIMEOUT)
+
+    def _remaining(minimum: int = 5) -> int:
+        return max(minimum, int(deadline - time.monotonic()))
+
     images = [img for img in (image_base64_list or []) if img and img.strip()]
     source_text = text.strip()
     if images:
+        whole = max(1, int(deadline - time.monotonic()))
+        limit = vision_timeout or settings.AI_VISION_PRIMARY_TIMEOUT
+        vision_cap = max(10, whole - 60)
         try:
-            source_text = _vision_extract_text(images, instruction, timeout) or source_text
+            source_text = (
+                _vision_extract_text(
+                    images,
+                    instruction,
+                    max(1, min(limit, vision_cap, whole)),
+                    model=model,
+                    base_url=base_url,
+                    api_key=api_key,
+                )
+                or source_text
+            )
         except Exception:
             source_text = text.strip()
     if not source_text.strip():
@@ -731,23 +768,27 @@ def analyze_english(
             {"role": "user", "content": source_text},
         ],
         max_tokens=4000,
-        timeout=timeout,
+        timeout=_remaining(),
     )
     if not reading.get("is_english"):
-        return _analyze_standard_content([], source_text, standard_tags, instruction, timeout)
-
-    # ② 重点短语/生词（失败则不阻塞，词汇可为空）
-    try:
-        vocab = _chat_json(
-            [
-                {"role": "system", "content": _parse_english_vocab_prompt()},
-                {"role": "user", "content": source_text},
-            ],
-            max_tokens=4000,
-            timeout=timeout,
+        return _analyze_standard_content(
+            [], source_text, standard_tags, instruction, timeout=_remaining()
         )
-    except Exception:
-        vocab = {}
+
+    # ② 重点短语/生词（预算耗尽或失败则不阻塞，词汇可为空）
+    vocab = {}
+    if _remaining() > 5:
+        try:
+            vocab = _chat_json(
+                [
+                    {"role": "system", "content": _parse_english_vocab_prompt()},
+                    {"role": "user", "content": source_text},
+                ],
+                max_tokens=4000,
+                timeout=_remaining(),
+            )
+        except Exception:
+            vocab = {}
 
     # ③ 题目与解析：先列清单（小、稳），再逐题完整分析（单题输出小，不易漏逗号）
     user_req = source_text
@@ -755,29 +796,34 @@ def analyze_english(
         user_req = f"{source_text}\n\n【要求】{instruction.strip()}"
 
     questions_items = []
-    try:
-        titles = _chat_json(
-            [
-                {"role": "system", "content": (
-                    "你是考研英语阅读助手。根据用户提供的原文与题目，输出严格的 JSON（不要 Markdown）：\n"
-                    '{"questions": [{"question": "题干", "option_a": "...", "option_b": "...", '
-                    '"option_c": "...", "option_d": "...", "correct_answer": "单字母或参考答案文本"}]}\n'
-                    "只列出题目（含选项与答案），不要写解析；选择题 correct_answer 只能单个字母。"
-                )},
-                {"role": "user", "content": user_req},
-            ],
-            max_tokens=2500,
-            timeout=timeout,
-        )
-        questions_items = titles.get("questions") or []
-    except Exception:
-        questions_items = []
+    if _remaining() > 5:
+        try:
+            titles = _chat_json(
+                [
+                    {"role": "system", "content": (
+                        "你是考研英语阅读助手。根据用户提供的原文与题目，输出严格的 JSON（不要 Markdown）：\n"
+                        '{"questions": [{"question": "题干", "option_a": "...", "option_b": "...", '
+                        '"option_c": "...", "option_d": "...", "correct_answer": "单字母或参考答案文本"}]}\n'
+                        "只列出题目（含选项与答案），不要写解析；选择题 correct_answer 只能单个字母。"
+                    )},
+                    {"role": "user", "content": user_req},
+                ],
+                max_tokens=2500,
+                timeout=_remaining(),
+            )
+            questions_items = titles.get("questions") or []
+        except Exception:
+            questions_items = []
 
     full_questions = []
     for q in questions_items:
         if not isinstance(q, dict) or not q.get("question"):
             continue
         opts = " ".join(str(q.get(k) or "") for k in ("option_a", "option_b", "option_c", "option_d"))
+        if _remaining() <= 5:
+            # 预算耗尽：保留题目清单兜底，不再逐题展开
+            full_questions.append(q)
+            continue
         try:
             qa_one = _chat_json(
                 [
@@ -789,7 +835,7 @@ def analyze_english(
                     )},
                 ],
                 max_tokens=3000,
-                timeout=timeout,
+                timeout=_remaining(),
             )
             full_questions.append(qa_one)
         except Exception:
@@ -802,7 +848,7 @@ def analyze_english(
                 {"role": "user", "content": user_req},
             ],
             max_tokens=6000,
-            timeout=timeout,
+            timeout=_remaining(),
         )
         full_questions = [qa]
 
@@ -915,21 +961,37 @@ def ocr_image(
     base_url: str | None = None,
     api_key: str | None = None,
     timeout: int | None = None,
+    vision_timeout: int | None = None,
     instruction: str = "",
     reference_image_base64: str = "",
 ) -> dict:
     """识别图片中的题目并生成结构化错题数据。
 
-    先看图提取文字（主图 + 可选参考图），再用文本做详细分析，避免超大视觉生成超时。
+    先看图提取文字（主图 + 可选参考图，走 model/base_url/api_key 指定的视觉通道，
+    未指定时用 DeepSeek 首选），再用文本做详细分析；timeout 覆盖全程预算，
+    避免视觉提取与文本分析各自持有一份完整超时导致总时长翻倍。
     """
+    deadline = time.monotonic() + (timeout or settings.AI_TIMEOUT)
     images = [img for img in (image_base64, reference_image_base64) if img and img.strip()]
     text = ""
     if images:
-        # 视觉只做简单识人字（小输出、快、稳）
-        text = _vision_extract_text(images, instruction, timeout) or ""
+        whole = max(1, int(deadline - time.monotonic()))
+        limit = vision_timeout or settings.AI_VISION_PRIMARY_TIMEOUT
+        # 给文本分析链至少预留一小段预算，避免视觉提取吃满整个超时
+        vision_cap = max(10, whole - 60)
+        # 视觉只做简单识图提字（小输出、快、稳）
+        text = _vision_extract_text(
+            images,
+            instruction,
+            max(1, min(limit, vision_cap, whole)),
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+        ) or ""
+    left = max(5, int(deadline - time.monotonic()))
     # 自动检测：英语→整篇精读；数学/408→标准详细解析
     return analyze_english(
-        [], text or "", standard_tags=standard_tags, instruction=instruction, timeout=timeout
+        [], text or "", standard_tags=standard_tags, instruction=instruction, timeout=left
     )
 
 

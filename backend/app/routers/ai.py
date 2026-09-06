@@ -155,7 +155,9 @@ def ocr_image(body: AiOcrRequest):
             model=vision_model,
             base_url=vision_base_url,
             api_key=vision_api_key,
-            timeout=_vision_timeout_for(vision_model, budget),
+            # timeout 覆盖 ocr_image 全程（提字 + 文本分析），vision_timeout 只约束提字一步
+            timeout=max(5, int(min(settings.AI_TIMEOUT, budget))),
+            vision_timeout=_vision_timeout_for(vision_model, budget),
             instruction=body.instruction,
             reference_image_base64=body.reference_image_base64,
         )
@@ -208,7 +210,7 @@ def ocr_image(body: AiOcrRequest):
         parsed = ai_service.ocr_image(
             body.image_base64,
             standard_tags=standard_tags,
-            timeout=min(settings.AI_TIMEOUT, int(budget)),
+            timeout=max(5, int(min(settings.AI_TIMEOUT, budget))),
             instruction=body.instruction,
             reference_image_base64=body.reference_image_base64,
         )
@@ -235,40 +237,66 @@ def english_analysis(body: AiEnglishRequest):
 
     自动检测是否为英语阅读：是则返回英语整篇结构（原文/翻译/句子拆解/短语/生词 + 题目解析）；
     否则返回通用错题结构（is_english=false），供前端降级到普通录入。
+    带图时视觉通道按首选→后备逐个尝试（DeepSeek 失败自动换 GLM/Agnes），
+    单次尝试的全程预算受 AI_OCR_TOTAL_TIMEOUT 约束。
     """
     started = time.monotonic()
     # 标准标签只查一次
     standard_tags = _standard_tags()
-    budget = settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started)
-    timeout = max(5, int(min(settings.AI_TIMEOUT, budget)))
-    try:
-        parsed = ai_service.analyze_english(
-            body.images,
-            text=body.text,
-            standard_tags=standard_tags,
-            instruction=body.instruction,
-            timeout=timeout,
-        )
-        parsed["method"] = "vision" if body.images else "text"
-        # 自动识别并填入 科目/二级科目（英语→阅读、数学→高数、408→计网等）
-        if parsed.get("is_english") and not parsed.get("subject_hint"):
-            parsed["subject_hint"] = "英语"
-        conn = get_connection()
+
+    def remaining() -> float:
+        return max(0.0, settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started))
+
+    # 无图（纯文本）时单通道占位即可；带图时按配置顺序逐通道回退
+    providers: List[tuple] = _vision_providers() if body.images else [(None, None, None)]
+    parsed = None
+    last_error: Exception | None = None
+    for vision_model, vision_base_url, vision_api_key in providers:
+        budget = remaining()
+        if budget <= 2:
+            break
         try:
-            sid, sub_id = _auto_subject_ids(conn, parsed.get("subject_hint"))
-            if sid:
-                parsed["subject_id"] = sid
-                if sub_id:
-                    parsed["sub_subject_id"] = sub_id
-        finally:
-            conn.close()
-        return ok(parsed, "英语整篇解析完成")
-    except AiNotConfigured:
-        return error(400, AI_NOT_CONFIGURED_MESSAGE)
-    except AiRequestError as exc:
-        return error(502, str(exc))
-    except Exception as exc:
-        return error(502, f"AI 服务调用失败：{exc}")
+            parsed = ai_service.analyze_english(
+                body.images,
+                text=body.text,
+                standard_tags=standard_tags,
+                instruction=body.instruction,
+                timeout=max(5, int(min(settings.AI_TIMEOUT, budget))),
+                vision_timeout=(
+                    _vision_timeout_for(vision_model, budget)
+                    if vision_model
+                    else None
+                ),
+                model=vision_model,
+                base_url=vision_base_url,
+                api_key=vision_api_key,
+            )
+            break
+        except AiNotConfigured:
+            return error(400, AI_NOT_CONFIGURED_MESSAGE)
+        except Exception as exc:
+            last_error = exc
+    if parsed is None:
+        message = (
+            _ai_error_message(last_error)
+            if last_error is not None
+            else "图片识别超时：所有视觉通道均未在预算内完成"
+        )
+        return error(502, message)
+    parsed["method"] = "vision" if body.images else "text"
+    # 自动识别并填入 科目/二级科目（英语→阅读、数学→高数、408→计网等）
+    if parsed.get("is_english") and not parsed.get("subject_hint"):
+        parsed["subject_hint"] = "英语"
+    conn = get_connection()
+    try:
+        sid, sub_id = _auto_subject_ids(conn, parsed.get("subject_hint"))
+        if sid:
+            parsed["subject_id"] = sid
+            if sub_id:
+                parsed["sub_subject_id"] = sub_id
+    finally:
+        conn.close()
+    return ok(parsed, "英语整篇解析完成")
 
 
 @router.get("/sense")

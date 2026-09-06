@@ -1,4 +1,4 @@
-"""Codex 可复用的三视觉模型调用工具：GLM-4.6V-Flash -> Agnes-2.0-Flash -> Agnes-2.5-Flash。"""
+"""可复用的多视觉通道调用脚本：DeepSeek-Vision → GLM → Agnes（按 backend/.env 配置依次竞速回退）。"""
 
 import argparse
 import base64
@@ -32,6 +32,12 @@ def env(name: str, default: str = "") -> str:
 
 def build_providers():
     result = []
+    # 与 backend/app/config.py 保持一致：DS 通道模型名缺省 deepseek-v4-flash-vision-exp
+    ds_model = env("AI_VISION_DS_MODEL", "deepseek-v4-flash-vision-exp")
+    if ds_model and env("AI_API_KEY"):
+        result.append(
+            ("deepseek-vision", ds_model, env("AI_BASE_URL"), env("AI_API_KEY"))
+        )
     for channel, model_key, base_key, key_key in (
         ("glm", "AI_VISION_MODEL", "AI_VISION_BASE_URL", "AI_VISION_API_KEY"),
         (

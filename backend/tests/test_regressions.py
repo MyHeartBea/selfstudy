@@ -179,7 +179,7 @@ class TestSourceValidation(unittest.TestCase):
 
 
 class TestCapturePrompt(unittest.TestCase):
-    """智能录入：补充要求/参考图片是否进入发给模型的 prompt。"""
+    """智能录入：补充要求/参考图片/视觉通道参数是否真正进入发给模型的请求。"""
 
     def _capture_chat(self, fn, *args, **kwargs):
         captured = {}
@@ -196,6 +196,22 @@ class TestCapturePrompt(unittest.TestCase):
             ai_service._chat = original
         return captured["messages"]
 
+    def _capture_calls(self, fn, *args, **kwargs):
+        """捕获每一次 _chat 调用（消息 + 关键字参数），用于断言视觉通道契约。"""
+        calls = []
+
+        def fake_chat(messages, **kw):
+            calls.append((messages, kw))
+            return '{"question": "q"}'
+
+        original = ai_service._chat
+        ai_service._chat = fake_chat
+        try:
+            fn(*args, **kwargs)
+        finally:
+            ai_service._chat = original
+        return calls
+
     def test_analyze_text_includes_instruction(self):
         messages = self._capture_chat(
             ai_service.analyze_text, "题目", instruction="按配方法求解"
@@ -209,7 +225,7 @@ class TestCapturePrompt(unittest.TestCase):
         self.assertEqual(messages[1]["content"], "题目")
 
     def test_ocr_includes_instruction_and_reference_image(self):
-        messages = self._capture_chat(
+        calls = self._capture_calls(
             ai_service.ocr_image,
             "AAAA",
             model="m",
@@ -218,42 +234,33 @@ class TestCapturePrompt(unittest.TestCase):
             instruction="正交变换步骤写详细",
             reference_image_base64="BBBB",
         )
-        content = messages[1]["content"]
+        self.assertTrue(calls)
+        messages, kw = calls[0]
+        content = messages[0]["content"]
         texts = [p["text"] for p in content if p["type"] == "text"]
         images = [p for p in content if p["type"] == "image_url"]
         self.assertEqual(len(images), 2)
         self.assertTrue(any("正交变换步骤写详细" in t for t in texts))
-        self.assertTrue(any("【参考图片】" in t for t in texts))
         self.assertTrue(images[1]["image_url"]["url"].startswith("data:image/png;base64,BBBB"))
+        # 视觉通道参数必须真正透传（回归：重构后写死首选通道，多通道回退形同虚设）
+        self.assertEqual(kw.get("model"), "m")
+        self.assertEqual(kw.get("base_url"), "u")
+        self.assertEqual(kw.get("api_key"), "k")
 
     def test_ocr_without_instruction_and_reference(self):
-        messages = self._capture_chat(ai_service.ocr_image, "AAAA")
-        content = messages[1]["content"]
+        calls = self._capture_calls(ai_service.ocr_image, "AAAA")
+        messages, _ = calls[0]
+        content = messages[0]["content"]
         images = [p for p in content if p["type"] == "image_url"]
         texts = [p["text"] for p in content if p["type"] == "text"]
         self.assertEqual(len(images), 1)
         self.assertFalse(any("【补充要求】" in t for t in texts))
 
-    def test_deepseek_ocr_requests_json_mode(self):
-        captured = {}
-
-        def fake_chat(messages, **kw):
-            captured.update(kw)
-            return '{"question":"q"}'
-
-        original = ai_service._chat
-        ai_service._chat = fake_chat
-        try:
-            ai_service.ocr_image(
-                "AAAA",
-                model="deepseek-v4-flash-vision-exp",
-                base_url="https://api.deepseek.com/v1",
-                api_key="test-key",
-            )
-        finally:
-            ai_service._chat = original
-
-        self.assertEqual(captured["response_format"], {"type": "json_object"})
+    def test_ocr_default_channel_is_deepseek_vision(self):
+        """未指定通道时，识图提字默认走 DeepSeek 视觉首选模型。"""
+        calls = self._capture_calls(ai_service.ocr_image, "AAAA")
+        _, kw = calls[0]
+        self.assertEqual(kw.get("model"), ai_service.settings.AI_VISION_DS_MODEL)
 
 
 class TestVisionTimeoutBudget(unittest.TestCase):
