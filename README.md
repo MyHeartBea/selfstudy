@@ -136,7 +136,9 @@ AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 
 启动后访问 `http://127.0.0.1:8000/docs`（Swagger）；接口约定见 [docs/api.md](docs/api.md)。
 
-## DSH / agent 集成
+## AI Agent 协作 / 交接（ZCode / Codex / Claude）
 
+- 仓库根 **`AGENTS.md`** 是给编码 Agent 的完整项目约定，**先读它**（ZCode 等会自动加载）。
+- `docs/NEW_SESSION.md` 是「可粘贴给新会话 / 新 Agent 的交接提示词块」（含完整 AI 约定与 openviking 配置）。
 - 视觉识别脚本：`python D:\km-v2\scripts\vision_request.py --image <路径> --json`
-  （DSH `vision` 技能已指向此路径；密钥读 `D:\km-v2\backend\.env`，脚本永不打印密钥）
+  （密钥读 `D:\km-v2\backend\.env`，脚本永不打印密钥）。

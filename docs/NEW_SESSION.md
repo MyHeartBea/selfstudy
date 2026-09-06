@@ -1,9 +1,9 @@
-# 【km-v2 考研错题本】新会话交接提示词
+# 【km-v2 考研错题本】新会话 / 新 Agent 交接提示词
 
-> 打开新会话时，把本块粘贴给 agent，即可无缝接管本项目。项目在 **`D:\km-v2`**（生产端口 8000），是唯一在用系统。
+> 打开新会话（或把本仓库交给 ZCode / Codex / Claude 等编码 Agent）时，把本块连同仓库一起交给对方即可无缝接管。项目在 **`D:\km-v2`**（生产端口 8000），是唯一在用系统。**先读 `README.md` 与仓库根 `AGENTS.md`**（内含完整约定）。
 
 ## 项目定位
-单用户考研错题本：错题录入（文本/多图截图）、错题库、复习（1/3/7/15/30）、生词本、知识点库、公式、科目指南、统计。后端 FastAPI+SQLite（无 ORM），前端 Vue3+自建设计系统「墨纸印」（无 UI 框架库），Vite 构建。**先读 `README.md`，提交前 `git add -A && git commit && git push`，临时文件放 `D:\temp`，密钥不打印。**
+单用户考研错题本：错题录入（文本/多图截图）、错题库、复习（1/3/7/15/30）、生词本、知识点库、公式、科目指南、统计。后端 FastAPI+SQLite（无 ORM），前端 Vue3+自建设计系统「墨纸印」（无 UI 框架库），Vite 构建。**先读 `README.md` 与 `AGENTS.md`，提交前 `git add -A && git commit && git push`，临时文件放 `D:\temp`，密钥不打印。**
 
 ## 关键约定（务必遵守）
 1. **DeepSeek 视觉首选**：`AI_BASE_URL=https://api.deepseek.com/v1`，`AI_MODEL=deepseek-chat`（文本），视觉模型 `deepseek-v4-flash-vision-exp`（走同一把 DeepSeek Key，无额外密钥）。
@@ -27,9 +27,10 @@
 - **embedding**（检索/向量）：智谱 `provider=openai`、`api_base=https://open.bigmodel.cn/api/paas/v4`、`model=embedding-3`、`dimension=2048`、`api_key`=app `.env` 的 `AI_VISION_API_KEY`（读入配置、不打印）。
 - **VLM**（生成式，用于**记忆抽取 + 查询扩展**）：`provider=openai`、`model=deepseek-v4-flash-vision-exp`、`api_base=https://api.deepseek.com/v1`、`api_key`=app `.env` 的 `AI_API_KEY`（DeepSeek 同一把）。⚠️ 此块缺失会报 `api_key client option must be set` 导致记忆抽取失败。
 - **自启**：启动文件夹唯一条目 `OpenViking自启.vbs`（幂等，先查 1933）→ `D:\dsh-home\scripts\start_openviking.py`；**该脚本 `CONF` 必须指向上面规范配置**（曾误指 `D:\dsh-home\openviking\ov.conf`，已改回）。旧的 `start-server.cmd`、启动文件夹里 `openviking-server.cmd`、以及 `D:\dsh-home\openviking\ov.conf`（指向 D 盘另一工作区）**已弃用，勿再使用**。
-- `pending/` 会话文件**会话启动时**由插件 `replayPending` 回填（每次≤50）；`ov find` 可语义检索。**MCP 工具 `mcp__openviking__*` 需 DSH 面把 openviking MCP 连到 agent 会话才可见。**
+- `pending/` 会话文件**会话启动时**由插件 `replayPending` 回填（每次≤50）；`ov find` 可语义检索。**MCP 工具 `mcp__openviking__*` 需宿主（DSH 等）把 openviking MCP 连到 agent 会话才可见。**
 - 备份：`~\.openviking\ov.conf.bak`（原始）、`.bak-ds`（DeepSeek 改前）。`ov` CLI 已配置 `local`。
 
-## 现状
-- 已 `git commit`：`d20d838`（大功能）、`d4fc2ab`（列表首图）、`93b261b`（hex 等宽）。
+## 现状（2026-09-06）
+- git HEAD = `aad766f`（修正 openviking 配置分裂说明）。历史：`d20d838`（大功能）、`d4fc2ab`（列表首图）、`93b261b`（hex 等宽）、`f60464c`（文档）。
 - 后端 8000 运行中；前端 `frontend/dist` 已构建。
+- openviking 已修复并验证正常：VLM = DeepSeek `deepseek-v4-flash-vision-exp`；规范配置 C 盘 `~\.openviking\ov.conf`；自启 vbs→`start_openviking.py`（其 CONF 指向规范配置）；`pending/` 已清理。
