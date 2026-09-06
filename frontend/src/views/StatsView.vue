@@ -456,6 +456,7 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 .span2 { grid-column: span 2; }
+.span3 { grid-column: span 3; }
 
 /* 英雄卡 */
 .b-hero { grid-row: 1 / 3; display: flex; flex-direction: column; transition: transform 0.3s var(--ease); }
@@ -602,7 +603,16 @@ onMounted(() => {
 .cap { font-size: 12.5px; color: var(--ink-3); }
 
 /* ---------- 薄弱点列表 ---------- */
-.weak-list { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.weak-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  /* 与热力图卡同排时限制高度，避免热力图卡被撑出大片空白 */
+  max-height: 460px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
 .weak-item {
   display: flex;
   align-items: center;
@@ -787,10 +797,12 @@ onMounted(() => {
 
 @media (max-width: 1100px) {
   .bento { grid-template-columns: repeat(2, 1fr); }
+  /* 两列网格下通栏卡只跨两列，避免撑出隐式第三列 */
+  .span3 { grid-column: span 2; }
 }
 @media (max-width: 860px) {
   .bento { grid-template-columns: 1fr; }
-  .span2 { grid-column: span 1; }
+  .span2, .span3 { grid-column: span 1; }
   .bento-top { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
   .b-hero { grid-row: auto; }
   .b-hero .hero-body { flex-direction: column; align-items: flex-start; }

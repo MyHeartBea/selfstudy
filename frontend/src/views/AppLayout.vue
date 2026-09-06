@@ -109,14 +109,10 @@ function toggleTheme(event) {
   const R = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y)) + 60
   const dur = 620
   const t0 = performance.now()
-  const grow = (t) => {
-    const p = Math.min(1, (t - t0) / dur)
-    const eased = 1 - Math.pow(1 - p, 3)
-    veil.style.clipPath = `circle(${R * eased}px at ${x}px ${y}px)`
-    if (p < 1) {
-      requestAnimationFrame(grow)
-      return
-    }
+  let finished = false
+  const finish = () => {
+    if (finished) return
+    finished = true
     applyTheme(next) // 墨已盖满：此刻才真正换肤
     veil.style.transition = 'opacity .18s ease'
     veil.style.opacity = '0'
@@ -124,9 +120,22 @@ function toggleTheme(event) {
       veil.style.display = 'none'
       veil.style.transition = ''
       themeBusy = false
-    }, 190)
+    }, 200)
+  }
+  const grow = (t) => {
+    if (finished) return
+    const p = Math.min(1, (t - t0) / dur)
+    const eased = 1 - Math.pow(1 - p, 3)
+    veil.style.clipPath = `circle(${R * eased}px at ${x}px ${y}px)`
+    if (p < 1) {
+      requestAnimationFrame(grow)
+      return
+    }
+    finish()
   }
   requestAnimationFrame(grow)
+  // rAF 冻结兜底：后台标签/最小化时动画停摆，遮罩会冻在半途遮住内容
+  setTimeout(finish, 1000)
 }
 
 watch(
