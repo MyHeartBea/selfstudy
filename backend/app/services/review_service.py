@@ -103,6 +103,7 @@ def get_practice_mistakes(
     search: Optional[str] = None,
     source_type: Optional[str] = None,
     source_year: Optional[str] = None,
+    mistake_id: Optional[int] = None,
 ) -> List[dict]:
     """按记忆曲线、错误时间或随机方式抽取错题进行自主练习。"""
     if mode in ("real_exam", "mock"):
@@ -111,6 +112,10 @@ def get_practice_mistakes(
         source_type = source_type or "real_exam"
     conditions = ["COALESCE(m.review_paused, 0) = 0"]
     params = []
+    if mistake_id is not None:
+        # 单题直练（详情页「练这道题」入口）
+        conditions.append("m.id = ?")
+        params.append(mistake_id)
     if subject_id is not None:
         conditions.append("m.subject_id = ?")
         params.append(subject_id)

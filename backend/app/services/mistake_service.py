@@ -134,12 +134,16 @@ def process_images(images: Optional[List[Any]]) -> List[str]:
 
 
 def remove_image_files(paths: Optional[List[str]]) -> None:
-    """删除不再引用的图片文件（吞掉 IO 错误，避免影响主流程）。"""
+    """删除不再引用的图片文件及其缩略图（吞掉 IO 错误，避免影响主流程）。"""
     for path in paths or []:
         try:
             rel = str(path)
             if rel.startswith("images/") and ".." not in rel.replace("\\", "/").split("/"):
-                (_images_dir() / Path(rel).name).unlink(missing_ok=True)
+                name = Path(rel).name
+                (_images_dir() / name).unlink(missing_ok=True)
+                # 同步清理懒生成的缩略图（/images/thumb/{name} 的缓存文件）
+                thumb = _images_dir() / "_thumbs" / (Path(name).stem + ".webp")
+                thumb.unlink(missing_ok=True)
         except OSError:
             pass
 

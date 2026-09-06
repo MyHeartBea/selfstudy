@@ -1,12 +1,13 @@
 """复习相关接口。"""
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Query
 
 from app.database import get_connection
 from app.responses import error, ok, server_error
-from app.schemas import ReviewCreate
+from app.schemas import MockCreate, ReviewCreate
 from app.services import review_service
 
 router = APIRouter(prefix="/api", tags=["复习"])
@@ -81,6 +82,50 @@ def get_review_forecast(days: int = Query(30, ge=7, le=90)):
         conn.close()
 
 
+@router.get("/mocks")
+def list_mocks(limit: int = Query(20, ge=1, le=100)):
+    """模考成绩存档列表（按时间倒序），供统计页绘制分数趋势。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM mock_records ORDER BY created_at DESC, id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return ok([dict(row) for row in rows])
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.post("/mocks")
+def create_mock(body: MockCreate):
+    """存档一次模考成绩。"""
+    conn = get_connection()
+    try:
+        now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        cur = conn.execute(
+            "INSERT INTO mock_records "
+            "(exam_year, total, correct, score, duration_min, used_seconds, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                body.exam_year,
+                body.total,
+                body.correct,
+                body.score,
+                body.duration_min,
+                body.used_seconds,
+                now_text,
+            ),
+        )
+        conn.commit()
+        return ok({"id": cur.lastrowid})
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
 @router.get("/reviews/practice")
 def get_practice_reviews(
     mode: str = Query("curve", pattern="^(curve|wrong_time|random|real_exam|mock)$"),
@@ -93,6 +138,7 @@ def get_practice_reviews(
     search: Optional[str] = Query(None),
     source_type: Optional[str] = Query(None),
     source_year: Optional[str] = Query(None),
+    mistake_id: Optional[int] = Query(None),
 ):
     """返回自主练习队列：记忆曲线、按错误时间或随机抽题。"""
     conn = get_connection()
@@ -109,6 +155,7 @@ def get_practice_reviews(
             search=search,
             source_type=source_type,
             source_year=source_year,
+            mistake_id=mistake_id,
         )
         return ok(data)
     except Exception as exc:

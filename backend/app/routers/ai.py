@@ -301,10 +301,25 @@ def english_analysis(body: AiEnglishRequest):
 
 
 @router.post("/weekly-report", dependencies=[Depends(ai_rate_limit)])
-def weekly_report():
-    """近 7 天错题的错因聚类周报（AI 生成）。"""
+def weekly_report(force: int = Query(0, ge=0, le=1)):
+    """近 7 天错题的错因聚类周报（AI 生成，按天缓存；force=1 强制重新生成）。"""
+    from datetime import datetime
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    cache_key = f"weekly_report_{today}"
     conn = get_connection()
     try:
+        if not force:
+            row = conn.execute(
+                "SELECT value FROM app_meta WHERE key = ?", (cache_key,)
+            ).fetchone()
+            if row and row["value"]:
+                try:
+                    cached = json.loads(row["value"])
+                    cached["cached"] = True
+                    return ok(cached)
+                except (TypeError, ValueError):
+                    pass
         rows = conn.execute(
             """
             SELECT m.id, m.question, m.knowledge_tags, r.note, r.user_answer,
@@ -341,6 +356,23 @@ def weekly_report():
     except Exception as exc:
         return error(502, f"AI 服务调用失败：{exc}")
     report["week_count"] = len(items)
+    report["cached"] = False
+    # 按天缓存进 app_meta，并清理历史日期的缓存
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+            (cache_key, json.dumps(report, ensure_ascii=False)),
+        )
+        for r in conn.execute(
+            "SELECT key FROM app_meta WHERE key LIKE 'weekly_report_%' AND key != ?",
+            (cache_key,),
+        ).fetchall():
+            if r["key"] < cache_key:
+                conn.execute("DELETE FROM app_meta WHERE key = ?", (r["key"],))
+        conn.commit()
+    finally:
+        conn.close()
     return ok(report)
 
 

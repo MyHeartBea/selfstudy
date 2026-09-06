@@ -85,6 +85,16 @@ function openEdit() {
   emit('edit', detail.value)
 }
 
+/** 单题直练：只练这一道（走记忆曲线队列的 id 过滤）。 */
+function practiceThis() {
+  if (!detail.value) return
+  router.push({
+    path: '/review',
+    query: { mode: 'curve', count: 1, mistake_id: detail.value.id },
+  })
+  visible.value = false
+}
+
 async function markReview(result) {
   if (!detail.value) return
   reviewing.value = true
@@ -207,6 +217,10 @@ async function deleteCurrent() {
           </UiTag>
         </div>
         <div class="review-actions">
+          <UiButton size="sm" variant="outline" @click="practiceThis">
+            <Icon name="play" :size="13" />
+            练这道题
+          </UiButton>
           <UiButton size="sm" variant="success" :loading="reviewing" @click="markReview(true)">标记掌握</UiButton>
           <UiButton size="sm" variant="subtle" :loading="reviewing" @click="markReview(false)">标记生疏</UiButton>
           <UiButton v-if="detail.review_paused" size="sm" variant="subtle" :loading="pausing" @click="resumeReview">恢复复习</UiButton>

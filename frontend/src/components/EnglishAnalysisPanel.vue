@@ -414,16 +414,49 @@ async function saveAll() {
 </template>
 
 <style scoped>
-.english-panel { display: flex; flex-direction: column; gap: 18px; }
+/* 卷宗语言：阅读宽度 + 朱砂边线 + 编辑部小节标题（与普通错题详情一致） */
+.english-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding-left: 28px;
+}
+.english-panel::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--teal) 55%, transparent),
+    color-mix(in srgb, var(--teal) 10%, transparent) 60%,
+    transparent
+  );
+}
 .ep-section { display: flex; flex-direction: column; gap: 10px; }
-.ep-section-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--ink); }
-.ep-section-head .ep-hint { font-size: 12px; color: var(--ink-3); font-weight: 400; }
-.ep-section-head svg { color: var(--accent); }
+.ep-section-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+.ep-section-head .ep-hint { font-size: 12px; color: var(--ink-3); font-weight: 400; letter-spacing: normal; }
+.ep-section-head svg { color: var(--teal); }
 
 .ep-bilingual { display: flex; flex-direction: column; gap: 14px; }
 .ep-bi-block { display: flex; flex-direction: column; gap: 8px; }
 .ep-bi { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; align-items: start; }
-.ep-bi-en { margin: 0; font-size: 14.5px; line-height: 1.8; color: var(--ink); }
+.ep-bi-en { margin: 0; font-size: 14.5px; line-height: 1.85; color: var(--ink); font-family: var(--font-display); }
 .ep-bi-cn { margin: 0; font-size: 12.5px; line-height: 1.8; color: var(--ink-2); padding-left: 8px; border-left: 2px solid var(--line-strong); }
 .ep-word { border: none; background: transparent; color: inherit; font: inherit; padding: 0 1px; cursor: pointer; border-bottom: 1px dashed var(--ink-3); border-radius: 3px; }
 .ep-word:hover { background: var(--accent-soft); color: var(--accent-ink); }
@@ -470,13 +503,13 @@ async function saveAll() {
 .ep-toggle-btn.active { background: var(--red); border-color: var(--red); color: #fff; }
 .ep-toggle-btn.ok.active { background: var(--green); border-color: var(--green); color: #fff; }
 .ep-toggle-btn:hover { border-color: var(--accent); }
-.ep-question-text { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.ep-question-text { margin: 0 0 8px; font-size: 15.5px; font-weight: 600; font-family: var(--font-display); line-height: 1.85; }
 .ep-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .ep-option { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .ep-option-letter { font-weight: 700; color: var(--accent-ink); }
 .ep-correct { color: var(--green); font-weight: 700; }
 .ep-answer { font-size: 13px; font-weight: 700; margin: 4px 0 8px; }
-.ep-analysis { font-size: 13px; color: var(--ink-2); line-height: 1.8; white-space: pre-wrap; }
+.ep-analysis { font-size: 13.5px; color: var(--ink); line-height: 1.9; white-space: pre-wrap; }
 
 .ep-lookup-loading { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 13px; }
 .ep-lookup-phonetic { margin: 0 0 8px; font-size: 14px; color: var(--ink-2); }

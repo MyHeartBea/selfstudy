@@ -19,10 +19,17 @@ export const NAV_COMMANDS = [
   { icon: 'plus-circle', label: '智能录入', hint: '新错题', path: '/capture' },
   { icon: 'refresh', label: '今日复习', hint: '复习', path: '/review' },
   { icon: 'pencil', label: '自主练习', hint: '练习', path: '/practice' },
+  { icon: 'calendar', label: '真题模考', hint: '组卷', path: '/practice' },
   { icon: 'book', label: '生词本', hint: '英语', path: '/vocab' },
   { icon: 'layers', label: '知识点库', hint: '资料', path: '/knowledge' },
   { icon: 'sigma', label: '公式背诵', hint: '资料', path: '/formulas' },
   { icon: 'compass', label: '科目指南', hint: '资料', path: '/subjects' },
+]
+
+// 快捷动作：不走路由，派发全局事件（AppLayout 监听）
+export const QUICK_ACTIONS = [
+  { icon: 'sun', label: '切换深浅主题', hint: '墨漫纸面', event: 'km:toggle-theme' },
+  { icon: 'notebook', label: '快捷键速查', hint: '?', event: 'km:show-shortcuts' },
 ]
 
 export const SCOPES = [

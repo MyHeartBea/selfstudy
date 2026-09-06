@@ -78,7 +78,7 @@ def init_database() -> None:
 
 
 # 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描
-MIGRATION_VERSION = 6
+MIGRATION_VERSION = 7
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
@@ -168,6 +168,22 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     conn.execute(
         "UPDATE vocab_items SET kind = 'phrase' "
         "WHERE kind = 'word' AND TRIM(word) LIKE '% %'"
+    )
+
+    # 模考成绩存档表（v7）
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS mock_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            exam_year TEXT DEFAULT '',
+            total INTEGER DEFAULT 0,
+            correct INTEGER DEFAULT 0,
+            score INTEGER DEFAULT 0,
+            duration_min INTEGER DEFAULT 60,
+            used_seconds INTEGER DEFAULT 0,
+            created_at DATETIME
+        )
+        """
     )
 
     _ensure_math_categories(conn)

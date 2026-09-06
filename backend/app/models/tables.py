@@ -130,6 +130,18 @@ CREATE TABLE IF NOT EXISTS app_meta (
     value TEXT
 );
 
+-- 真题模考成绩存档（v7）：供统计页绘制模考分数趋势
+CREATE TABLE IF NOT EXISTS mock_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    exam_year TEXT DEFAULT '',
+    total INTEGER DEFAULT 0,
+    correct INTEGER DEFAULT 0,
+    score INTEGER DEFAULT 0,
+    duration_min INTEGER DEFAULT 60,
+    used_seconds INTEGER DEFAULT 0,
+    created_at DATETIME
+);
+
 -- 错题-知识点标签关联表：让"按标签检索"走索引，替代 instr(',tags,', ?) 全表扫描。
 -- knowledge_tags 逗号串仍保留（展示用），此表只负责高效检索，由 service 层同步维护。
 CREATE TABLE IF NOT EXISTS mistake_tag_map (

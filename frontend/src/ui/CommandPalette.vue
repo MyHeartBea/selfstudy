@@ -13,6 +13,7 @@ import {
   setScope,
   moveActive,
   NAV_COMMANDS,
+  QUICK_ACTIONS,
   SCOPES,
 } from './commandPalette'
 import { questionTypeName, subjectName, truncate } from '../composables/useBaseData'
@@ -47,6 +48,11 @@ watch(
 function choose(item) {
   closePalette()
   if (item && item.target) router.push(item.target)
+}
+
+function runQuick(item) {
+  closePalette()
+  if (item && item.event) window.dispatchEvent(new CustomEvent(item.event))
 }
 
 function onKeydown(event) {
@@ -118,12 +124,24 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <div class="palette-group">快速跳转</div>
               <button
                 v-for="(item, i) in NAV_COMMANDS"
-                :key="item.path"
+                :key="item.path + item.label"
                 type="button"
                 class="palette-item"
                 :class="{ active: i === paletteState.activeIndex }"
                 @click="choose(item)"
                 @mousemove="paletteState.activeIndex = i"
+              >
+                <Icon :name="item.icon" :size="16" class="palette-item-icon" />
+                <span class="palette-item-label">{{ item.label }}</span>
+                <UiTag size="sm">{{ item.hint }}</UiTag>
+              </button>
+              <div class="palette-group">快捷操作</div>
+              <button
+                v-for="item in QUICK_ACTIONS"
+                :key="item.label"
+                type="button"
+                class="palette-item"
+                @click="runQuick(item)"
               >
                 <Icon :name="item.icon" :size="16" class="palette-item-icon" />
                 <span class="palette-item-label">{{ item.label }}</span>

@@ -6,7 +6,7 @@
  * - 筛选条件同步到 URL（刷新/分享不丢）
  * - 批量操作 / 导入导出 / 详情弹窗
  */
-import { onMounted, onUnmounted, ref, toRef, watch } from 'vue'
+import { onMounted, onUnmounted, ref, toRef, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 import request from '../api/request'
@@ -179,6 +179,10 @@ function debouncedSearch() {
 // —— Anki 卡组导出（TSV：正面/背面/标签） ——
 const exportingAnki = ref(false)
 
+function printPage() {
+  window.print()
+}
+
 async function exportAnki() {
   exportingAnki.value = true
   try {
@@ -202,7 +206,40 @@ onMounted(loadMistakes)
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
   if (syncTimer) clearTimeout(syncTimer)
+  if ('highlights' in CSS) CSS.highlights.delete(HIGHLIGHT_KEY)
 })
+
+// —— 搜索关键词高亮：CSS Custom Highlight API（不改动 RichText 的 DOM，KaTeX 安全） ——
+const HIGHLIGHT_KEY = 'km-search-hit'
+
+watch(
+  [items, () => filters.search, page],
+  async () => {
+    await nextTick()
+    if (!('highlights' in CSS)) return
+    CSS.highlights.delete(HIGHLIGHT_KEY)
+    const term = String(filters.search || '').trim()
+    if (!term) return
+    const ranges = []
+    document.querySelectorAll('.card-grid .question-text').forEach((el) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      const nodes = []
+      while (walker.nextNode()) nodes.push(walker.currentNode)
+      for (const node of nodes) {
+        let idx = node.textContent.indexOf(term)
+        while (idx !== -1) {
+          const range = document.createRange()
+          range.setStart(node, idx)
+          range.setEnd(node, idx + term.length)
+          ranges.push(range)
+          idx = node.textContent.indexOf(term, idx + term.length)
+        }
+      }
+    })
+    if (ranges.length) CSS.highlights.set(HIGHLIGHT_KEY, new Highlight(...ranges))
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -232,6 +269,10 @@ onUnmounted(() => {
         <UiButton variant="outline" @click="exportJson">
           <Icon name="download" :size="15" />
           导出
+        </UiButton>
+        <UiButton variant="outline" @click="printPage">
+          <Icon name="notebook" :size="15" />
+          打印
         </UiButton>
         <UiButton variant="outline" :loading="exportingAnki" @click="exportAnki">
           <Icon name="layers" :size="15" />
@@ -483,6 +524,9 @@ onUnmounted(() => {
   gap: 12px;
   margin-bottom: 16px;
   padding: 16px 18px;
+  position: relative;
+  /* backdrop-filter 会创建层叠上下文：不给 z-index 的话，下拉菜单会被后渲染的卡片盖住 */
+  z-index: 5;
   border: 1px solid transparent;
   border-radius: var(--r-lg);
   background:

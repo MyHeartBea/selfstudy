@@ -5,6 +5,7 @@ import { computed } from 'vue'
 import MathText from './MathText.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiTag from '../ui/UiTag.vue'
+import { scoreLetters } from '../utils/examScoring'
 
 const props = defineProps({
   current: { type: Object, required: true },
@@ -30,11 +31,7 @@ const selectedSet = computed(() => new Set((props.selected || '').split('').filt
 
 const isCorrect = computed(() => {
   if (!props.answered || !props.current) return false
-  if (isMulti.value) {
-    const expected = (props.current.correct_answer || '').split('').filter(Boolean).sort().join('')
-    return (props.selected || '').split('').filter(Boolean).sort().join('') === expected
-  }
-  return props.selected === props.current?.correct_answer
+  return scoreLetters(props.selected, props.current.correct_answer)
 })
 
 function choose(key) {

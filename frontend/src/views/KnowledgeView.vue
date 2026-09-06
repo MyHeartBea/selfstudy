@@ -272,6 +272,9 @@ onMounted(() => {
   flex-wrap: wrap;
   margin-bottom: 14px;
   padding: 14px 18px;
+  position: relative;
+  /* backdrop-filter 会创建层叠上下文：不给 z-index 的话，下拉菜单会被后渲染的卡片盖住 */
+  z-index: 5;
   border: 1px solid transparent;
   border-radius: var(--r-lg);
   background:

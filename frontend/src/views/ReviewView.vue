@@ -13,6 +13,7 @@ import QuestionImages from '../components/QuestionImages.vue'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
 import { confetti } from '../utils/confetti'
+import { scoreLetters } from '../utils/examScoring'
 import UiButton from '../ui/UiButton.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import Icon from '../ui/Icon.vue'
@@ -173,10 +174,9 @@ async function submitMock(auto = false) {
           result = false
         }
       } else if (q.question_type === 'multi') {
-        const expected = (q.correct_answer || '').split('').filter(Boolean).sort().join('')
-        result = ans.split('').filter(Boolean).sort().join('') === expected
+        result = scoreLetters(ans, q.correct_answer)
       } else {
-        result = !!ans && ans === (q.correct_answer || '')
+        result = scoreLetters(ans, q.correct_answer)
       }
       if (result) correct += 1
       // 每题结果计入复习记录（SM-2 调度），模考即复习
@@ -201,6 +201,17 @@ async function submitMock(auto = false) {
     }
     done.value = true
     window.dispatchEvent(new CustomEvent('km:review-saved'))
+    // 成绩存档（统计页绘制模考趋势；失败静默——复习记录已提交不受影响）
+    request
+      .post('/mocks', {
+        exam_year: String(route.query.source_year || ''),
+        total: mockReport.value.total,
+        correct: mockReport.value.correct,
+        score: mockReport.value.score,
+        duration_min: mockDuration.value,
+        used_seconds: mockReport.value.usedSec,
+      })
+      .catch(() => {})
     setTimeout(() => confetti.celebrate({ count: 40 }), 250)
   } catch (err) {
     toast.error('交卷失败，请重试')
@@ -226,6 +237,7 @@ async function loadQueue() {
       if (route.query.search) params.search = route.query.search
       if (route.query.source_type) params.source_type = route.query.source_type
       if (route.query.source_year) params.source_year = route.query.source_year
+      if (route.query.mistake_id) params.mistake_id = route.query.mistake_id
       res = await request.get('/reviews/practice', { params })
     } else {
       res = await request.get('/reviews/today')

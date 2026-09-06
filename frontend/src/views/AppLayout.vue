@@ -13,6 +13,7 @@ import Icon from '../ui/Icon.vue'
 import AmbientLayer from '../ui/AmbientLayer.vue'
 import DockNav from '../ui/DockNav.vue'
 import CommandPalette from '../ui/CommandPalette.vue'
+import UiModal from '../ui/UiModal.vue'
 import { openPalette } from '../ui/commandPalette'
 
 const route = useRoute()
@@ -55,6 +56,30 @@ async function loadRing() {
 }
 
 const backendOk = ref(null)
+const shortcutsOpen = ref(false)
+
+const SHORTCUT_ROWS = [
+  ['全局搜索 · 命令面板', 'Ctrl + K'],
+  ['快捷键速查', '?'],
+  ['复习：选项作答', '1-4 / A-D'],
+  ['复习：确认 / 下一题', 'Enter'],
+  ['复习：记住了 / 没记住', 'Q / W'],
+  ['复习：显示参考答案', '空格'],
+  ['复习：填空/解答提交', 'Ctrl + Enter'],
+  ['模考：末题交卷', 'Enter'],
+]
+
+function onGlobalKeydown(event) {
+  if (event.key !== '?') return
+  const tag = event.target?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  event.preventDefault()
+  shortcutsOpen.value = true
+}
+
+function onToggleThemeEvent() {
+  toggleTheme(null)
+}
 
 async function loadHealth() {
   try {
@@ -156,6 +181,9 @@ onMounted(() => {
   loadHealth()
   healthTimer = setInterval(loadHealth, 30000)
   window.addEventListener('km:review-saved', loadRing)
+  window.addEventListener('km:toggle-theme', onToggleThemeEvent)
+  window.addEventListener('km:show-shortcuts', () => (shortcutsOpen.value = true))
+  window.addEventListener('keydown', onGlobalKeydown)
   // 窄屏：Dock 收起，改为紧凑顶栏 + 抽屉
   mq = window.matchMedia('(max-width: 1100px)')
   isNarrow.value = mq.matches
@@ -185,6 +213,8 @@ onMounted(() => {
 onUnmounted(() => {
   clearInterval(healthTimer)
   window.removeEventListener('km:review-saved', loadRing)
+  window.removeEventListener('km:toggle-theme', onToggleThemeEvent)
+  window.removeEventListener('keydown', onGlobalKeydown)
   mq?.removeEventListener?.('change', mediaHandler)
   if (systemThemeHandler) {
     window.matchMedia('(prefers-color-scheme: dark)').removeEventListener?.('change', systemThemeHandler)
@@ -256,6 +286,19 @@ onUnmounted(() => {
     </main>
 
     <CommandPalette />
+
+    <!-- 快捷键速查（? 呼出） -->
+    <UiModal v-model="shortcutsOpen" title="快捷键速查" size="sm">
+      <div class="shortcut-list">
+        <div v-for="[label, keys] in SHORTCUT_ROWS" :key="label" class="sc-row">
+          <span class="sc-label">{{ label }}</span>
+          <span class="sc-keys"><kbd>{{ keys }}</kbd></span>
+        </div>
+      </div>
+      <template #footer>
+        <span class="count-tip">在输入框打字时快捷键不生效</span>
+      </template>
+    </UiModal>
   </div>
 </template>
 
@@ -389,5 +432,32 @@ onUnmounted(() => {
 
 @media (max-width: 1100px) {
   .deck { padding: 24px 16px 40px; }
+}
+
+/* 快捷键速查 */
+.shortcut-list { display: flex; flex-direction: column; }
+.sc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 2px;
+  border-bottom: 1px dashed var(--line);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.sc-row:last-child { border-bottom: none; }
+.sc-label { min-width: 0; }
+.sc-keys kbd {
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 3px 9px;
+  white-space: nowrap;
 }
 </style>

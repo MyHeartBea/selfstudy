@@ -158,20 +158,58 @@ async function loadForecast() {
   }
 }
 
-// —— AI 错因周报 ——
+// —— AI 错因周报（按天缓存，重新生成强制刷新） ——
 const report = ref(null)
 const reportLoading = ref(false)
 
-async function loadWeeklyReport() {
+async function loadWeeklyReport(force = false) {
   if (reportLoading.value) return
   reportLoading.value = true
   try {
-    const res = await request.post('/ai/weekly-report', {})
+    const res = await request.post(`/ai/weekly-report${force ? '?force=1' : ''}`, {})
     report.value = res.data.data
   } catch (err) {
     // 错误提示由请求拦截器统一处理
   } finally {
     reportLoading.value = false
+  }
+}
+
+// —— 模考成绩趋势 ——
+const mocks = ref([])
+const mockTrend = computed(() => {
+  // 时间正序，取最近 12 场画折线
+  const list = [...mocks.value].reverse().slice(-12)
+  return list
+})
+const mockTrendPoints = computed(() => {
+  const list = mockTrend.value
+  if (list.length < 2) return ''
+  return list
+    .map((m, i) => {
+      const p = mockPoint(i)
+      return `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`
+    })
+    .join(' ')
+})
+
+function mockPoint(i) {
+  const W = 560
+  const H = 90
+  const pad = 10
+  const list = mockTrend.value
+  return {
+    x: pad + (i * (W - 2 * pad)) / Math.max(1, list.length - 1),
+    y: H - pad - ((Number(list[i]?.score) || 0) / 100) * (H - 2 * pad),
+  }
+}
+
+async function loadMocks() {
+  try {
+    const res = await request.get('/mocks', { params: { limit: 12 }, silent: true })
+    mocks.value = res.data.data || []
+  } catch (err) {
+    // 静默失败
   }
 }
 
@@ -233,6 +271,7 @@ function practiceTag(tag) {
 onMounted(() => {
   loadStats()
   loadForecast()
+  loadMocks()
 })
 </script>
 
@@ -380,10 +419,13 @@ onMounted(() => {
             <h3 class="panel-title">AI 错因周报</h3>
             <p class="cap">近 7 天答错题目按错因聚类，给出针对性训练建议</p>
           </div>
-          <UiButton variant="primary" size="sm" :loading="reportLoading" @click="loadWeeklyReport">
-            <Icon name="sparkles" :size="14" />
-            {{ report ? '重新生成' : '生成本周报告' }}
-          </UiButton>
+          <div class="rp-actions">
+            <span v-if="report && !report.empty && report.cached" class="rp-cached">今日已生成 · 缓存</span>
+            <UiButton variant="primary" size="sm" :loading="reportLoading" @click="loadWeeklyReport(!report || report.cached)">
+              <Icon name="sparkles" :size="14" />
+              {{ report ? '重新生成' : '生成本周报告' }}
+            </UiButton>
+          </div>
         </div>
         <p v-if="reportLoading" class="rp-hint">AI 正在聚类分析近 7 天的错题…（约 10-30 秒）</p>
         <p v-else-if="report?.empty" class="rp-hint">{{ report.message }}</p>
@@ -413,6 +455,42 @@ onMounted(() => {
             </div>
           </div>
         </template>
+      </GlassCard>
+
+      <!-- 模考成绩趋势 -->
+      <GlassCard class="span3 mock-strip" :pad="false" :hover="false">
+        <div class="fc-head">
+          <h3 class="panel-title">模考成绩趋势</h3>
+          <span class="cap">最近 {{ mockTrend.length }} 场 · 交卷自动存档</span>
+        </div>
+        <div v-if="mockTrend.length >= 2" class="mk-chart">
+          <svg viewBox="0 0 560 90" width="100%" style="display: block" role="img" aria-label="模考分数趋势">
+            <path
+              :d="mockTrendPoints"
+              fill="none"
+              stroke="var(--accent)"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+            <circle
+              v-for="(m, i) in mockTrend"
+              :key="i"
+              :cx="mockPoint(i).x"
+              :cy="mockPoint(i).y"
+              r="3.5"
+              fill="var(--surface)"
+              stroke="var(--accent)"
+              stroke-width="2.2"
+            />
+          </svg>
+        </div>
+        <div v-if="mockTrend.length" class="mk-meta">
+          <span v-for="(m, i) in mockTrend" :key="i" class="mk-chip num">
+            {{ m.exam_year || '—' }} · {{ m.score }} 分 · {{ m.correct }}/{{ m.total }}
+          </span>
+        </div>
+        <p v-else class="cap mk-empty">还没有模考存档——去「自主练习 → 真题模考」打一场，成绩会自动记到这里。</p>
       </GlassCard>
     </div>
 
@@ -811,6 +889,31 @@ onMounted(() => {
 .rp-count { font-size: 12px; color: var(--accent-ink); font-weight: 700; }
 .rp-advice { margin: 4px 0 6px; font-size: 12.8px; line-height: 1.8; color: var(--ink-2); }
 .rp-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.rp-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rp-cached {
+  font-size: 12px;
+  color: var(--teal);
+  background: var(--teal-soft);
+  padding: 3px 11px;
+  border-radius: 999px;
+}
+
+/* 模考趋势条 */
+.mk-chart { padding: 12px 22px 2px; }
+.mk-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 22px 16px;
+}
+.mk-chip {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  padding: 3px 11px;
+  border-radius: 999px;
+}
+.mk-empty { padding: 0 22px 16px; margin: 0; }
 
 /* ---------- 下部布局 ---------- */
 .grid-2 {

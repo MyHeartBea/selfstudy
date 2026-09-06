@@ -116,22 +116,31 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 - ⚠️ scoped CSS 教训：`:global(A) B` 会被错编译成「把 B 的样式套到 A」（Phase 1 曾把 Dock 的 transform 套到 body 导致整页左移）；组合选择器要写 `:global(A B)`。
 - ⚠️ 路由过渡必须带显式 `:duration`（AppLayout 已配）：后台标签页 transitionend 被浏览器推迟，否则切路由卡死白屏。
 
-**门面页**：`StatsView`=Bento 网格（英雄卡+进度环+速览条+AreaChart+Heatmap+薄弱点直通）；`ReviewView`=沉浸舞台（流光进度线+StageBadge+玻璃题卡+落章完成页）；生词闪卡=真 3D 翻面（preserve-3d 双面卡）；公式背诵=翻卡 reveal 动效。四题型作答/全键盘流/判分反馈链（脉冲/抖动）逻辑层未动。
+**门面页**：`StatsView`=Bento 网格（英雄卡+进度环+速览徽章+AreaChart 趋势+复习负荷预报+AI 错因周报+模考成绩趋势+Heatmap+薄弱点直通+科目分析墨条）；`ReviewView`=沉浸舞台（流光进度线+StageBadge+巨型汉字数字背景+玻璃题卡+落章完成页+模考成绩单分支）；生词闪卡=真 3D 翻面（preserve-3d 双面卡）；公式背诵=翻卡 reveal 动效。四题型作答/全键盘流/判分反馈链（脉冲/抖动）逻辑层未动。
+
+**硬规则补充（v2 后续批次踩过的坑）**：
+- **backdrop-filter 创建层叠上下文**：玻璃筛选栏（`.list-toolbar`/`.filter-bar`）必须带 `position:relative; z-index:5`，否则内部 UiSelect 下拉会被后渲染的卡片盖住（三处已修；新增玻璃容器 Hosting 下拉时同样要加）；
+- **Vue scoped `:global(A) B` 会错编译**（把 B 的样式套到 A 上），组合选择器一律写 `:global(A B)`；
+- **后台标签页 transitionend/rAF 会被推迟**：路由过渡带显式 `:duration`；换肤遮罩有 1s 看门狗强制收尾；
+- **搜索高亮**用 CSS Custom Highlight API（`::highlight(km-search-hit)`，MistakeListView 注册 Range），不改 RichText 的 DOM——KaTeX 安全；
+- **改含中文文件禁止 PowerShell Get-Content|Set-Content**（GBK/UTF-8 双重编码会吃掉标签，Phase 6 翻过车），用 Edit 工具或 `[System.IO.File]::ReadAllText/WriteAllText` 显式 UTF-8 无 BOM。
 
 **字体**：`@fontsource/noto-serif-sc` 本地子集（按 unicode-range 分片按需加载，约 411 片 woff2），`main.js` 引 500/600/700/900 四字重；**已移除 Google Fonts CDN**。更新字体 = `npm update @fontsource/noto-serif-sc`。`/design` 画廊页（不入导航）是全组件双主题打磨场，改基件先在画廊验证。
 
 **PowerShell 教训**：改含中文的文件**禁止** `Get-Content | Set-Content`（GBK/UTF-8 双重编码会把 `</title>` 等吃掉导致整页空白——Phase 6 实际翻过车）；一律用 Edit 工具或 `[System.IO.File]::ReadAllText/WriteAllText` 显式 UTF-8 无 BOM。
 
 ## 7. 功能备忘（改功能时留意）
-- **错题库**：题型按科目感知（数学 / 408：选择·填空·解答；政治：单选·多选·分析；英语：客观题·翻译·作文）；筛选 / 排序 / 分页 / 批量操作 / URL 同步筛选状态 / 导入导出 JSON。
-- **今日复习**：间隔重复 1 / 3 / 7 / 15 / 30 天；选择 / 多选（全对判分，顺序无关）/ 填空（别名 + 数值容差）/ 翻译（对照参考译文自评）/ 解答（AI 按步骤给分 0-100）；全键盘流（1-4 选答、Enter 下一题、Q/W 标记）。
-- **自主练习**：记忆曲线 / 按错误时间 / 随机 / 真题专项，多条件筛选。
-- **生词本**（英语）：闪卡快刷（认识→1/2/4/7/15/30/60 天阶梯，模糊→明天，不认识→留在队列）；批量导入词表；掌握度分布。
-- **知识点库**：标签同义归一、AI 自动总结、贴图分析、服务端分页。
-- **公式背诵**：分类 / 搜索 / 过卡循环背诵模式（没记住排队尾直到全会）。
-- **科目指南**：各科复习重点与方法建议（政治 / 英语已预置默认档案，可编辑）。
-- **统计**：8 指标卡（数字滚动）、复习热力图（119 天）、7 天趋势、掌握度 / 题型 / 来源分布、薄弱知识点直通练习、科目与二级科目统计。
-- **前端体验**：墨纸印设计系统、启动动画、按钮涟漪、复习礼花、命令面板（Ctrl+K 全局搜索）、图片灯箱、深色模式（View Transitions 圆形扩散换肤）。
+- **复习调度 = SM-2 简化版（迁移 v6/v7）**：`mistakes.ease_factor`（2.5 起，答对+0.1 上探封顶 2.8、答错-0.2 下限 1.3）+ `last_interval`（答对=上次间隔×系数四舍五入，首次 1 天，封顶 180；答错重置 1 天）。`INTERVALS` 常量仅迁移回填用。mastery 阶梯保留仅供统计展示。**mock_records 表（v7）**：模考成绩存档（`GET/POST /api/mocks`），统计页画趋势。
+- **错题库**：题型按科目感知（数学 / 408：选择·填空·解答；政治：单选·多选·分析；英语：客观题·翻译·作文）；筛选 / 排序 / 分页 / 批量操作 / URL 同步筛选状态 / 导入导出 JSON / **Anki TSV 导出（`/api/export/anki?type=mistakes|vocab`）** / 打印（`window.print()` + 全局 print 样式）。列表首图走**缩略图**：`/images/thumb/{name}`（懒生成 WebP 到 `data/images/_thumbs/`，失败回退原图；删除错题同步清缩略图）。
+- **今日复习**：间隔重复由 SM-2 驱动；选择 / 多选（全对判分，顺序无关，判分统一走 `utils/examScoring.js` 的 scoreLetters）/ 填空（别名 + 数值容差）/ 翻译（对照参考译文自评）/ 解答（AI 按步骤给分 0-100）；全键盘流（1-4 选答、Enter 下一题、Q/W 标记）；`?` 呼出快捷键速查。**单题直练**：practice 接口支持 `mistake_id` 参数（详情「练这道题」用）。
+- **真题模考（mode=mock）**：练习页选年份+时长 → `mode=mock&duration=分钟&source_type=real_exam&source_year=年`；ReviewView mock 分支：倒计时（归零自动交卷）、作答暂存不判分、自由翻题、交卷统一判分（choice/multi 本地、fill 走 /judge）并逐题写入复习记录 + POST /mocks 存档；卷面客户端过滤为客观题。
+- **AI 错因周报**：`POST /api/ai/weekly-report`（force=1 强制重生成）——近 7 天答错记录聚类为错因，**按天缓存于 app_meta（key=weekly_report_YYYY-MM-DD，自动清旧）**；统计页渲染，标签可点击直通练习。
+- **生词本**（英语）：闪卡快刷（认识→1/2/4/7/15/30/60 天阶梯，模糊→明天，不认识→留在队列）；批量导入词表；掌握度墨点；掌握度分布。
+- **知识点库**：标签同义归一、AI 自动总结、贴图分析、服务端分页；知识笺卡片墙（科目色脊+摘要+关联标签）。
+- **公式背诵**：分类 / 搜索 / 过卡循环背诵模式（没记住排队尾直到全会）；分类彩色印章。
+- **科目指南**：各科复习重点与方法建议（政治 / 英语已预置默认档案，可编辑）；首字印章+顶部色条。
+- **统计**：Bento 网格——英雄卡（今日待复习+进度环+连续复习火苗章+正确率/掌握度徽章）、瓷砖、今日速览条、SVG 趋势、**复习负荷预报（`/api/reviews/forecast`）**、AI 错因周报、**模考成绩趋势**、热力图、薄弱知识点、题型/来源/科目分析（两张旧表已合并为科目分析墨条；**不再展示二级科目统计**）。
+- **前端体验**：墨纸印/墨韵2.0 设计系统、启动动画、按钮涟漪、复习礼花、命令面板（Ctrl+K 全局搜索+快捷动作）、`?` 快捷键速查、图片灯箱、深色模式（墨漫纸面 rAF 圆形扩散换肤，未手动选择时跟随系统）、搜索高亮（Highlight API）、打印样式。
 
 ## 8. openviking 记忆库（已跑通，**勿动坏**）
 详见 `docs/NEW_SESSION.md` 的 openviking 段。要点：
@@ -142,7 +151,8 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 - **已弃用，勿再使用**：`start-server.cmd`、启动文件夹里 `openviking-server.cmd`、`D:\\dsh-home\\openviking\\ov.conf`（指向 D 盘另一工作区）。
 
 ## 9. 当前状态（2026-09-06）
-- **前端「墨韵 2.0」全面重构已完成**（7 个 Phase，commits：`2c1e52b` 地基→`5b47665` 外壳→`7f7331f` 基件库→`a7b16c7` 门面两页→`96619bc` 列表+录入→`d6b08b5` 生词/公式→`1458fdc` 全局审计）。架构与硬规则见第 6.5 节；视觉基准原型在 `D:\temp\km-redesign\ink2-prototype.html`。
-- 后端契约零改动：41 个测试全绿；路由与 API 完全未动；零新增 npm 依赖（图表手写 SVG、字体走 @fontsource 包）。
-- 真实验收已过：完整录入链路（粘贴文本→AI 解析→表单→保存→列表可见）、复习答题流（对/错/多选空态）、键盘流、换肤连点 10 次、窄屏 860px 抽屉、Ctrl+K、生词 3D 闪卡；10 路由深浅双主题巡检通过。
-- 此前状态（AI 链路修复等）见 git log `9e4d887` 及更早；openviking 正常（见第 8 节）。
+- **前端墨韵 2.0 重构 + 功能补全批次全部完成**。UI：7 Phase（`2c1e52b`…`1458fdc`）+ 三轮反馈迭代；功能批：详情卷宗v3+缩略图+预报（`d19bf5a`）、SM-2 调度（`ccedc90`）、错因周报+Anki 导出（`e66a24e`）、真题模考（`e5c3481`）、层叠修复+模考存档+高亮+打印+速查+Vitest（本批）。
+- **后端契约注意**：迁移已到 **v7**（v6=ease_factor/last_interval，v7=mock_records 表）；`/api` 新增 `/mocks`、`/ai/weekly-report`（按天缓存 app_meta）、`/export/anki`、`/reviews/forecast`、`/images/thumb/{name}`；`/reviews/practice` 支持 `mistake_id` 与 `mode=mock`。改调度/判分先看第 7 节。
+- 测试：后端 41 + 前端 Vitest 10（`cd frontend && npm test`，判分纯函数 + useMistakeFilters）全绿。
+- 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`；架构与硬规则见第 6.5 节。
+- 后端 8000 运行中（HOST 默认 127.0.0.1，改 0.0.0.0 可手机局域网访问，建议配 API_TOKEN）；前端 dist 已构建；openviking 正常（第 8 节）。
