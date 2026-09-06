@@ -133,6 +133,28 @@ def _chat_json(messages: List[dict], attempts: int = 3, **kwargs) -> dict:
     raise AiRequestError(f"AI 返回内容不是有效 JSON：{last}") from last
 
 
+def analyze_weekly_report(items: List[dict]) -> dict:
+    """近 7 天错题的错因聚类周报。items 由路由层从 review_records 组装。"""
+    prompt = (
+        "你是考研错题分析教练。下面是这位学生最近 7 天答错的题目清单（JSON）。"
+        "请按错因聚类分析（如：概念不清 / 计算失误 / 审题偏差 / 方法不会 / 记忆遗忘，"
+        "可自拟但不超过 5 类，按数量降序），并给出针对性训练建议。"
+        "输出严格 JSON（不要 Markdown）：\n"
+        '{"summary": "本周错题总体诊断，2-3 句，点出最危险的趋势", '
+        '"clusters": [{"cause": "错因名", "count": 该类题数, '
+        '"tags": ["涉及知识点", 最多 4 个], "advice": "针对性建议 1-2 句", '
+        '"mistake_ids": [命中的题目 id]}]}\n\n'
+        "题目清单：\n" + json.dumps(items, ensure_ascii=False)
+    )
+    parsed = _chat_json(
+        [{"role": "user", "content": prompt}],
+        max_tokens=2000,
+    )
+    if not isinstance(parsed, dict):
+        raise AiRequestError("AI 返回的周报格式异常")
+    return parsed
+
+
 def _parse_prompt(standard_tags: List[str] | None = None) -> str:
     prompt = (
         "你是一个考研错题整理助手。请根据用户提供的题目内容，输出严格的 JSON（不要 Markdown），字段如下：\n"

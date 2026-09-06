@@ -9,6 +9,7 @@
 import { onMounted, onUnmounted, ref, toRef, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
+import request from '../api/request'
 import {
   baseData,
   questionTypeFilterOptions,
@@ -32,6 +33,7 @@ import UiModal from '../ui/UiModal.vue'
 import UiDropdown from '../ui/UiDropdown.vue'
 import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
+import { toast } from '../ui/toast'
 
 const router = useRouter()
 const route = useRoute()
@@ -174,6 +176,28 @@ function debouncedSearch() {
   }, 300)
 }
 
+// —— Anki 卡组导出（TSV：正面/背面/标签） ——
+const exportingAnki = ref(false)
+
+async function exportAnki() {
+  exportingAnki.value = true
+  try {
+    const res = await request.get('/export/anki', { params: { type: 'mistakes' } })
+    const blob = new Blob([res.data], { type: 'text/tab-separated-values;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `考研错题_anki_${new Date().toISOString().slice(0, 10)}.tsv`
+    link.click()
+    URL.revokeObjectURL(url)
+    toast.success('已导出 Anki TSV，在 Anki 中「文件 → 导入」即可')
+  } catch (err) {
+    toast.error('Anki 导出失败')
+  } finally {
+    exportingAnki.value = false
+  }
+}
+
 onMounted(loadMistakes)
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
@@ -208,6 +232,10 @@ onUnmounted(() => {
         <UiButton variant="outline" @click="exportJson">
           <Icon name="download" :size="15" />
           导出
+        </UiButton>
+        <UiButton variant="outline" :loading="exportingAnki" @click="exportAnki">
+          <Icon name="layers" :size="15" />
+          Anki 卡组
         </UiButton>
         <label class="btn btn-outline btn-md import-label">
           <Icon name="upload" :size="15" />

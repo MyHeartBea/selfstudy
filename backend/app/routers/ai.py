@@ -1,5 +1,6 @@
 """AI 解析接口：题干解析、图片识别、知识点自动总结。"""
 
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from fastapi import APIRouter, Depends, Query
@@ -297,6 +298,50 @@ def english_analysis(body: AiEnglishRequest):
     finally:
         conn.close()
     return ok(parsed, "英语整篇解析完成")
+
+
+@router.post("/weekly-report", dependencies=[Depends(ai_rate_limit)])
+def weekly_report():
+    """近 7 天错题的错因聚类周报（AI 生成）。"""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT m.id, m.question, m.knowledge_tags, r.note, r.user_answer,
+                   s.name AS subject_name
+            FROM review_records r
+            JOIN mistakes m ON m.id = r.mistake_id
+            LEFT JOIN subjects s ON s.id = m.subject_id
+            WHERE r.result = 'wrong' AND r.reviewed_at >= datetime('now', '-7 days')
+            ORDER BY r.reviewed_at DESC
+            LIMIT 60
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return ok({"empty": True, "message": "近 7 天没有答错记录，继续保持！"})
+    items = [
+        {
+            "id": r["id"],
+            "subject": r["subject_name"] or "",
+            "question": (r["question"] or "")[:160],
+            "tags": [t for t in (r["knowledge_tags"] or "").split(",") if t][:4],
+            "note": (r["note"] or "")[:120],
+            "user_answer": (r["user_answer"] or "")[:80],
+        }
+        for r in rows
+    ]
+    try:
+        report = ai_service.analyze_weekly_report(items)
+    except AiNotConfigured:
+        return error(400, AI_NOT_CONFIGURED_MESSAGE)
+    except AiRequestError as exc:
+        return error(502, str(exc))
+    except Exception as exc:
+        return error(502, f"AI 服务调用失败：{exc}")
+    report["week_count"] = len(items)
+    return ok(report)
 
 
 @router.get("/sense")

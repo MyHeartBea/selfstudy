@@ -1,9 +1,11 @@
 """导出与导入接口。"""
 
 import base64
+import html
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
+from fastapi.responses import Response
 
 from app.database import get_connection, mistake_field, mistake_to_dict, sync_mistake_tags
 from app.models.tables import MISTAKE_COLUMNS
@@ -77,6 +79,64 @@ def export_data():
         return server_error(exc)
     finally:
         conn.close()
+
+
+def _anki_escape(text) -> str:
+    """TSV 字段转义：HTML 转义 + 换行转 <br> + 制表符转空格（Anki 字段支持 HTML）。"""
+    return (
+        html.escape(str(text or ""), quote=False)
+        .replace("\n", "<br>")
+        .replace("\t", " ")
+    )
+
+
+@router.get("/export/anki")
+def export_anki(type: str = Query("mistakes", pattern="^(mistakes|vocab)$")):
+    """导出 Anki 可导入的 TSV（正面 TAB 背面 TAB 标签，字段为 HTML）。
+
+    Anki 导入：文件 → 导入，字段映射默认即可，标签列自动归档。
+    """
+    conn = get_connection()
+    try:
+        lines = []
+        if type == "vocab":
+            rows = conn.execute(
+                "SELECT word, meaning, example, kind FROM vocab_items ORDER BY id"
+            ).fetchall()
+            for r in rows:
+                back = _anki_escape(r["meaning"] or "")
+                if r["example"]:
+                    back += "<br><br>" + _anki_escape(r["example"])
+                tag = "短语" if (r["kind"] or "word") == "phrase" else "词汇"
+                lines.append(f"{_anki_escape(r['word'])}\t{back}\t{tag}")
+            filename = "anki_vocab.tsv"
+        else:
+            rows = conn.execute(
+                "SELECT question, correct_answer, analysis, knowledge_tags "
+                "FROM mistakes ORDER BY id"
+            ).fetchall()
+            for r in rows:
+                back_parts = [_anki_escape(r["correct_answer"] or "（无答案）")]
+                if r["analysis"]:
+                    back_parts.append(_anki_escape(r["analysis"]))
+                tags = " ".join(
+                    t.strip().replace(" ", "_")
+                    for t in (r["knowledge_tags"] or "").split(",")
+                    if t.strip()
+                )
+                front = _anki_escape(r["question"] or "")
+                lines.append(f"{front}\t{'<br><br>'.join(back_parts)}\t考研错题 {tags}".rstrip())
+            filename = "anki_mistakes.tsv"
+    finally:
+        conn.close()
+    if not lines:
+        return error(400, "没有可导出的数据")
+    # BOM 让 Anki/Excel 正确识别 UTF-8
+    return Response(
+        content="\ufeff" + "\n".join(lines),
+        media_type="text/tab-separated-values; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/import")

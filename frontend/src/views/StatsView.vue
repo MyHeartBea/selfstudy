@@ -11,6 +11,8 @@ import ReviewHeatmap from '../components/ReviewHeatmap.vue'
 import Icon from '../ui/Icon.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiButton from '../ui/UiButton.vue'
+import UiTag from '../ui/UiTag.vue'
+import MathText from '../components/MathText.vue'
 import GlassCard from '../ui/GlassCard.vue'
 import MetricTile from '../ui/MetricTile.vue'
 import RingProgress from '../ui/RingProgress.vue'
@@ -153,6 +155,23 @@ async function loadForecast() {
     forecast.value = res.data.data || { overdue: 0, items: [] }
   } catch (err) {
     // 静默失败，预报条留空即可
+  }
+}
+
+// —— AI 错因周报 ——
+const report = ref(null)
+const reportLoading = ref(false)
+
+async function loadWeeklyReport() {
+  if (reportLoading.value) return
+  reportLoading.value = true
+  try {
+    const res = await request.post('/ai/weekly-report', {})
+    report.value = res.data.data
+  } catch (err) {
+    // 错误提示由请求拦截器统一处理
+  } finally {
+    reportLoading.value = false
   }
 }
 
@@ -352,6 +371,48 @@ onMounted(() => {
             <span class="fc-label num">{{ c.label }}</span>
           </div>
         </div>
+      </GlassCard>
+
+      <!-- AI 错因周报 -->
+      <GlassCard class="span3 report-strip" :hover="false">
+        <div class="rp-head">
+          <div>
+            <h3 class="panel-title">AI 错因周报</h3>
+            <p class="cap">近 7 天答错题目按错因聚类，给出针对性训练建议</p>
+          </div>
+          <UiButton variant="primary" size="sm" :loading="reportLoading" @click="loadWeeklyReport">
+            <Icon name="sparkles" :size="14" />
+            {{ report ? '重新生成' : '生成本周报告' }}
+          </UiButton>
+        </div>
+        <p v-if="reportLoading" class="rp-hint">AI 正在聚类分析近 7 天的错题…（约 10-30 秒）</p>
+        <p v-else-if="report?.empty" class="rp-hint">{{ report.message }}</p>
+        <template v-else-if="report">
+          <p class="rp-summary"><MathText :text="report.summary" /></p>
+          <div class="rp-clusters">
+            <div v-for="(c, i) in report.clusters" :key="i" class="rp-cluster">
+              <span class="rp-rank num">{{ i + 1 }}</span>
+              <div class="rp-body">
+                <div class="rp-line">
+                  <b class="serif">{{ c.cause }}</b>
+                  <span class="rp-count num">{{ c.count }} 题</span>
+                </div>
+                <p class="rp-advice"><MathText :text="c.advice" /></p>
+                <div v-if="c.tags && c.tags.length" class="rp-tags">
+                  <UiTag
+                    v-for="t in c.tags"
+                    :key="t"
+                    size="sm"
+                    color="var(--gold)"
+                    soft
+                    clickable
+                    @click="practiceTag(t)"
+                  >{{ t }}</UiTag>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </GlassCard>
     </div>
 
@@ -701,6 +762,55 @@ onMounted(() => {
 .fc-col i.today { background: var(--accent-grad); box-shadow: 0 0 0 1px var(--accent-ring); }
 .fc-col i.peak { background: var(--accent); }
 .fc-label { font-size: 10px; color: var(--ink-3); height: 14px; white-space: nowrap; }
+
+/* AI 错因周报 */
+.rp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.rp-hint { margin: 14px 0 2px; font-size: 13px; color: var(--ink-3); }
+.rp-summary {
+  margin: 14px 0 2px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--ink);
+}
+.rp-clusters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.rp-cluster {
+  display: flex;
+  gap: 11px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+}
+.rp-rank {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 12px;
+}
+.rp-line { display: flex; align-items: baseline; gap: 8px; }
+.rp-line b { font-size: 15px; color: var(--ink); }
+.rp-count { font-size: 12px; color: var(--accent-ink); font-weight: 700; }
+.rp-advice { margin: 4px 0 6px; font-size: 12.8px; line-height: 1.8; color: var(--ink-2); }
+.rp-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 
 /* ---------- 下部布局 ---------- */
 .grid-2 {
