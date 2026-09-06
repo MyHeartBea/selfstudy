@@ -32,10 +32,10 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
 <template>
   <div ref="root" class="dropdown">
     <slot name="trigger" :open="open" :toggle="() => (open = !open)">
-      <button type="button" class="btn" :class="[`btn-${variant}`, `btn-${size}`]" :disabled="disabled" @click="open = !open">
+      <button type="button" class="dd-trigger" :disabled="disabled" @click="open = !open">
         <slot></slot>
         <span v-if="label">{{ label }}</span>
-        <Icon name="chevron-down" :size="13" />
+        <Icon name="chevron-down" :size="13" class="dd-arrow" :class="{ up: open }" />
       </button>
     </slot>
     <Transition name="drop">
@@ -51,6 +51,40 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
 
 <style scoped>
 .dropdown { position: relative; display: inline-block; }
+
+/* 默认触发器：与 UiButton outline 同一视觉（此前裸用 .btn 全局类导致样式脱落） */
+.dd-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease), background 0.15s var(--ease), box-shadow 0.2s var(--ease), transform 0.25s var(--spring);
+}
+.dd-trigger:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  box-shadow: var(--e-glow);
+}
+.dd-trigger:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+.dd-trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+.dd-trigger svg { flex: none; }
+.dd-arrow { color: var(--ink-3); transition: transform 0.2s var(--ease); }
+.dd-arrow.up { transform: rotate(180deg); }
+.dropdown:hover .dd-arrow { color: var(--accent-ink); }
 
 .dropdown-menu {
   position: absolute;

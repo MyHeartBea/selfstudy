@@ -364,6 +364,7 @@ onUnmounted(() => {
           :key="item.id"
           :mistake="item"
           :index="total - (page - 1) * pageSize - i"
+          :pos="i"
           :selected="selectedIds.includes(item.id)"
           @open="openDetail"
           @toggle-select="toggleSelect"
@@ -421,7 +422,32 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.import-label { cursor: pointer; }
+/* 导入按钮：label 承载文件选择，样式与描边按钮一致 */
+.import-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease), background 0.15s var(--ease), box-shadow 0.2s var(--ease), transform 0.25s var(--spring);
+}
+.import-label:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  box-shadow: var(--e-glow);
+}
+.import-label:active { transform: translateY(1px) scale(0.985); }
 
 .list-toolbar {
   display: flex;

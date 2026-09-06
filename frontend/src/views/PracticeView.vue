@@ -7,6 +7,7 @@ import { baseData, loadBaseData, questionTypeFilterOptions, sourceTypes } from '
 import { useSubSubject } from '../composables/useSubSubject'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
+import GlassCard from '../ui/GlassCard.vue'
 import Icon from '../ui/Icon.vue'
 
 const router = useRouter()
@@ -85,25 +86,27 @@ onMounted(loadBaseData)
       </div>
     </div>
 
-    <div class="card card-pad block">
+    <GlassCard class="block">
       <div class="section-label">练习方式</div>
       <div class="practice-modes">
         <button
-          v-for="m in modes"
+          v-for="(m, i) in modes"
           :key="m.value"
           type="button"
           class="practice-mode"
           :class="{ active: mode === m.value }"
+          :style="{ '--enter-delay': i * 70 + 'ms' }"
           @click="mode = m.value"
         >
-          <Icon :name="m.icon" :size="19" class="mode-icon" />
-          <div class="practice-mode-title">{{ m.title }}</div>
-          <div class="practice-mode-desc">{{ m.desc }}</div>
+          <span class="mode-icon"><Icon :name="m.icon" :size="19" /></span>
+          <span class="mode-check" aria-hidden="true"><Icon name="check" :size="11" /></span>
+          <span class="practice-mode-title">{{ m.title }}</span>
+          <span class="practice-mode-desc">{{ m.desc }}</span>
         </button>
       </div>
-    </div>
+    </GlassCard>
 
-    <div class="card card-pad block">
+    <GlassCard class="block">
       <div class="section-label">抽题数量</div>
       <div class="count-seg">
         <button
@@ -117,9 +120,9 @@ onMounted(loadBaseData)
           {{ n }} 题
         </button>
       </div>
-    </div>
+    </GlassCard>
 
-    <div class="card card-pad block">
+    <GlassCard class="block">
       <div class="section-label">筛选条件</div>
       <div class="filter-grid">
         <div class="f-item">
@@ -182,7 +185,7 @@ onMounted(loadBaseData)
           <input v-model="filters.search" class="field-input" placeholder="搜索题干" />
         </div>
       </div>
-    </div>
+    </GlassCard>
 
     <div class="practice-start">
       <UiButton variant="primary" size="lg" @click="start">
@@ -199,31 +202,76 @@ onMounted(loadBaseData)
 .practice-modes {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  gap: 12px;
 }
 @media (max-width: 860px) { .practice-modes { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 480px) { .practice-modes { grid-template-columns: 1fr; } }
 
 .practice-mode {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
-  padding: 14px;
+  gap: 5px;
+  padding: 16px 15px;
   border: 1.5px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
   cursor: pointer;
   text-align: left;
-  transition: all 0.15s;
+  transition: transform 0.25s var(--spring), border-color 0.18s var(--ease), background 0.18s var(--ease), box-shadow 0.25s var(--ease);
+  animation: mode-in 0.5s var(--ease) both;
+  animation-delay: var(--enter-delay, 0ms);
 }
-.practice-mode:hover { border-color: var(--accent); }
+@keyframes mode-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.practice-mode:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-2);
+}
 .practice-mode.active {
   border-color: var(--accent);
   background: var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
-.mode-icon { color: var(--ink-3); margin-bottom: 4px; }
-.practice-mode.active .mode-icon { color: var(--accent-ink); }
+.mode-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  margin-bottom: 4px;
+  transition: all 0.2s var(--ease);
+}
+.practice-mode:hover .mode-icon { transform: rotate(-6deg) scale(1.08); }
+.practice-mode.active .mode-icon {
+  background: var(--accent-grad);
+  color: #fff;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--accent-hover) 40%, transparent);
+}
+/* 选中印章角标 */
+.mode-check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-grad);
+  color: #fff;
+  transform: rotate(6deg) scale(0);
+  transition: transform 0.3s var(--spring);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-hover) 40%, transparent);
+}
+.practice-mode.active .mode-check { transform: rotate(6deg) scale(1); }
 .practice-mode-title {
   font-size: 14px;
   font-weight: 700;
@@ -234,30 +282,31 @@ onMounted(loadBaseData)
   color: var(--ink-3);
 }
 
-.count-seg { display: inline-flex; gap: 8px; }
+.count-seg {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px;
+  background: var(--surface-2);
+  border-radius: 13px;
+}
 .count-btn {
-  height: 38px;
-  min-width: 74px;
-  padding: 0 16px;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 11px;
-  background: var(--surface);
-  color: var(--ink-2);
+  height: 40px;
+  min-width: 84px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-3);
   font-size: 13.5px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.14s;
+  transition: all 0.2s var(--ease);
 }
-.count-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.count-btn:hover { color: var(--ink); }
 .count-btn.active {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--surface);
-}
-[data-theme='dark'] .count-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-grad);
   color: #fff;
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--accent-hover) 40%, transparent);
 }
 
 .filter-grid {
