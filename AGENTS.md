@@ -4,14 +4,14 @@
 > 作用：无缝接管本系统，并按项目约定构建 / 维护。位置 `D:\km-v2`（**唯一在用系统**，生产端口 8000）。
 
 ## 0. 一句话
-单用户考研错题本：错题录入（文本 / 多图截图）、错题库、复习（1/3/7/15/30 天）、生词本（英语单词闪卡）、知识点库、公式背诵、科目指南、统计。
+单用户考研错题本：错题录入（文本 / 多图截图）、错题库、真题库与整卷模考、复习（SM-2 简化版间隔重复）、生词本（英语单词闪卡）、知识点库、公式背诵、科目指南、统计。
 后端 **FastAPI + SQLite（无 ORM）**，前端 **Vue3 + 自建设计系统「墨纸印」（零 UI 框架库）** + KaTeX，Vite 构建。
 
 ## 1. 关键位置
 - 仓库根 = `D:\km-v2`
 - 后端：`backend/`（入口 `backend/main.py`，挂 `frontend/dist`，监听 127.0.0.1:8000）
 - 前端：`frontend/`（源码 `src/`，构建产物 `frontend/dist`）
-- 数据：`data/kaoyan_mistakes.db`（SQLite；迁移版本门控 v5；启动前自动备份保留 20 份）
+- 数据：`data/kaoyan_mistakes.db`（SQLite；迁移版本门控 v8；启动前自动备份保留 20 份）
 - 文档：`docs/`（api.md / architecture.md / NEW_SESSION.md / notes/）
 - 视觉脚本：`scripts/vision_request.py`
 
@@ -75,8 +75,8 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 - `services/ai_service.py`：英语 / 标准分析、OCR→文本、JSON 修复、自动科目。
 - `routers/ai.py`：`/ai/english`、`/ai/ocr`、`/ai/analyze`、`/ai/sense`、`_auto_subject_ids`。
 - `services/vocab_service.py`：`kind` 等。
-- `models/tables.py` + `database.py`：DDL、迁移门控 v5、备份。
-- 其它 services：`mistake / review / knowledge / formula / stats / answer`；routers：`mistakes / reviews / knowledge / formulas / vocab / subjects / stats / transfer / ai / system`。
+- `models/tables.py` + `database.py`：DDL、迁移门控 v8、备份。
+- 其它 services：`mistake / review / knowledge / formula / stats / answer / exam_paper`；routers：`mistakes / reviews / knowledge / formulas / vocab / subjects / stats / papers / transfer / ai / system`。
 
 前端（`frontend/src/`）：
 - `styles/tokens.css` + `styles/base.css`：墨韵 2.0 令牌与全局（见 6.5 节）。
@@ -153,7 +153,7 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 
 ## 9. 当前状态（2026-09-06）
 - **前端墨韵 2.0 重构 + 功能补全批次全部完成**。UI：7 Phase（`2c1e52b`…`1458fdc`）+ 三轮反馈迭代；功能批：详情卷宗v3+缩略图+预报（`d19bf5a`）、SM-2 调度（`ccedc90`）、错因周报+Anki 导出（`e66a24e`）、真题模考（`e5c3481`）、层叠修复+模考存档+高亮+打印+速查+Vitest（本批）。
-- **后端契约注意**：迁移已到 **v7**（v6=ease_factor/last_interval，v7=mock_records 表）；`/api` 新增 `/mocks`、`/ai/weekly-report`（按天缓存 app_meta）、`/export/anki`、`/reviews/forecast`、`/images/thumb/{name}`；`/reviews/practice` 支持 `mistake_id` 与 `mode=mock`。改调度/判分先看第 7 节。
+- **后端契约注意**：迁移已到 **v8**（v6=ease_factor/last_interval，v7=mock_records 表，v8=exam_papers/exam_questions 真题库）；`/api` 新增 `/mocks`、`/ai/weekly-report`（按天缓存 app_meta）、`/export/anki`、`/reviews/forecast`、`/images/thumb/{name}`；`/reviews/practice` 支持 `mistake_id` 与 `mode=mock`。改调度/判分先看第 7 节。
 - 测试：后端 41 + 前端 Vitest 10（`cd frontend && npm test`，判分纯函数 + useMistakeFilters）全绿。
 - **真题库已上线**：真机验证英语二 2013 全链路（导入拆题 33 题 50 秒 / 答案配对 20/27 / 整卷模考 / 错题自动入本）。v1 边界：扫描版 PDF（数学解析等）无文本层不支持，数学题建议走「智能录入」识图逐题入；每份卷导入约 1-3 分钟 + 数次 AI 调用。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`；架构与硬规则见第 6.5 节。

@@ -21,13 +21,13 @@ km-v2/（仓库根 = D:\km-v2）
 ├── backend/            # FastAPI 后端
 │   ├── app/
 │   │   ├── config.py       # 端口(8000)/路径/AI 参数
-│   │   ├── database.py     # 连接、建表、迁移门控(v5)、备份
+│   │   ├── database.py     # 连接、建表、迁移门控(v8)、备份
 │   │   ├── schemas.py      # Pydantic 模型
 │   │   ├── models/tables.py# DDL
-│   │   ├── services/       # 业务逻辑（mistake/review/knowledge/formula/vocab/stats/ai/answer）
-│   │   └── routers/        # mistakes/reviews/knowledge/formulas/vocab/subjects/stats/transfer/ai/system
+│   │   ├── services/       # 业务逻辑（mistake/review/knowledge/formula/vocab/stats/ai/answer/exam_paper）
+│   │   └── routers/        # mistakes/reviews/knowledge/formulas/vocab/subjects/stats/papers/transfer/ai/system
 │   ├── main.py         # 启动入口（127.0.0.1:8000）
-│   ├── tests/          # 40 个单元/接口测试（临时库，不碰真实数据）
+│   ├── tests/          # 41 个单元/接口测试（临时库，不碰真实数据）
 │   └── .env            # AI 密钥（不入库）
 ├── frontend/           # Vue 3 前端（自建组件库 src/ui/）
 │   └── src/{views,components,ui,composables,utils,styles,directives}
@@ -85,19 +85,22 @@ npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /images 到 8000
 - **解析增强**：数学/408「懂一题会三题」+**先讲透考点**（当作读者不会）+1.1/1.2 分步详细；英语用【定位/来源/思路/总结】（定位到具体句）
 - **自动识别科目/二级科目**：识图/分析后按 `subject_hint` 自动填好（英语→阅读、数学→高数、408→计算机网络、政治→马原）
 - **AI 健壮性**：JSON 自动修复（未转义反斜杠/缺失逗号/尾逗号/空内容）+ 失败重试 3 次 + max_tokens 放宽
-- **今日复习**：间隔重复 1/3/7/15/30 天，选择/多选（全对判分，顺序无关）/填空（别名+数值容差）/
-  翻译（对照参考译文自评）/解答（AI 按步骤给分 0-100）；全键盘流（1-4 选答、Enter 下一题、Q/W 标记）
+- **今日复习**：间隔重复 **SM-2 简化版**（答对=上次间隔×难度系数自适应拉长、封顶 180 天，答错-0.2 重置 1 天），
+  选择/多选（全对判分，顺序无关）/填空（别名+数值容差）/翻译（对照参考译文自评）/解答（AI 按步骤给分 0-100）；
+  全键盘流（1-4 选答、Enter 下一题、Q/W 标记）；`?` 呼出快捷键速查；单题直练（`mistake_id`）
 - **自主练习**：记忆曲线 / 按错误时间 / 随机 / 真题专项，多条件筛选
+- **真题库 + 整卷模考**：扫描真题文件夹（科目/年份/答案配对自动识别）→ 后台 AI 拆题流水线 → `/papers` 卷库浏览；
+  整卷模考（`mode=mock`，倒计时/自由翻题/统一判分/成绩单），**作答且错的题自动入错题本**；成绩存档入 `mock_records`（v7）
 - **生词本**（英语）：闪卡快刷（认识→1/2/4/7/15/30/60 天阶梯，模糊→明天，不认识→留在队列）、
   批量导入词表、掌握度分布
 - **知识点库**：标签同义归一、AI 自动总结、贴图分析、服务端分页
 - **公式背诵**：分类/搜索/**过卡循环背诵模式**（没记住排队尾直到全会）
 - **科目指南**：各科复习重点与方法建议（政治/英语已预置默认档案，可编辑）
-- **学习统计**：8 指标卡（数字滚动）、复习热力图（119 天）、7 天趋势、掌握度/题型/来源分布、
-  薄弱知识点直通练习、科目与二级科目统计
+- **学习统计**：Bento 网格（英雄卡/进度环/连续复习火苗章）、复习热力图、7 天趋势、**复习负荷预报（30 天到期分布）**、
+  **AI 错因周报（近 7 天错因聚类）**、**模考成绩趋势**、掌握度/题型/来源分布、薄弱知识点直通练习、科目分析墨条（不再显示二级科目）
 - **科目感知交互**：政治多选错因快选（干扰项混淆/多选漏选…）、英语错因快选（词汇不识/长难句误读…）
-- **前端体验**：墨纸印设计系统、启动动画、按钮涟漪、复习礼花、命令面板（Ctrl+K 全局搜索错题/知识点/公式）、
-  图片灯箱、深色模式（View Transitions 圆形扩散换肤）
+- **前端体验**：墨纸印/墨韵2.0 设计系统、启动动画、按钮涟漪、复习礼花、命令面板（Ctrl+K 全局搜索+快捷动作）、
+  `?` 快捷键速查、图片灯箱、**搜索高亮（Highlight API）**、**打印样式**、深色模式（墨漫纸面 rAF 圆形扩散换肤，未手动选择时跟随系统）
 
 ## AI 配置（可选）
 
@@ -116,7 +119,7 @@ AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 
 ## 测试与 CI
 
-- 后端 40 个测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）
+- 后端 41 个测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）；前端 Vitest 10 个：`cd frontend && npm test`
 - GitHub Actions：push 触发 backend 测试 + frontend 构建
 
 ## Git 约定（继承自原 AGENTS.md）
@@ -128,7 +131,7 @@ AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 
 ## 数据安全
 
-- 全部数据在 `data/kaoyan_mistakes.db`，升级/重启不删数据；迁移只加列加表（版本门控 v5）
+- 全部数据在 `data/kaoyan_mistakes.db`，升级/重启不删数据；迁移只加列加表（版本门控 v8）
 - 每次启动前自动备份数据库到 `data/backups/`，保留最近 20 份
 - 演示数据只在数据库首次创建时写入
 
