@@ -20,14 +20,11 @@ html {
 
 body {
   font-family: var(--font-body);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.7;
   color: var(--ink);
-  /* 笔记本横线纸面 + 右上角淡红光 */
-  background:
-    radial-gradient(1100px 700px at 88% -8%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 62%),
-    repeating-linear-gradient(0deg, transparent 0 31px, var(--paper-line) 31px 32px),
-    var(--bg);
+  /* 底色交给 AppLayout 的氛围层（bgwash/极光/墨渍），这里只保底色 */
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
