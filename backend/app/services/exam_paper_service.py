@@ -337,6 +337,21 @@ def _has_diagram_option(q: dict) -> bool:
     return any(h in qtext for h in _FIGURE_HINTS)
 
 
+def _page_for_no(no: str, page_items: list) -> int:
+    """按题号在逐页提取文本里定位该题所在页（可靠，供图示题存图）。
+
+    匹配「行首 题号 + .（、．）」形式，例如 page 文本里 "46.（8 分）..."。
+    """
+    n = str(no or "").strip()
+    if not n.isdigit():
+        return 0
+    pat = re.compile(r"^[^\S\n]*" + re.escape(n) + r"[.．、]", re.M)
+    for i, text, _pil in page_items:
+        if pat.search(text or ""):
+            return i
+    return 0
+
+
 def _page_diagram_image(paper_id: int, source: Path, page_idx: int, cache: dict, pil=None) -> str:
     """渲染第 page_idx 页为 WebP 图，存 data/images/exam_papers/<pid>/，返回 /images/... URL。
 
@@ -396,7 +411,7 @@ def _structure_prompt(subject: str, year: str, chunk: str) -> str:
         "规则：\n"
         "1. type 判断：四选项的选 choice；英译汉/翻译与写作选 solution；其余选 fill。\n"
         "2. 只整理试题，跳过考生须知、条形码说明、`[[PAGE:n]]` 页码标记等一切噪声。\n"
-        "3. choice 必须带四个选项；选项文本保持原样（LaTeX/公式原样保留）。\n"
+        "3. choice 必须带四个选项；选项文本保持原样。**任何数学公式/上下标一律用 `\\(...\\)` 包裹**（如 `\\(2^{8}\\)`、`\\(x^{2}\\)`、`\\(O(n)\\)`），禁止裸写 `^`/`_`。\n"
         "4. correct_answer 一律留空串（答案由系统从答案文件另行匹配）。\n"
         "5. 文本不完整（被截断）时，只整理能完整识别的题目，不要编造。\n"
         "6. 文本中的 `[[PAGE:n]]` 是页码标记：请把该题所在的页码 n 填入 `page` 字段（整数，无标记填 0）。\n"
@@ -533,15 +548,20 @@ def _run_import(paper_id: int) -> None:
                 )
 
         if scanned:
-            # 逐页拆题：页码可靠，图示题可定位到页
+            # 统一扁平分块拆题（对扫描/公式卷更完整，避免逐页漏掉同页多个综合题）；
+            # 拆完再按题号在逐页文本里定位页码（可靠，供图示题存该页原图）。
             for i, page_text, pil in pages:
                 page_pils[i] = pil
+            chunks = _chunk_text(exam_text)
+            for idx, chunk in enumerate(chunks):
                 parsed = ai_service._chat_json(
-                    [{"role": "user", "content": _structure_prompt(paper["subject"], paper["year"], page_text)}],
+                    [{"role": "user", "content": _structure_prompt(paper["subject"], paper["year"], chunk)}],
                     max_tokens=12000,
                 )
-                _collect(parsed.get("questions", []) or [], i)
-                _set_status(conn, paper_id, "structuring", f"AI 拆题中 第{i + 1}/{len(pages)}页")
+                _collect(parsed.get("questions", []) or [])
+                _set_status(conn, paper_id, "structuring", f"AI 拆题中 {idx + 1}/{len(chunks)} 段")
+            for q in questions:
+                q["page_idx"] = _page_for_no(q["no"], pages)
         else:
             chunks = _chunk_text(exam_text)
             for idx, chunk in enumerate(chunks):
