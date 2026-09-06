@@ -62,6 +62,11 @@ const routes = [
         name: 'subject-guide',
         component: () => import('../views/SubjectView.vue'),
       },
+      {
+        path: 'design',
+        name: 'design-gallery',
+        component: () => import('../views/DesignView.vue'),
+      },
     ],
   },
 ]

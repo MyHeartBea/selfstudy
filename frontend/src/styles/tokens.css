@@ -1,108 +1,160 @@
 /* ============================================================
-   研错本 v2 · 设计令牌
-   概念：纸面 + 红笔批改。暖纸底色、墨色正文、红笔强调。
+   研错本 · 墨韵 2.0 设计令牌（v2，2026-09 重构）
+   概念：宣纸 · 松烟墨 · 朱砂印 · 洒金
+   说明：
+   - 变量名沿用 v1 主体（--bg/--ink/--accent/...），全站即时换新值，
+     视图逐阶段换皮时无需一次性改名；
+   - v2 新增：氛围层（wash/blob/aurora/vig/deco）、玻璃（glass）、
+     海拔（e1/e2/e-pop/e-glow）、动效曲线（spring/ease）、Dock 布局；
+   - 显示字体为本地子集思源宋体（@fontsource，按 unicode-range 分片加载）。
    ============================================================ */
 
 :root {
-  /* 纸面 */
-  --bg: #f6f3ee;
-  --bg-soft: #efebe3;
-  --surface: #fffdf8;
-  --surface-2: #f8f5ee;
+  /* ── 纸与墨（浅色 = 宣纸） ── */
+  --bg: #f5f1e8;
+  --bg-soft: #ebe1cb;
+  --surface: #fdfbf5;
+  --surface-2: #f1ecdf;
+  --surface-glass: rgba(254, 252, 246, 0.84);
+  --glass: rgba(253, 251, 245, 0.66);
 
-  /* 墨色 */
-  --ink: #211d18;
-  --ink-2: #5b544a;
-  --ink-3: #93897a;
+  --ink: #2c2822;
+  --ink-2: #635c4d;
+  --ink-3: #9a917d;
 
-  /* 线 */
-  --line: #e6e0d4;
-  --line-strong: #d4ccbc;
+  --line: rgba(44, 40, 34, 0.08);
+  --line-strong: rgba(44, 40, 34, 0.16);
 
-  /* 红笔 */
-  --accent: #c2402a;
-  --accent-hover: #a83520;
-  --accent-soft: #f9e9e4;
+  /* ── 朱砂（印章红，唯一强调色） ── */
+  --accent: #c14a31;
+  --accent-hover: #a83320;
+  --accent-soft: rgba(193, 74, 49, 0.1);
   --accent-ink: #9a3120;
+  --accent-ring: rgba(193, 74, 49, 0.35);
+  --accent-grad: linear-gradient(145deg, #c94a32, #a83320);
 
-  /* 辅助色 */
-  --teal: #0e7568;
-  --teal-soft: #e2f1ee;
-  --gold: #a16207;
-  --gold-soft: #f7edd8;
-  --green: #1a7f42;
-  --green-soft: #e3f2e8;
+  /* ── 辅助色（克制，图表/语义用） ── */
+  --teal: #3d6f68;
+  --teal-soft: rgba(61, 111, 104, 0.1);
+  --gold: #a8842c;
+  --gold-soft: rgba(168, 132, 44, 0.12);
+  --green: #4a7c59;
+  --green-soft: rgba(74, 124, 89, 0.12);
   --violet: #6d5bd0;
-  --violet-soft: #ebe7fa;
+  --violet-soft: rgba(109, 91, 208, 0.1);
   --blue: #2f6db3;
-  --blue-soft: #e5eef8;
-  --red: #c2402a;
-  --red-soft: #f9e9e4;
+  --blue-soft: rgba(47, 109, 179, 0.1);
+  --red: #b23b2e;
+  --red-soft: rgba(178, 59, 46, 0.1);
 
-  /* 阴影：纸片叠放感 */
-  --shadow-1: 0 0 0 0.5px color-mix(in srgb, var(--ink) 6%, transparent), 0 1px 2px rgba(33, 29, 24, 0.06);
-  --shadow-2: 0 0 0 0.5px color-mix(in srgb, var(--ink) 8%, transparent), 0 2px 4px rgba(33, 29, 24, 0.06), 0 16px 32px -20px rgba(33, 29, 24, 0.28);
-  --shadow-3: 0 0 0 0.5px color-mix(in srgb, var(--ink) 10%, transparent), 0 8px 16px rgba(33, 29, 24, 0.1), 0 32px 72px -28px rgba(33, 29, 24, 0.4);
+  /* ── 氛围层（环境背景） ── */
+  --wash1: rgba(193, 74, 49, 0.11);
+  --wash2: rgba(61, 111, 104, 0.09);
+  --wash3: rgba(168, 132, 44, 0.1);
+  --blob1: rgba(193, 74, 49, 0.22);
+  --blob2: rgba(61, 111, 104, 0.19);
+  --blob3: rgba(168, 132, 44, 0.2);
+  --aurora-o: 0.5;
+  --vig: rgba(60, 50, 30, 0.08);
+  --deco: 0.85;
+  --grain-opacity: 0.028;
 
-  /* 圆角：纸片更利落 */
-  --r-sm: 4px;
-  --r-md: 8px;
-  --r-lg: 10px;
-  --r-xl: 14px;
+  /* ── 海拔（柔和多层阴影，替代 1px 边框的层次） ── */
+  --shadow-1: 0 1px 2px rgba(44, 40, 34, 0.04), 0 4px 14px rgba(44, 40, 34, 0.05);
+  --shadow-2: 0 2px 4px rgba(44, 40, 34, 0.05), 0 12px 32px rgba(44, 40, 34, 0.08), 0 32px 64px rgba(44, 40, 34, 0.04);
+  --shadow-3: 0 4px 10px rgba(44, 40, 34, 0.08), 0 16px 40px rgba(44, 40, 34, 0.14);
+  --e1: var(--shadow-1);
+  --e2: var(--shadow-2);
+  --e-pop: var(--shadow-3);
+  --e-glow: 0 6px 24px rgba(193, 74, 49, 0.16), 0 2px 6px rgba(193, 74, 49, 0.08);
 
-  /* 纸面格线（笔记本横线） */
-  --paper-line: rgba(33, 29, 24, 0.045);
-  --masthead-h: 62px;
+  /* ── 动效 ── */
+  --spring: cubic-bezier(0.34, 1.4, 0.4, 1);
+  --ease: cubic-bezier(0.22, 0.8, 0.3, 1);
 
-  /* 字体 */
-  --font-body: 'Inter', 'Segoe UI', system-ui, -apple-system, 'PingFang SC',
-    'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
-  --font-display: 'Georgia', 'Times New Roman', 'Source Han Serif SC',
-    'Noto Serif CJK SC', 'Songti SC', 'SimSun', serif;
+  /* ── 圆角 ── */
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 22px;
 
-  /* 布局 */
-  --sidebar-w: 248px;
-  --topbar-h: 64px;
+  --paper-line: rgba(44, 40, 34, 0.045);
+  --masthead-h: 76px;   /* 顶部 Dock 区域高度 */
+
+  /* ── 字体（显示 = 本地子集思源宋体） ── */
+  --font-display: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'SimSun', serif;
+  --font-body: 'Noto Sans SC', 'PingFang SC', 'Segoe UI', system-ui, 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+
+  /* ── 字阶 ── */
+  --fs-display: 42px;
+  --fs-h1: 32px;
+  --fs-h2: 20px;
+  --fs-h3: 16.5px;
+  --fs-body: 15px;
+  --fs-sm: 13px;
+  --fs-xs: 12px;
+
+  /* ── 布局 ── */
+  --content-max: 1150px;
+  --sidebar-w: 248px;   /* v1 遗留，Phase 1 移除 */
+  --topbar-h: 64px;     /* v1 遗留，Phase 1 移除 */
 
   color-scheme: light;
 }
 
 [data-theme='dark'] {
-  --bg: #16130f;
-  --bg-soft: #1c1915;
-  --surface: #211d18;
-  --surface-2: #292420;
+  /* 砚台黑 + 洒金 */
+  --bg: #141110;
+  --bg-soft: #0d0b09;
+  --surface: #1e1a15;
+  --surface-2: #282217;
+  --surface-glass: rgba(30, 26, 21, 0.84);
+  --glass: rgba(30, 26, 21, 0.6);
 
-  --ink: #ece6da;
-  --ink-2: #b3aa9a;
-  --ink-3: #7f766a;
+  --ink: #ece5d5;
+  --ink-2: #b0a692;
+  --ink-3: #7c7361;
 
-  --line: #34302a;
-  --line-strong: #453f36;
+  --line: rgba(236, 229, 213, 0.08);
+  --line-strong: rgba(236, 229, 213, 0.15);
 
-  --accent: #e0604a;
-  --accent-hover: #ea7460;
-  --accent-soft: #38211c;
+  --accent: #e0583d;
+  --accent-hover: #ea6a4f;
+  --accent-soft: rgba(224, 88, 61, 0.12);
   --accent-ink: #f0907e;
+  --accent-ring: rgba(224, 88, 61, 0.35);
+  --accent-grad: linear-gradient(145deg, #d95a41, #c14330);
 
-  --teal: #4cb3a4;
-  --teal-soft: #173029;
-  --gold: #d0a03f;
-  --gold-soft: #332a17;
-  --green: #55ae74;
-  --green-soft: #1a2e20;
+  --teal: #5f948c;
+  --teal-soft: rgba(95, 148, 140, 0.14);
+  --gold: #d2a83f;
+  --gold-soft: rgba(210, 168, 63, 0.14);
+  --green: #7fae8c;
+  --green-soft: rgba(127, 174, 140, 0.14);
   --violet: #9a8ae8;
-  --violet-soft: #272242;
+  --violet-soft: rgba(154, 138, 232, 0.14);
   --blue: #6b9fd4;
-  --blue-soft: #1c2a3a;
-  --red: #e0604a;
-  --red-soft: #38211c;
+  --blue-soft: rgba(107, 159, 212, 0.14);
+  --red: #d96453;
+  --red-soft: rgba(217, 100, 83, 0.14);
 
-  --shadow-1: 0 0 0 0.5px rgba(236, 230, 218, 0.07), 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-2: 0 0 0 0.5px rgba(236, 230, 218, 0.09), 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 36px -20px rgba(0, 0, 0, 0.7);
-  --shadow-3: 0 0 0 0.5px rgba(236, 230, 218, 0.12), 0 8px 16px rgba(0, 0, 0, 0.5), 0 32px 72px -28px rgba(0, 0, 0, 0.8);
+  --wash1: rgba(224, 88, 61, 0.1);
+  --wash2: rgba(95, 148, 140, 0.1);
+  --wash3: rgba(210, 168, 63, 0.09);
+  --blob1: rgba(224, 88, 61, 0.16);
+  --blob2: rgba(95, 148, 140, 0.14);
+  --blob3: rgba(210, 168, 63, 0.12);
+  --aurora-o: 0.55;
+  --vig: rgba(0, 0, 0, 0.34);
+  --deco: 0.7;
+  --grain-opacity: 0.032;
 
-  --paper-line: rgba(236, 230, 218, 0.035);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25), 0 6px 18px rgba(0, 0, 0, 0.28);
+  --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.4);
+  --shadow-3: 0 4px 10px rgba(0, 0, 0, 0.4), 0 20px 48px rgba(0, 0, 0, 0.5);
+  --e-glow: 0 6px 28px rgba(224, 88, 61, 0.22), 0 2px 8px rgba(224, 88, 61, 0.12);
+
+  --paper-line: rgba(236, 229, 213, 0.035);
 
   color-scheme: dark;
 }

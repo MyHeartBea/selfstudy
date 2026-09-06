@@ -3,6 +3,11 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import { reveal } from './directives/reveal'
+// 本地子集思源宋体（unicode-range 分片，只加载用到的字形；离线可用）
+import '@fontsource/noto-serif-sc/500.css'
+import '@fontsource/noto-serif-sc/600.css'
+import '@fontsource/noto-serif-sc/700.css'
+import '@fontsource/noto-serif-sc/900.css'
 import './styles/tokens.css'
 import './styles/base.css'
 
