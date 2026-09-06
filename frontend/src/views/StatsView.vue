@@ -127,6 +127,35 @@ const sourceMax = computed(() => Math.max(1, ...(stats.value.by_source_type || [
 const subjectMax = computed(() => Math.max(1, ...stats.value.by_subject.map((s) => s.count)))
 const weakMax = computed(() => Math.max(1, ...(reviewStats.value.weakest_tags || []).map((w) => w.wrong_count)))
 
+// —— 复习负荷预报：未来 30 天到期分布 + 逾期 ——
+const forecast = ref({ overdue: 0, items: [] })
+const forecastCols = computed(() => {
+  const map = new Map((forecast.value.items || []).map((i) => [i.day, Number(i.count) || 0]))
+  const out = []
+  const today = new Date()
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(today)
+    d.setDate(d.getDate() + i)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    out.push({
+      day: key,
+      count: map.get(key) || 0,
+      label: i === 0 ? '今天' : i % 7 === 0 ? `${d.getMonth() + 1}/${d.getDate()}` : '',
+    })
+  }
+  return out
+})
+const forecastMax = computed(() => Math.max(1, ...forecastCols.value.map((c) => c.count)))
+
+async function loadForecast() {
+  try {
+    const res = await request.get('/reviews/forecast', { params: { days: 30 }, silent: true })
+    forecast.value = res.data.data || { overdue: 0, items: [] }
+  } catch (err) {
+    // 静默失败，预报条留空即可
+  }
+}
+
 // —— 科目分析：合并「题目规模」与「复习效果」两张表（按科目名关联，数据不丢） ——
 const subjectMerged = computed(() => {
   const map = new Map()
@@ -182,7 +211,10 @@ function practiceTag(tag) {
   })
 }
 
-onMounted(loadStats)
+onMounted(() => {
+  loadStats()
+  loadForecast()
+})
 </script>
 
 <template>
@@ -302,6 +334,24 @@ onMounted(loadStats)
         <UiButton v-if="reviewStats.weakest_tags.length" variant="outline" block size="sm" class="weak-more" @click="practiceTag(reviewStats.weakest_tags[0].tag_name)">
           直通薄弱练习
         </UiButton>
+      </GlassCard>
+
+      <!-- 复习负荷预报 -->
+      <GlassCard class="span3 fc-strip" :pad="false" :hover="false">
+        <div class="fc-head">
+          <h3 class="panel-title">复习负荷预报</h3>
+          <span class="cap">未来 30 天到期分布，哪天堆多了提前匀开</span>
+          <span v-if="forecast.overdue" class="fc-overdue">逾期 <b class="num">{{ forecast.overdue }}</b> 题</span>
+        </div>
+        <div class="fc-bars">
+          <div v-for="c in forecastCols" :key="c.day" class="fc-col" :title="`${c.day}：到期 ${c.count} 题`">
+            <i
+              :class="{ peak: c.count === forecastMax && c.count > 0, today: c.label === '今天' }"
+              :style="{ height: (c.count ? Math.max(6, Math.round((c.count / forecastMax) * 64)) : 4) + 'px' }"
+            ></i>
+            <span class="fc-label num">{{ c.label }}</span>
+          </div>
+        </div>
       </GlassCard>
     </div>
 
@@ -596,6 +646,51 @@ onMounted(loadStats)
 .w-track { display: block; height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
 .w-track i { display: block; height: 100%; border-radius: 99px; background: var(--accent); transition: width 1.1s var(--spring); }
 .weak-more { margin-top: 12px; }
+
+/* 复习负荷预报条 */
+.fc-strip { overflow: hidden; }
+.fc-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px 22px 0;
+}
+.fc-overdue {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--red);
+  background: var(--red-soft);
+  padding: 3px 12px;
+  border-radius: 999px;
+}
+.fc-overdue b { font-weight: 800; }
+.fc-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  padding: 14px 22px 10px;
+}
+.fc-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.fc-col i {
+  display: block;
+  width: 100%;
+  max-width: 24px;
+  border-radius: 4px 4px 2px 2px;
+  background: color-mix(in srgb, var(--accent) 40%, var(--surface-2));
+  transition: height 0.8s var(--spring);
+}
+.fc-col i.today { background: var(--accent-grad); box-shadow: 0 0 0 1px var(--accent-ring); }
+.fc-col i.peak { background: var(--accent); }
+.fc-label { font-size: 10px; color: var(--ink-3); height: 14px; white-space: nowrap; }
 
 /* ---------- 下部布局 ---------- */
 .grid-2 {

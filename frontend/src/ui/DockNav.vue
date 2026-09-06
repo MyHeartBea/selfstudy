@@ -62,6 +62,7 @@ onMounted(() => {
       class="dock-item"
       :class="{ active: activePath === item.path }"
       :data-label="item.full"
+      :aria-label="item.full"
       @click="go(item.path)"
     >
       <Icon :name="item.icon" :size="18" />
@@ -74,6 +75,7 @@ onMounted(() => {
       class="dock-item"
       :class="{ active: activePath === item.path }"
       :data-label="item.full"
+      :aria-label="item.full"
       @click="go(item.path)"
     >
       <Icon :name="item.icon" :size="18" />
@@ -83,6 +85,7 @@ onMounted(() => {
       type="button"
       class="dock-item ring-item"
       data-label="今日复习进度"
+      :aria-label="`今日复习进度 ${ringDone} / ${ringTotal}`"
       @click="go('/review')"
     >
       <svg viewBox="0 0 40 40" class="ring-svg" aria-hidden="true">
@@ -98,18 +101,19 @@ onMounted(() => {
       </svg>
       <b class="num">{{ ringDone }}</b><i>/{{ ringTotal }}</i>
     </button>
-    <button type="button" class="dock-item" data-label="全局搜索 Ctrl K" @click="emit('open-search')">
+    <button type="button" class="dock-item" data-label="全局搜索 Ctrl K" aria-label="全局搜索" @click="emit('open-search')">
       <Icon name="search" :size="18" />
     </button>
     <button
       type="button"
       class="dock-item"
       :data-label="isDark ? '换浅色 · 墨漫纸面' : '换深色 · 墨漫纸面'"
+      :aria-label="isDark ? '切换浅色模式' : '切换深色模式'"
       @click="emit('toggle-theme', $event)"
     >
       <Icon :name="isDark ? 'sun' : 'moon'" :size="18" />
     </button>
-    <span class="status-dot" :class="{ bad: backendOk === false }" data-label="本地数据状态"></span>
+    <span class="status-dot" :class="{ bad: backendOk === false }" data-label="本地数据状态" role="status" :aria-label="backendOk === false ? '后端连接异常' : '后端连接正常'"></span>
     <div ref="indEl" class="dock-ind" aria-hidden="true"></div>
   </nav>
 </template>

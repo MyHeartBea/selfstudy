@@ -48,6 +48,39 @@ def get_review_calendar(days: int = Query(140, ge=14, le=366)):
         conn.close()
 
 
+@router.get("/reviews/forecast")
+def get_review_forecast(days: int = Query(30, ge=7, le=90)):
+    """未来 N 天复习负荷分布：{overdue, items:[{day, count}]}（day=YYYY-MM-DD，含今日）。"""
+    conn = get_connection()
+    try:
+        overdue = conn.execute(
+            """
+            SELECT COUNT(*) AS c FROM mistakes
+            WHERE review_paused = 0
+              AND next_review_at IS NOT NULL
+              AND date(next_review_at) < date('now', 'localtime')
+            """
+        ).fetchone()["c"]
+        rows = conn.execute(
+            """
+            SELECT date(next_review_at) AS day, COUNT(*) AS count
+            FROM mistakes
+            WHERE review_paused = 0
+              AND next_review_at IS NOT NULL
+              AND date(next_review_at) >= date('now', 'localtime')
+              AND date(next_review_at) <= date('now', ?)
+            GROUP BY date(next_review_at)
+            ORDER BY day
+            """,
+            (f"+{days} days",),
+        ).fetchall()
+        return ok({"overdue": overdue, "items": [dict(row) for row in rows]})
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
 @router.get("/reviews/practice")
 def get_practice_reviews(
     mode: str = Query("curve", pattern="^(curve|wrong_time|random|real_exam)$"),

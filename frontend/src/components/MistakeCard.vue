@@ -92,9 +92,9 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
     <i class="spine" aria-hidden="true"></i>
     <span class="card-sheen" aria-hidden="true"></span>
 
-    <!-- 通栏图版：首图等高裁齐，白底衬板 -->
+    <!-- 通栏图版：首图等高裁齐，白底衬板（走缩略图通道） -->
     <div v-if="hasImage" class="shot-banner">
-      <QuestionImages :images="mistake.images" :max-width="480" :count="1" />
+      <QuestionImages :images="mistake.images" :max-width="480" :count="1" thumb />
     </div>
 
     <div class="card-body">

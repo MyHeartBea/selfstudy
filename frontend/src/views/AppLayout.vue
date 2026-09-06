@@ -81,10 +81,10 @@ const THEME_LOOKS = {
 const veilEl = ref(null)
 let themeBusy = false
 
-function applyTheme(dark) {
+function applyTheme(dark, persist = true) {
   isDark.value = dark
   document.documentElement.dataset.theme = dark ? 'dark' : ''
-  localStorage.setItem('km-theme', dark ? 'dark' : 'light')
+  if (persist) localStorage.setItem('km-theme', dark ? 'dark' : 'light')
   const meta = document.querySelector('meta[name="theme-color"]')
   if (meta) meta.setAttribute('content', dark ? '#141110' : '#f5f1e8')
 }
@@ -139,6 +139,7 @@ watch(
 
 let healthTimer = 0
 let mediaHandler = null
+let systemThemeHandler = null
 
 onMounted(() => {
   loadBaseData()
@@ -153,6 +154,15 @@ onMounted(() => {
     isNarrow.value = mq.matches
   }
   mq.addEventListener?.('change', mediaHandler)
+  // 从未手动选过主题 → 跟随系统（用户点换肤后写入 km-theme 即固定）
+  if (!localStorage.getItem('km-theme')) {
+    const systemMQ = window.matchMedia('(prefers-color-scheme: dark)')
+    applyTheme(systemMQ.matches, false)
+    systemThemeHandler = (e) => {
+      if (!localStorage.getItem('km-theme')) applyTheme(e.matches, false)
+    }
+    systemMQ.addEventListener?.('change', systemThemeHandler)
+  }
   // 开场编排：等字体就绪（本地字体毫秒级；700ms 兜底）再放下 Dock / 显影氛围
   const arm = () => document.body.classList.add('app-ready')
   if (document.fonts && document.fonts.ready) {
@@ -167,6 +177,9 @@ onUnmounted(() => {
   clearInterval(healthTimer)
   window.removeEventListener('km:review-saved', loadRing)
   mq?.removeEventListener?.('change', mediaHandler)
+  if (systemThemeHandler) {
+    window.matchMedia('(prefers-color-scheme: dark)').removeEventListener?.('change', systemThemeHandler)
+  }
 })
 </script>
 

@@ -125,6 +125,40 @@ app.include_router(ai.router, dependencies=[Depends(verify_api_token)])
 from app.services.mistake_service import _images_dir  # noqa: E402
 
 _images_dir().mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/images/thumb/{name}", include_in_schema=False)
+def image_thumbnail(name: str):
+    """列表缩略图：懒生成 WebP（长边 480px，存 data/images/_thumbs/），失败回退原图。
+
+    生成失败不阻塞——直接返回原文件字节，前端无感。
+    """
+    from pathlib import Path as _Path
+
+    from fastapi import HTTPException
+    from PIL import Image
+
+    # 安全：只接受纯文件名，堵目录穿越
+    if "/" in name or "\\" in name or ".." in name or name.startswith("."):
+        raise HTTPException(status_code=404)
+    src = _images_dir() / name
+    if not src.is_file():
+        raise HTTPException(status_code=404)
+
+    thumbs_dir = _images_dir() / "_thumbs"
+    thumbs_dir.mkdir(exist_ok=True)
+    thumb = thumbs_dir / f"{_Path(name).stem}.webp"
+    if not thumb.is_file():
+        try:
+            with Image.open(src) as im:
+                im = im.convert("RGB")
+                im.thumbnail((480, 480))
+                im.save(thumb, "WEBP", quality=78, method=4)
+        except Exception:
+            return FileResponse(src)
+    return FileResponse(thumb, media_type="image/webp")
+
+
 app.mount("/images", StaticFiles(directory=str(_images_dir())), name="images")
 
 

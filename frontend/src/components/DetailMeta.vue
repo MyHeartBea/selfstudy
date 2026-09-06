@@ -41,13 +41,13 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
 
     <!-- 题干：宋体大字，直接落在纸面 -->
     <section class="dossier-sec">
-      <div class="sec-head">题干</div>
+      <div class="sec-head"><span class="sec-num serif">壹</span>题干</div>
       <div class="dossier-question"><RichText :text="detail.question" /></div>
     </section>
 
     <!-- 选项 / 参考答案 -->
     <section v-if="hasOptions" class="dossier-sec">
-      <div class="sec-head">选项</div>
+      <div class="sec-head"><span class="sec-num serif">贰</span>选项</div>
       <div
         v-for="opt in optionList"
         :key="opt.key"
@@ -60,7 +60,7 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
       </div>
     </section>
     <section v-else class="dossier-sec">
-      <div class="sec-head">参考答案</div>
+      <div class="sec-head"><span class="sec-num serif">贰</span>参考答案</div>
       <div class="verdict-panel">
         <MathText :text="detail.correct_answer || '暂无参考答案'" />
         <p
@@ -74,7 +74,7 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
 
     <!-- 主要难点 -->
     <section v-if="detail.difficulty_points" class="dossier-sec">
-      <div class="sec-head">主要难点</div>
+      <div class="sec-head"><span class="sec-num serif">叁</span>主要难点</div>
       <div class="verdict-panel gold">
         <MathText :text="detail.difficulty_points" />
       </div>
@@ -82,13 +82,13 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
 
     <!-- 解析 -->
     <section v-if="detail.analysis" class="dossier-sec">
-      <div class="sec-head">解析</div>
+      <div class="sec-head"><span class="sec-num serif">肆</span>解析</div>
       <div class="dossier-analysis"><RichText :text="detail.analysis" /></div>
     </section>
 
     <!-- 档案 -->
     <section class="dossier-sec">
-      <div class="sec-head">档案</div>
+      <div class="sec-head"><span class="sec-num serif">伍</span>档案</div>
       <dl class="dossier-facts">
         <div class="fact"><dt>解题思路</dt><dd><MathText v-if="detail.approach" :text="detail.approach" /><span v-else class="muted">未填写</span></dd></div>
         <div class="fact"><dt>难度</dt><dd>{{ detail.difficulty }} 星</dd></div>
@@ -102,10 +102,27 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
 </template>
 
 <style scoped>
-/* 卷宗阅读宽度：xl 弹窗下约束行长 */
+/* 卷宗：阅读宽度 + 左缘朱砂边线 */
 .dossier {
+  position: relative;
   max-width: 960px;
   margin: 0 auto;
+  padding-left: 28px;
+}
+.dossier::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 55%, transparent),
+    color-mix(in srgb, var(--accent) 10%, transparent) 60%,
+    transparent
+  );
 }
 .dossier-head {
   display: flex;
@@ -129,26 +146,35 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
 }
 .dossier-plates :deep(img) { border-radius: 4px; }
 
-/* 小节编辑部标题 */
-.dossier-sec { margin-top: 20px; }
+/* 小节编辑部标题：汉字编号印章 */
+.dossier-sec { margin-top: 22px; }
 .sec-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   font-size: 11.5px;
   font-weight: 800;
   letter-spacing: 0.16em;
   color: var(--ink-3);
-  margin-bottom: 10px;
+  margin-bottom: 11px;
 }
-.sec-head::before {
-  content: '';
-  width: 16px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-  opacity: 0.75;
+.sec-num {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent-ink);
+  font-weight: 900;
+  font-size: 13px;
+  letter-spacing: 0;
+  transform: rotate(-3deg);
+  transition: transform 0.25s var(--spring);
 }
+.dossier-sec:hover .sec-num { transform: rotate(0deg) scale(1.08); }
 
 /* 题干：宋体大字 */
 .dossier-question {

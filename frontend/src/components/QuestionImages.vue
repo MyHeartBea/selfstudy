@@ -8,6 +8,8 @@ const props = defineProps({
   maxWidth: { type: Number, default: 520 },
   // 只显示前 N 张（列表卡片=1，详情=0 表示全部）
   count: { type: Number, default: 0 },
+  // 缩略图通道：展示用 /images/thumb/（后端懒生成 WebP），灯箱仍用原图；加载失败自动回退原图
+  thumb: { type: Boolean, default: false },
 })
 
 const viewerVisible = ref(false)
@@ -66,6 +68,19 @@ function imageSrc(item) {
   const name = item.startsWith('images/') ? item.slice('images/'.length) : item
   return '/images/' + name
 }
+
+function displaySrc(item) {
+  const full = imageSrc(item)
+  if (!props.thumb || full.startsWith('data:')) return full
+  return full.replace('/images/', '/images/thumb/')
+}
+
+function onThumbError(item, event) {
+  // 缩略图缺失/生成失败 → 回退原图（只回退一次，防循环）
+  const full = imageSrc(item)
+  if (event.target.src.endsWith(full) || event.target.src.includes(full)) return
+  event.target.src = full
+}
 </script>
 
 <template>
@@ -77,7 +92,7 @@ function imageSrc(item) {
       :title="'点击放大（' + (index + 1) + '/' + previewList.length + '）'"
       @click="openPreview(images.indexOf(img))"
     >
-      <img :src="imageSrc(img)" alt="题干配图" loading="lazy" />
+      <img :src="displaySrc(img)" alt="题干配图" loading="lazy" @error="onThumbError(img, $event)" />
     </figure>
 
     <Teleport to="body">
