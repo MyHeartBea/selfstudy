@@ -319,5 +319,29 @@ class TestMigrationIdempotent(unittest.TestCase):
             conn.close()
 
 
+class TestPdfOcrFallback(unittest.TestCase):
+    """真题库扫描版 PDF 的 OCR 兜底关键判定（2026-09-06 新增）。
+
+    扫描版（图片型）PDF 无文本层，extract_text 需判定文本层是否可用，
+    不足时回退到渲染成图 + 本地 Windows OCR（再退视觉）。此处只覆盖纯逻辑判定，
+    不依赖真实 PDF/AI，避免测试因 OCR/视觉不可用而波动。
+    """
+
+    def test_pdf_text_usable_threshold(self):
+        from app.services.exam_paper_service import _pdf_text_usable
+        # 空/过少（扫描版常见）→ 不可用 → 触发 OCR 兜底
+        self.assertFalse(_pdf_text_usable(""))
+        self.assertFalse(_pdf_text_usable("   "))
+        self.assertFalse(_pdf_text_usable("x" * 199))
+        # 达到阈值 → 文本层足够，直接使用
+        self.assertTrue(_pdf_text_usable("试题内容" * 120))
+
+    def test_extract_pdf_unsupported_suffix_raises(self):
+        from pathlib import Path
+        from app.services.exam_paper_service import extract_text
+        with self.assertRaises(ValueError):
+            extract_text(Path("foo.txt"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -37,6 +37,10 @@ class Settings:
     FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
     # 历年真题文件夹（真题库扫描根目录，可用 .env PAPERS_DIR 覆盖）
     PAPERS_DIR = os.environ.get("PAPERS_DIR", str(PROJECT_ROOT / "真题"))
+    # 扫描版 PDF 的 OCR 兜底：最多渲染的页数（0=不限，默认 60）
+    PDF_OCR_PAGES = int(os.environ.get("PDF_OCR_PAGES", "60"))
+    # 判定 PDF 文本层是否可用的最小字符数，低于则触发 OCR 兜底
+    PDF_TEXT_MIN = int(os.environ.get("PDF_TEXT_MIN", "200"))
 
     # AI 服务（OpenAI 兼容接口，可在 backend/.env 中配置）
     AI_API_KEY = os.environ.get("AI_API_KEY", "")

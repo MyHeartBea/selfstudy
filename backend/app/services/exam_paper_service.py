@@ -89,7 +89,12 @@ def scan_folder() -> List[dict]:
 
 
 def extract_text(path: Path) -> str:
-    """提取 docx / pdf（文本层）的全文文本。"""
+    """提取 docx / pdf 的全文文本。
+
+    PDF 优先用 pypdf 提取文本层；文本层为空/过少（扫描版图片型 PDF）时，用
+    pypdfium2 把页面渲染成图，逐页走本地 Windows OCR 兜底（更快、免费、可离线），
+    OCR 仍失败的页再退视觉模型提取，尽量把题面文字捞回来。
+    """
     suffix = path.suffix.lower()
     if suffix == ".docx":
         import docx
@@ -103,17 +108,107 @@ def extract_text(path: Path) -> str:
                     parts.append(" | ".join(cells))
         return "\n".join(parts)
     if suffix == ".pdf":
+        text = _pdf_text_layer(path)
+        if _pdf_text_usable(text):
+            return text
+        # 文本层稀少/为空：扫描版 → 渲染成图走本地 OCR（必要时视觉兜底）。
+        ocr_text = _pdf_ocr(path)
+        if ocr_text.strip():
+            return ocr_text
+        return text  # 兜底全失败，返回原文本（调用方给出明确报错）
+    raise ValueError(f"不支持的文件类型：{suffix}")
+
+
+def _pdf_text_layer(path: Path) -> str:
+    """用 pypdf 提取 PDF 文本层（前若干页合并）。"""
+    try:
         from pypdf import PdfReader
 
         reader = PdfReader(str(path))
-        parts = []
-        for page in reader.pages[:80]:
+    except Exception:
+        return ""
+    parts = []
+    for page in reader.pages[:80]:
+        try:
+            parts.append(page.extract_text() or "")
+        except Exception:
+            continue
+    return "\n".join(parts)
+
+
+def _pdf_text_usable(text: str) -> bool:
+    """文本层是否足够用来拆题：扫描版常为空或极稀疏，低于阈值即走 OCR。"""
+    return len((text or "").strip()) >= settings.PDF_TEXT_MIN
+
+
+def _pdf_ocr(path: Path) -> str:
+    """扫描版 PDF 兜底：渲染页面为图，逐页本地 OCR；OCR 失败的页退视觉。"""
+    import base64
+    import io
+
+    try:
+        import pypdfium2 as pdfium
+    except Exception:
+        return ""
+    from app.services import local_ocr
+
+    try:
+        pdf = pdfium.PdfDocument(str(path))
+        pages = len(pdf)
+    except Exception:
+        return ""
+
+    limit = settings.PDF_OCR_PAGES or pages
+    out: List[str] = []
+    # 正常试卷页数少，全量 OCR 才能覆盖全部题目；仅在累计文本足够拆题(约2段)时提前刹车，
+    # 避免 100+ 页的「解析/答案速查」类大文件被整本 OCR 拖慢。
+    needed = _CHUNK_CHARS * 2
+    for i in range(min(pages, limit)):
+        try:
+            page = pdf[i]
+            bmp = page.render(scale=2.0)
+            pil = bmp.to_pil()
+            buf = io.BytesIO()
+            pil.save(buf, format="PNG")
+            data = buf.getvalue()
+        except Exception:
+            continue
+        text = ""
+        if local_ocr.is_available():
             try:
-                parts.append(page.extract_text() or "")
+                text = local_ocr.recognize_base64(base64.b64encode(data).decode())
             except Exception:
-                continue
-        return "\n".join(parts)
-    raise ValueError(f"不支持的文件类型：{suffix}")
+                text = ""
+        if not text.strip():
+            text = _pdf_page_vision(pil, i)
+        if text.strip():
+            out.append(text.strip())
+        if sum(len(t) for t in out) >= needed:
+            break
+    return "\n".join(out)
+
+
+def _pdf_page_vision(pil, index: int) -> str:
+    """单页视觉兜底：把渲染图交给 DeepSeek 视觉模型提取文字。"""
+    import base64
+    import io
+
+    from app.services import ai_service
+
+    buf = io.BytesIO()
+    try:
+        pil.save(buf, format="PNG")
+    except Exception:
+        return ""
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    try:
+        return ai_service._vision_extract_text(
+            [b64],
+            "请完整提取这一页试卷题目的文字，数学公式用 LaTeX 表示；只输出文字本身，不要解释。",
+            timeout=settings.AI_VISION_TIMEOUT,
+        )
+    except Exception:
+        return ""
 
 
 def _chunk_text(text: str, size: int = _CHUNK_CHARS) -> List[str]:
