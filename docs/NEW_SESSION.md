@@ -21,10 +21,14 @@
 - 后端：`app/services/ai_service.py`（英语/标准分析、OCR→文本、JSON 修复、自动科目）、`app/routers/ai.py`（`/ai/english`、`/ai/ocr`、`/ai/analyze`、`/ai/sense`、`_auto_subject_ids`）、`app/services/vocab_service.py`（kind）、`app/models/tables.py`+`app/database.py`（迁移）。
 - 前端：`components/EnglishAnalysisPanel.vue`（整篇精读，核心）、`views/CaptureView.vue`（多图/粘贴目标/自动检测）、`components/MistakeCard.vue`（列表首图）、`components/DetailMeta.vue`+`ui/QuestionImages.vue`（详情全图/首图）、`utils/markdown.js`+`components/RichText.vue`（表格/hex）、`ui/UiModal.vue`（加宽）。
 
-## openviking（已跑通，勿动坏）
-- 服务 `openviking-server.exe --config C:\Users\Administrator\.openviking\ov.conf`，监听 **127.0.0.1:1933**；**智谱 embedding**：`provider=openai`、`api_base=https://open.bigmodel.cn/api/paas/v4`、`model=embedding-3`、`dimension=2048`、`api_key`=app `.env` 的 `AI_VISION_API_KEY`（读入配置、不打印）。
-- `~/.openviking/ov.conf`（JSON）、`start-server.cmd`、启动文件夹自启（登录自动拉起）。`ov` CLI 已配置 `local`。
+## openviking（已跑通，勿动坏；2026-09-06 修复配置分裂）
+- **规范配置 = `~\.openviking\ov.conf`**（JSON）。工作区 = `C:\Users\Administrator\.openviking`（记忆库 `pending/vectordb/viking` 都在此）。
+- 服务：`openviking-server.exe --config C:\Users\Administrator\.openviking\ov.conf`，监听 **127.0.0.1:1933**。
+- **embedding**（检索/向量）：智谱 `provider=openai`、`api_base=https://open.bigmodel.cn/api/paas/v4`、`model=embedding-3`、`dimension=2048`、`api_key`=app `.env` 的 `AI_VISION_API_KEY`（读入配置、不打印）。
+- **VLM**（生成式，用于**记忆抽取 + 查询扩展**）：`provider=openai`、`model=deepseek-v4-flash-vision-exp`、`api_base=https://api.deepseek.com/v1`、`api_key`=app `.env` 的 `AI_API_KEY`（DeepSeek 同一把）。⚠️ 此块缺失会报 `api_key client option must be set` 导致记忆抽取失败。
+- **自启**：启动文件夹唯一条目 `OpenViking自启.vbs`（幂等，先查 1933）→ `D:\dsh-home\scripts\start_openviking.py`；**该脚本 `CONF` 必须指向上面规范配置**（曾误指 `D:\dsh-home\openviking\ov.conf`，已改回）。旧的 `start-server.cmd`、启动文件夹里 `openviking-server.cmd`、以及 `D:\dsh-home\openviking\ov.conf`（指向 D 盘另一工作区）**已弃用，勿再使用**。
 - `pending/` 会话文件**会话启动时**由插件 `replayPending` 回填（每次≤50）；`ov find` 可语义检索。**MCP 工具 `mcp__openviking__*` 需 DSH 面把 openviking MCP 连到 agent 会话才可见。**
+- 备份：`~\.openviking\ov.conf.bak`（原始）、`.bak-ds`（DeepSeek 改前）。`ov` CLI 已配置 `local`。
 
 ## 现状
 - 已 `git commit`：`d20d838`（大功能）、`d4fc2ab`（列表首图）、`93b261b`（hex 等宽）。
