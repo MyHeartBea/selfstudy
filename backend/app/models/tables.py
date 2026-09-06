@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS mistakes (
     last_reviewed_at DATETIME,
     next_review_at DATETIME,
     review_paused INTEGER DEFAULT 0,
+    -- SM-2 简化版自适应调度（v6）：难度系数与上次间隔天数
+    ease_factor REAL DEFAULT 2.5,
+    last_interval INTEGER DEFAULT 0,
     images TEXT,
     -- 英语整篇精读（可选）：解析后挂在一条错题上，供详情/复习回看
     passage_text TEXT,

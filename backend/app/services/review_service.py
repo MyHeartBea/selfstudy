@@ -7,7 +7,26 @@ from typing import List, Optional
 from app.database import local_day_bounds_utc, mistake_tag_condition, mistake_to_dict
 from app.services.answer_service import judge_fill
 
-INTERVALS = [1, 3, 7, 15, 30]
+INTERVALS = [1, 3, 7, 15, 30]  # v5 旧固定阶梯：仅迁移回填/兼容保留
+
+# SM-2 简化版参数
+SM2_EASE_INIT = 2.5
+SM2_EASE_MIN = 1.3
+SM2_EASE_MAX = 2.8
+SM2_MAX_INTERVAL = 180
+
+
+def _next_schedule(ease: float, last_interval: int, result: bool):
+    """SM-2 简化版：答对 → 间隔 = 上次间隔 × 难度系数（首次 1 天），系数 +0.1；
+    答错 → 重置 1 天，系数 -0.2。返回 (新系数, 新间隔天数)。"""
+    if result:
+        interval = int(last_interval * ease + 0.5) if last_interval > 0 else 1
+        interval = max(1, min(SM2_MAX_INTERVAL, interval))
+        ease = min(SM2_EASE_MAX, ease + 0.1)
+    else:
+        interval = 1
+        ease = max(SM2_EASE_MIN, ease - 0.2)
+    return ease, interval
 
 
 def _utc_to_local_datetime(value):
@@ -188,15 +207,17 @@ def review_mistake(
     mastery = current.get("mastery_level") or 0
     review_count = current.get("review_count") or 0
     wrong_count = current.get("wrong_count") or 0
+    ease = current.get("ease_factor") or SM2_EASE_INIT
+    last_interval = current.get("last_interval") or 0
 
     if result:
         mastery = min(5, mastery + 1)
-        # 递增前取档：首次答对（0→1）1 天后复习，之后 3/7/15/30 天逐级拉长
-        interval = INTERVALS[max(0, mastery - 1)]
+        # SM-2 简化版：间隔自适应拉长，越熟练的题复习得越稀疏
+        ease, interval = _next_schedule(ease, last_interval, True)
     else:
         mastery = max(0, mastery - 1)
         wrong_count += 1
-        interval = 1
+        ease, interval = _next_schedule(ease, last_interval, False)
     review_count += 1
 
     now = datetime.now(timezone.utc)
@@ -207,8 +228,9 @@ def review_mistake(
 
     conn.execute(
         "UPDATE mistakes SET mastery_level = ?, review_count = ?, wrong_count = ?, "
-        "last_reviewed_at = ?, next_review_at = ? WHERE id = ?",
-        (mastery, review_count, wrong_count, now_text, next_at, mistake_id),
+        "ease_factor = ?, last_interval = ?, last_reviewed_at = ?, next_review_at = ? "
+        "WHERE id = ?",
+        (mastery, review_count, wrong_count, ease, interval, now_text, next_at, mistake_id),
     )
     conn.execute(
         "INSERT INTO review_records (mistake_id, result, note, user_answer, reviewed_at) "

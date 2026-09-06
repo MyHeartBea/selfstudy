@@ -78,7 +78,7 @@ def init_database() -> None:
 
 
 # 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描
-MIGRATION_VERSION = 5
+MIGRATION_VERSION = 6
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
@@ -119,6 +119,9 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         "english_phrases": "TEXT",
         "english_words": "TEXT",
         "english_questions": "TEXT",
+        # SM-2 简化版自适应调度（v6）
+        "ease_factor": "REAL DEFAULT 2.5",
+        "last_interval": "INTEGER DEFAULT 0",
     }
     for column, ddl in additions.items():
         if column not in existing_columns:
@@ -213,6 +216,15 @@ def migrate_database(conn: sqlite3.Connection) -> None:
             )
     _normalize_existing_math(conn)
     _rebuild_mistake_tag_map(conn)
+
+    # v6：按旧阶梯回填上次间隔，存量题从平滑处续接 SM-2 调度（只跑一次）
+    conn.execute(
+        "UPDATE mistakes SET last_interval = CASE mastery_level "
+        "WHEN 1 THEN 1 WHEN 2 THEN 3 WHEN 3 THEN 7 WHEN 4 THEN 15 WHEN 5 THEN 30 "
+        "ELSE 0 END "
+        "WHERE last_interval IS NULL OR last_interval <= 0"
+    )
+
     _set_meta(conn, "migration_version", str(MIGRATION_VERSION))
 
 

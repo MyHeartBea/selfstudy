@@ -82,34 +82,38 @@ class TestReviewSchedule(unittest.TestCase):
         updated = review_service.review_mistake(self.conn, self.id, True)
         after = updated["mastery_level"]
         self.assertEqual(after, min(5, before + 1))
-        # 递增前取档：首次答对（0→1）为 1 天，之后 3/7/15/30 逐级拉长
-        interval = review_service.INTERVALS[max(0, after - 1)]
-        expected = datetime.now(timezone.utc) + timedelta(days=interval)
+        # SM-2 简化版：首次答对（last_interval=0）安排 1 天后复习，系数 +0.1
+        expected = datetime.now(timezone.utc) + timedelta(days=1)
         next_at = datetime.strptime(updated["next_review_at"], "%Y-%m-%d %H:%M:%S").replace(
             tzinfo=timezone.utc
         )
         self.assertLess(abs((next_at - expected).total_seconds()), 5)
+        self.assertEqual(updated["last_interval"], 1)
+        self.assertAlmostEqual(updated["ease_factor"], 2.6, places=6)
 
-    def test_interval_sequence_1_3_7_15_30(self):
-        """连续答对：间隔依次为 1/3/7/15/30 天（回归 off-by-one 修复）。"""
+    def test_interval_sequence_sm2(self):
+        """连续答对：间隔 1 → 3 → 8 → 22 → 62 天（上次间隔 × 难度系数自适应拉长）。"""
         intervals = []
         for _ in range(5):
             updated = review_service.review_mistake(self.conn, self.id, True)
-            mastery = updated["mastery_level"]
-            intervals.append(review_service.INTERVALS[max(0, mastery - 1)])
-        self.assertEqual(intervals, [1, 3, 7, 15, 30])
+            intervals.append(updated["last_interval"])
+        self.assertEqual(intervals, [1, 3, 8, 22, 62])
 
-    def test_wrong_resets_interval_to_one_day(self):
+    def test_wrong_penalizes_ease_and_resets_interval(self):
+        # 先答对一次抬系数，再答错验证惩罚与重置
+        review_service.review_mistake(self.conn, self.id, True)
         updated = review_service.review_mistake(self.conn, self.id, False)
         self.assertEqual(updated["mastery_level"], 0)
         self.assertEqual(updated["wrong_count"], 1)
+        self.assertAlmostEqual(updated["ease_factor"], 2.4, places=6)  # 2.6 - 0.2
+        self.assertEqual(updated["last_interval"], 1)
         expected = datetime.now(timezone.utc) + timedelta(days=1)
         next_at = datetime.strptime(updated["next_review_at"], "%Y-%m-%d %H:%M:%S").replace(
             tzinfo=timezone.utc
         )
         self.assertLess(abs((next_at - expected).total_seconds()), 5)
         history = review_service.get_review_history(self.conn, self.id)
-        self.assertEqual(len(history), 1)
+        self.assertEqual(len(history), 2)
         self.assertEqual(history[0]["result"], "wrong")
 
     def test_fill_review_rejudges_with_user_answer(self):
