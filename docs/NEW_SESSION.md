@@ -9,7 +9,7 @@
 - 统一响应 `{code,data,message}`（`ok()/error()`）；有 SPA 回退与全局异常处理；可选 API_TOKEN 鉴权；AI 限流 `AI_RATE_LIMIT=30/min`。
 
 ## 铁律（改代码必须遵守）
-1. **DeepSeek 为主**：`AI_BASE_URL=https://api.deepseek.com/v1`、`AI_MODEL=deepseek-chat`（文本）；视觉 `deepseek-v4-flash-vision-exp`（同一把 DeepSeek Key，无独立视觉密钥）。
+1. **DeepSeek 为主**：`AI_BASE_URL=https://api.deepseek.com/v1`、`AI_MODEL=deepseek-flash`（文本）；识图 `AI_VISION_DS_MODEL=deepseek-flash`（同一把 DeepSeek Key）。**2026-09-10 起 `deepseek-chat` 与 `deepseek-v4-flash-vision-exp` 已下线**，只剩 `deepseek-flash` / `deepseek-v4-pro`；模型名失效时识图会静默退到智谱，排查先看 `/api/ai/ocr` 响应里的 `vision_model`。
 2. **图片一律「先看图提文字(`_vision_extract_text`) → 再文本分析」**；**禁止**单次超大视觉生成（会 300s 超时/返回空）。单图/多图/带参考图都自动检测：**英语→整篇精读**，**数学/408→标准解析**。
 3. **内容不许减少**：英语整篇＝原文(左右两栏对照)+全文翻译+逐句拆解(结构/句型)+点词查义+重点短语/生词+多题解析；数学/408 解析要「**懂一题会三题**」+「**先讲透考点（当作读者不会）**」+ **1.1/1.2 分步**。英语解析**不用** 1.1/1.2，用【定位/来源/思路/总结】，且【定位】要点名具体句并引用关键词。
 4. **自动识别科目/二级科目**：解析输出 `subject_hint` → 后端 `_auto_subject_ids` 填 `subject_id`/`sub_subject_id`（英语→阅读理解、数学→高等数学、408→计算机网络、政治→马原）。
@@ -56,7 +56,7 @@ Start-Process cmd -ArgumentList '/c','start "" /b D:\python\python.exe D:\dsh-ho
 
 ## OpenViking 记忆库（已跑通，勿动坏）
 - **权威配置**：`C:\Users\Administrator\.openviking\ov.conf`（工作区 `C:\Users\Administrator\.openviking`）。旧 `D:\dsh-home\openviking\ov.conf`、`start-server.cmd` 已弃用。
-- **VLM**（记忆抽取/查询扩展）：`provider=openai, model=deepseek-v4-flash-vision-exp, api_base=https://api.deepseek.com/v1, api_key=app .env 的 AI_API_KEY`。
+- **VLM**（记忆抽取/查询扩展）：`provider=openai, model=deepseek-flash, api_base=https://api.deepseek.com/v1, api_key=app .env 的 AI_API_KEY`（旧 `deepseek-v4-flash-vision-exp` 已下线）。自启脚本 `CONF` 必须指向权威配置（已修正，日志会回显路径）。
 - **embedding**：智谱 `embedding-3`（2048 维）。
 - 服务端 `127.0.0.1:1933`（`auth_mode=dev`）；`ov` CLI 已配 `local`；`pending/` 会话启动时回放（≤50/次、7 天 TTL、重试 3 次）。
 - 自启：`OpenViking自启.vbs` → `D:\dsh-home\scripts\start_openviking.py`（其 CONF 必须指向权威配置）。

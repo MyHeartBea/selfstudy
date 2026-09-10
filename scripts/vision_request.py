@@ -32,8 +32,9 @@ def env(name: str, default: str = "") -> str:
 
 def build_providers():
     result = []
-    # 与 backend/app/config.py 保持一致：DS 通道模型名缺省 deepseek-v4-flash-vision-exp
-    ds_model = env("AI_VISION_DS_MODEL", "deepseek-v4-flash-vision-exp")
+    # 与 backend/app/config.py 保持一致：DS 通道模型名缺省 deepseek-flash
+    # （2026-09-10 起 deepseek-v4-flash-vision-exp 已下线）
+    ds_model = env("AI_VISION_DS_MODEL", "deepseek-flash")
     if ds_model and env("AI_API_KEY"):
         result.append(
             ("deepseek-vision", ds_model, env("AI_BASE_URL"), env("AI_API_KEY"))

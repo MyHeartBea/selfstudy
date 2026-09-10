@@ -50,7 +50,7 @@ class Settings:
     # AI 服务（OpenAI 兼容接口，可在 backend/.env 中配置）
     AI_API_KEY = os.environ.get("AI_API_KEY", "")
     AI_BASE_URL = os.environ.get("AI_BASE_URL", "https://api.openai.com/v1")
-    AI_MODEL = os.environ.get("AI_MODEL", "gpt-4o-mini")
+    AI_MODEL = os.environ.get("AI_MODEL", "deepseek-flash")
     # 可选：支持图片的视觉模型，例如 gpt-4o-mini、qwen-vl-max、豆包视觉模型。
     # 配置后，截图识别会优先直接交给视觉模型，比本地 OCR 更准。
     AI_VISION_MODEL = os.environ.get("AI_VISION_MODEL", "")
@@ -66,9 +66,10 @@ class Settings:
     AI_VISION_3_MODEL = os.environ.get("AI_VISION_3_MODEL", "")
     AI_VISION_3_BASE_URL = os.environ.get("AI_VISION_3_BASE_URL", "")
     AI_VISION_3_API_KEY = os.environ.get("AI_VISION_3_API_KEY", "")
-    # DeepSeek 多模态视觉模型（DeepSeek-V4-Flash-Vision-Exp，走 AI_BASE_URL/AI_API_KEY，
-    # 不占用 AI_VISION_* 视觉密钥）：作为识图首选，便宜且精度高。
-    AI_VISION_DS_MODEL = os.environ.get("AI_VISION_DS_MODEL", "deepseek-v4-flash-vision-exp")
+    # DeepSeek 多模态视觉模型（走 AI_BASE_URL/AI_API_KEY，不占用 AI_VISION_* 视觉密钥）：
+    # 作为识图首选，便宜且精度高。2026-09-10 起模型名为 `deepseek-flash`
+    # （旧的 `deepseek-v4-flash-vision-exp` 已从 /v1/models 下线，会导致首选通道静默失败）。
+    AI_VISION_DS_MODEL = os.environ.get("AI_VISION_DS_MODEL", "deepseek-flash")
     AI_TIMEOUT = int(os.environ.get("AI_TIMEOUT", "240"))
     # 首选 DeepSeek Vision 通道可处理复杂试题图片，因此给予更长的单次预算。
     AI_VISION_PRIMARY_TIMEOUT = int(

@@ -110,10 +110,11 @@ npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /images 到 8000
 复制 `backend/.env.example` 为 `backend/.env`：
 
 ```bash
-AI_API_KEY=your-api-key          # DeepSeek 等文本模型
+AI_API_KEY=your-api-key          # DeepSeek key（文本 + 识图共用）
 AI_BASE_URL=https://api.deepseek.com/v1
-AI_MODEL=deepseek-chat
-AI_VISION_MODEL=...              # 可选：视觉通道（详见 .env.example）
+AI_MODEL=deepseek-flash          # 文本模型（deepseek-chat 已下线）
+AI_VISION_DS_MODEL=deepseek-flash  # 识图首选通道（同一把 DeepSeek key）
+AI_VISION_MODEL=...              # 可选：视觉兜底通道（详见 .env.example）
 API_TOKEN=...                    # 可选：设置后 /api 需携带 X-API-Token
 AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 ```

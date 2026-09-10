@@ -48,11 +48,15 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
 |---|---|---|
 | `AI_API_KEY` | DeepSeek key | 文本模型 |
 | `AI_BASE_URL` | `https://api.deepseek.com/v1` | DeepSeek 端点 |
-| `AI_MODEL` | `deepseek-chat` | 文本模型名 |
-| `AI_VISION_MODEL` | `glm-4.6v-flash` | 视觉模型（当前**智谱**） |
-| `AI_VISION_MODEL_FALLBACK` | `glm-4.6v-flashx` | 视觉兜底 |
+| `AI_MODEL` | `deepseek-flash` | 文本模型名（`deepseek-chat` 已下线） |
+| `AI_VISION_MODEL` | `glm-4.6v-flash` | 视觉兜底通道（智谱） |
+| `AI_VISION_MODEL_FALLBACK` | `glm-4.6v-flashx` | 智谱视觉兜底 |
 | `AI_VISION_BASE_URL` | `https://open.bigmodel.cn/api/paas/v4` | 智谱视觉端点 |
 | `AI_VISION_API_KEY` | 智谱 key | 智谱视觉 / 嵌入 |
+| `AI_VISION_DS_MODEL` | `deepseek-flash` | **识图首选通道**（走 `AI_API_KEY`，不占智谱额度） |
+
+> **2026-09-10 模型变更（重要）**：DeepSeek 现在只提供 `deepseek-flash` 与 `deepseek-v4-pro`（`GET /v1/models` 实测）。旧的 `deepseek-chat` 与 `deepseek-v4-flash-vision-exp` **都已下线**——后者曾是识图首选，模型名失效后 DS 通道会**静默失败并偷偷退到智谱**（症状：识图还能用，但更慢/不稳，且日志里只有一行异常）。
+> 现在文本与识图统一用 `deepseek-flash`（同一把 `AI_API_KEY`）。实测：单图识图 18s、准确输出 LaTeX（`\sin x\sim x`、`1-\cos x\sim\frac{x^2}{2}`）；文本解析 26s、点词查义 6s；`/api/ai/ocr` 返回结构体里的 `vision_model` 字段会写明实际用的通道，排查识图问题先看它。
 
 ### 4.1 运行参数（同样在 backend/.env）
 
@@ -181,7 +185,8 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
 详见 `docs/NEW_SESSION.md` 的 openviking 段。要点：
 - **规范配置**：`~\\.openviking\\ov.conf`（JSON；工作区 `C:\\Users\\Administrator\\.openviking`，记忆库 `pending/vectordb/viking` 都在此），监听 127.0.0.1:1933。
 - **embedding**：智谱 `provider=openai`、`api_base=https://open.bigmodel.cn/api/paas/v4`、`model=embedding-3`、`dimension=2048`、`api_key`=app `.env` 的 `AI_VISION_API_KEY`。
-- **VLM**（生成式，用于**记忆抽取 + 查询扩展**）：`provider=openai`、`model=deepseek-v4-flash-vision-exp`、`api_base=https://api.deepseek.com/v1`、`api_key`=app `.env` 的 `AI_API_KEY`。缺此块会报 `api_key client option must be set` 导致记忆抽取失败。
+- **VLM**（生成式，用于**记忆抽取 + 查询扩展**）：`provider=openai`、`model=deepseek-flash`、`api_base=https://api.deepseek.com/v1`、`api_key`=app `.env` 的 `AI_API_KEY`。缺此块会报 `api_key client option must be set` 导致记忆抽取失败。旧的 `deepseek-v4-flash-vision-exp` 已下线。
+- **自启脚本已修正**：`D:\dsh-home\scripts\start_openviking.py` 原先把 `CONF` 指向**已弃用**的 `D:\dsh-home\openviking\ov.conf`（那份还残留过期的 vlm 模型名 → 重启后会踩坑）。现已改为 `C:\Users\Administrator\.openviking\ov.conf`，并在启动日志里回显所用配置路径；两份配置的 vlm.model 也已同步为 `deepseek-flash`（两者 workspace 相同，切换不丢数据）。
 - **自启**：启动文件夹唯一条目 `OpenViking自启.vbs`（幂等，先查 1933）→ `D:\\dsh-home\\scripts\\start_openviking.py`；该脚本 `CONF` 必须指向 `C:\\Users\\Administrator\\.openviking\\ov.conf`。
 - **已弃用，勿再使用**：`start-server.cmd`、启动文件夹里 `openviking-server.cmd`、`D:\\dsh-home\\openviking\\ov.conf`（指向 D 盘另一工作区）。
 
