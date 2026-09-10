@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      # CI 只装跑测试必需的子集。python-docx / pypdf / Pillow / winsdk 是 Windows 侧
+      # 可选依赖，没有它们时相关测试必须自行 skip（曾因缺 python-docx 导致 CI 变红）
       - run: pip install "fastapi>=0.110" "uvicorn[standard]>=0.29" "pydantic>=2.5" "httpx>=0.27" coverage
       - name: Run backend tests
         shell: bash
@@ -30,7 +32,7 @@ jobs:
           coverage run -m unittest discover -s tests -v
           coverage report --fail-under=35
 
-  frontend-build:
+  frontend-test-build:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -41,4 +43,9 @@ jobs:
         with:
           node-version: '20'
       - run: npm install
-      - run: npm run build
+      # 原先只 build、不跑测试：卡片点击 / 知识点弹窗 / 关联错题区 这些
+      # DOM 级回归（happy-dom + @vue/test-utils）在 CI 里从未被验证
+      - name: Run frontend tests
+        run: npm test
+      - name: Build frontend
+        run: npm run build

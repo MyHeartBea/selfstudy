@@ -260,12 +260,23 @@ class DocxImportBranchTest(unittest.TestCase):
         self.assertIn("page_pils: dict = {}", src, "page_pils 必须在分支前初始化")
 
     def test_docx_extraction_returns_text(self):
-        """真实 docx（若样例存在）应能抽出文本，且不被判为扫描版。"""
+        """真实 docx（若样例存在）应能抽出文本，且不被判为扫描版。
+
+        CI 不装 python-docx（也没有 D:\\km-v2\\真题 这个目录），因此这里要显式跳过，
+        否则本地能过、CI 直接 ImportError（真实踩过）。
+        """
+        try:
+            import docx  # noqa: F401
+        except ImportError:
+            self.skipTest("未安装 python-docx（CI 环境即如此）")
+
         sample = None
-        for p in Path(r"D:\km-v2\真题").rglob("*.docx"):
-            if not p.name.startswith("~$") and p.stat().st_size > 10000:
-                sample = p
-                break
+        papers_dir = Path(r"D:\km-v2\真题")
+        if papers_dir.is_dir():
+            for p in papers_dir.rglob("*.docx"):
+                if not p.name.startswith("~$") and p.stat().st_size > 10000:
+                    sample = p
+                    break
         if sample is None:
             self.skipTest("真题目录里没有可用的 docx 样例")
         text = eps.extract_text(sample)
