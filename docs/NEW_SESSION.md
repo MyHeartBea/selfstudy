@@ -29,8 +29,10 @@
 ```powershell
 # 后端（8000）
 Start-Process cmd -ArgumentList '/c','cd /d D:\km-v2\backend && start "" /b "D:\python\python.exe" main.py > km-server.log 2> km-server.err.log' -WindowStyle Hidden
-# 验证：期望 200
-Invoke-WebRequest http://127.0.0.1:8000/stats -UseBasicParsing | % StatusCode
+# 验证：必须看 JSON，不能只看状态码
+# ⚠️ 勿用 /stats —— 那是前端 SPA 路由，会被 `/{full_path:path}` 回退成 index.html 返回 200（假阳性）
+(Invoke-WebRequest http://127.0.0.1:8000/api/health -UseBasicParsing).Content   # 期望 {"code":0,...,"status":"ok"}
+# 也可看 /api/dashboard（错题/复习聚合）
 # openviking（1933）
 Start-Process cmd -ArgumentList '/c','start "" /b D:\python\python.exe D:\dsh-home\scripts\start_openviking.py' -WindowStyle Hidden
 ```
