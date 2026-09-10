@@ -1061,6 +1061,68 @@ def vision_extract_text(
     )
 
 
+# 多图提文字：每批张数。批太大会拖慢单次响应并降低逐图识别精度，故分批串行。
+VISION_BATCH_SIZE = 3
+
+
+def vision_extract_text_multi(
+    images: List[str],
+    instruction: str = "",
+    timeout: int | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
+) -> str:
+    """多图按顺序提取文字并合并为一段文本（供「先提文字 → 再文本分析」链路）。
+
+    按 VISION_BATCH_SIZE 分批串行调用：既不会把小图拼成超大请求（避免超时/空返回），
+    又保留图片顺序，便于后续 AI 按原顺序理解材料。逐批失败不整体中断，
+    只记录哪几张没识别出来，尽量保住已识别内容。
+    """
+    cleaned = [str(img or "").strip() for img in (images or []) if str(img or "").strip()]
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return _vision_extract_text(
+            cleaned,
+            instruction=instruction,
+            timeout=timeout,
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+        )
+
+    chunks: List[str] = []
+    failures: List[str] = []
+    total = len(cleaned)
+    for start in range(0, total, VISION_BATCH_SIZE):
+        batch = cleaned[start : start + VISION_BATCH_SIZE]
+        label = (
+            f"第{start + 1}张"
+            if len(batch) == 1
+            else f"第{start + 1}-{start + len(batch)}张"
+        )
+        try:
+            text = _vision_extract_text(
+                batch,
+                instruction=instruction,
+                timeout=timeout,
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
+            )
+        except Exception:
+            text = ""
+        if text and text.strip():
+            chunks.append(f"【{label}】\n{text.strip()}")
+        else:
+            failures.append(label)
+
+    if failures:
+        chunks.append("（以下图片未能识别出文字：" + "、".join(failures) + "）")
+    return "\n\n".join(chunks).strip()
+
+
 _KNOWLEDGE_PROMPT = """你是一名知识点整理助手。请根据用户提供的学习材料，提炼为一个结构化的知识点，输出严格的 JSON（不要 Markdown），字段如下：
 {"tag_name": "知识点标准名称（简短，3-12 字，如：等价无穷小、地址转换、长难句结构）",
 "summary": "知识点总结：讲清核心概念、关键公式（数学公式用 $...$ LaTeX）、怎么用、常见易错点，300-500 字，可用 Markdown 列表/表格",

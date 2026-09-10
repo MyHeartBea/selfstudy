@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 
 import request from '../api/request'
 import RichText from '../components/RichText.vue'
+import { markdownToPlain } from '../utils/markdown'
 import { formatTime } from '../composables/useBaseData'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
@@ -94,7 +95,8 @@ function plainPreview(item) {
           !value.trim().startsWith('#') &&
           !value.trim().startsWith('|'),
       ) || ''
-  return line.replace(/[$*`]/g, '').slice(0, 80)
+  // 同样剥掉行内标记（** / ` / 表格竖线），只留可读正文
+  return markdownToPlain(line).slice(0, 80)
 }
 
 // 分类印章配色：按分类名稳定散列到五色
@@ -239,11 +241,16 @@ onMounted(loadFormulas)
         :style="{ '--enter-delay': Math.min(i, 11) * 50 + 'ms', '--fcol': catColor(item.category) }"
       >
         <span class="f-mark" aria-hidden="true">∑</span>
+        <!-- 整卡可点：铺满卡片、位于操作按钮之下的点击层 -->
+        <button
+          type="button"
+          class="f-hit"
+          :aria-label="`查看公式 ${item.title}`"
+          @click="openDetail(item)"
+        ></button>
         <div class="formula-head">
           <span class="cat-seal">{{ item.category }}</span>
-          <span class="formula-title" role="button" tabindex="0" @click="openDetail(item)" @keydown.enter="openDetail(item)">
-            {{ item.title }}
-          </span>
+          <span class="formula-title">{{ item.title }}</span>
         </div>
         <div class="formula-preview">{{ plainPreview(item) }}</div>
         <div class="formula-foot">
@@ -364,7 +371,7 @@ onMounted(loadFormulas)
   flex-direction: column;
   gap: 10px;
   padding: 16px 16px 14px 20px;
-  cursor: default;
+  cursor: pointer;
   transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease), transform 0.25s var(--spring);
   animation: fcard-in 0.5s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
@@ -384,9 +391,30 @@ onMounted(loadFormulas)
   background: linear-gradient(180deg, var(--fcol), color-mix(in srgb, var(--fcol) 30%, transparent));
   opacity: 0.8;
   transition: width 0.25s var(--spring);
+  /* 左侧色条是纯装饰：不参与命中测试，避免盖住整卡点击层 */
+  pointer-events: none;
 }
 .formula-card:hover { border-color: color-mix(in srgb, var(--fcol) 45%, var(--line)); box-shadow: var(--shadow-2); transform: translateY(-3px); }
 .formula-card:hover::before { width: 6px; }
+/* 整卡点击层（位于操作按钮之下，避免按钮嵌套按钮） */
+.f-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: inherit;
+}
+.f-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+/* 卡片内部可交互元素压在点击层之上，防止"点按钮变成查看" */
+.formula-head,
+.formula-preview,
+.formula-foot,
+.cat-seal { position: relative; z-index: 2; }
+.formula-actions .op-link { position: relative; z-index: 3; }
 /* 水墨 ∑ 水印 */
 .f-mark {
   position: absolute;
@@ -429,12 +457,11 @@ onMounted(loadFormulas)
   font-weight: 700;
   font-size: 14.5px;
   color: var(--ink);
-  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.formula-title:hover { color: var(--accent-ink); }
+.formula-card:hover .formula-title { color: var(--accent-ink); }
 
 .formula-preview {
   font-size: 12.5px;

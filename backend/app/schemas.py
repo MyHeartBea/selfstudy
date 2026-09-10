@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class MistakeCreate(BaseModel):
@@ -96,11 +96,20 @@ class AiAnalyzeRequest(BaseModel):
 
 
 class AiOcrRequest(BaseModel):
-    image_base64: str = Field(min_length=1, max_length=20000000)
+    image_base64: str = Field(default="", max_length=20000000)
+    # 可选：多图（知识点粘贴多张截图时一次提交；按顺序逐张提文字后合并）
+    images: List[str] = Field(default_factory=list, max_length=10)
     # 可选：补充解题要求/思路，AI 解析时须遵循
     instruction: str = Field(default="", max_length=5000)
     # 可选：参考图片（按图中思路/方法解题）
     reference_image_base64: str = Field(default="", max_length=20000000)
+
+    @model_validator(mode="after")
+    def _require_at_least_one_image(self):
+        """image_base64 与 images 至少给一个，否则后续识别必然空跑。"""
+        if not self.image_base64.strip() and not any(str(i).strip() for i in self.images):
+            raise ValueError("image_base64 与 images 至少需要提供一个")
+        return self
 
 
 class AiEnglishRequest(BaseModel):

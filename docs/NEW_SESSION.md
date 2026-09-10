@@ -20,10 +20,21 @@
 9. **超时**：前端 axios 300s；后端 `AI_TIMEOUT=240`、`AI_OCR_TOTAL_TIMEOUT=290`、`AI_VISION_PRIMARY_TIMEOUT=240`。
 10. **生词本**：`vocab_items.kind`(word/phrase) + 分类筛选 + 点词查义 `/api/ai/sense` + 去重导入 `/vocab/import-english`。
 11. **临时文件放 `D:\temp`**；**密钥不打印**（`.env` 不入库）；改完 **`git add -A && git commit && git push`**。
+12. **卡片整卡可点**：知识点/公式卡片点任意位置直接开详情（铺满的 `.k-hit`/`.f-hit` 点击层，操作按钮压在它之上，装饰元素 `pointer-events:none`）；卡片预览用 `markdownToPlain()` 去 Markdown 标记，详情才用 `RichText`。
+13. **知识点多图**：`/ai/knowledge-from-image` 收 `{images:[...]}`，按序分批提文字后合并成**一条**草稿；弹窗打开即重置（新增清空/编辑载入），粘贴监听用 `watchEffect` 同步挂载；多文件读取用 `Promise.all` 而非 `for...of + await`。
 
 ## 关键文件
-- 后端：`app/services/ai_service.py`、`app/routers/ai.py`（`/ai/english`、`/ai/ocr`、`/ai/analyze`、`/ai/sense`、`_auto_subject_ids`）、`app/services/vocab_service.py`、`app/models/tables.py`、`app/database.py`。
-- 前端：`components/EnglishAnalysisPanel.vue`（核心）、`views/CaptureView.vue`、`components/MistakeCard.vue`、`components/DetailMeta.vue`、`ui/QuestionImages.vue`、`utils/markdown.js`、`components/RichText.vue`、`ui/UiModal.vue`。
+- 后端：`app/services/ai_service.py`、`app/routers/ai.py`（`/ai/english`、`/ai/ocr`、`/ai/analyze`、`/ai/sense`、`_auto_subject_ids`、`_vision_extract_with_fallback`）、`app/services/vocab_service.py`、`app/models/tables.py`、`app/database.py`。
+- 前端：`components/EnglishAnalysisPanel.vue`（核心）、`views/CaptureView.vue`、`components/KnowledgeEditModal.vue`、`views/KnowledgeView.vue`、`views/FormulaView.vue`、`components/MistakeCard.vue`、`components/DetailMeta.vue`、`ui/QuestionImages.vue`、`utils/markdown.js`、`components/RichText.vue`、`ui/UiModal.vue`。
+
+## 测试与验证（含手法的坑）
+- 后端：`cd backend && python -m unittest discover -s tests`（54 个）。
+- 前端：`cd frontend && npm test`（Vitest 31 个，含 DOM 级交互回归；`vite.config.js` 里 `test.environment='happy-dom'`）。
+- **UiModal 是 Teleport 到 `document.body`**：测试里查弹窗必须 `document.querySelector`，不要用 `wrapper.find`。
+- **测试收尾必须 `unmount()`**，不要在 `beforeEach` 里 `document.body.innerHTML=''`——直接清空会让 Vue 的 Teleport 记账错乱，组件监听器静默失效（踩过）。
+- 真实浏览器端到端（可选）：Chrome `--headless=new --remote-debugging-port` + 裸 CDP（标准库即可），
+  用 `history.pushState({},'','/knowledge')+dispatchEvent(new PopStateEvent('popstate'))` 切路由
+  （router 是 `createWebHistory`，不是 hash 路由）。
 
 ## 启动与验证
 ```powershell

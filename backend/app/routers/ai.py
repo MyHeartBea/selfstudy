@@ -389,6 +389,85 @@ def word_sense(word: str = Query(..., min_length=1, max_length=60)):
         return error(502, f"AI 服务调用失败：{exc}")
 
 
+def _vision_extract_with_fallback(images: List[str], instruction: str) -> tuple:
+    """多通道视觉提文字 + 本地 OCR 兜底。
+
+    返回 (文本, 错误信息)：文本非空即成功（此时错误信息通常为空）；
+    文本为空时错误信息说明失败原因。整体受 AI_OCR_TOTAL_TIMEOUT 预算约束。
+    """
+    last_error = ""
+    providers = _vision_providers()
+    started = time.monotonic()
+
+    def remaining() -> float:
+        return max(0.0, settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started))
+
+    def call_provider(vision_model, vision_base_url, vision_api_key):
+        budget = remaining()
+        if budget <= 2:
+            raise RuntimeError("整体识别预算耗尽")
+        return ai_service.vision_extract_text_multi(
+            images,
+            timeout=_vision_timeout_for(vision_model, budget),
+            instruction=instruction,
+            model=vision_model,
+            base_url=vision_base_url,
+            api_key=vision_api_key,
+        )
+
+    raw_text = ""
+    if providers:
+        futures = {
+            _VISION_EXECUTOR.submit(call_provider, model, base_url, api_key): (
+                model,
+                base_url,
+                api_key,
+            )
+            for model, base_url, api_key in providers
+        }
+        pending = set(futures)
+        while pending:
+            wait_timeout = max(0.1, min(2.0, remaining()))
+            done, _ = wait(
+                pending,
+                timeout=wait_timeout,
+                return_when=FIRST_COMPLETED,
+            )
+            if not done:
+                if remaining() <= 2:
+                    break
+                continue
+            for future in done:
+                pending.discard(future)
+                try:
+                    text = future.result()
+                    if text and text.strip():
+                        raw_text = text.strip()
+                        break
+                except Exception as exc:
+                    last_error = str(exc)
+            if raw_text:
+                for f in pending:
+                    f.cancel()
+                break
+
+    # 视觉失败降级本地 OCR
+    if not raw_text and local_ocr.is_available():
+        locals_text: List[str] = []
+        for idx, img in enumerate(images):
+            try:
+                text = local_ocr.recognize_base64(img).strip()
+            except Exception as exc:
+                last_error = f"{last_error or '视觉失败'}; 本地 OCR: {exc}"
+                continue
+            if text:
+                label = f"第{idx + 1}张" if len(images) > 1 else "识别结果"
+                locals_text.append(f"【{label}】\n{text}")
+        raw_text = "\n\n".join(locals_text).strip()
+
+    return raw_text, last_error
+
+
 def _vision_providers() -> List[tuple]:
     """构建视觉 provider 列表 (model, base_url, api_key)。
 
@@ -430,69 +509,16 @@ def _vision_providers() -> List[tuple]:
 
 @router.post("/knowledge-from-image", dependencies=[Depends(ai_rate_limit)])
 def knowledge_from_image(body: AiOcrRequest):
-    """粘贴图片 → 视觉识别提取文字 → AI 整理为知识点草稿（可带重点关注指令）。"""
-    last_vision_error = ""
-    providers = _vision_providers()
-    started = time.monotonic()
+    """粘贴图片 → 视觉识别提取文字 → AI 整理为知识点草稿（可带重点关注指令）。
 
-    def remaining() -> float:
-        return max(0.0, settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started))
+    支持一次提交多张截图（body.images）：按粘贴顺序逐张提文字后合并，
+    再统一整理成一个知识点草稿——避免"粘一张就分析一张"把同一知识点拆碎。
+    """
+    images = [str(img).strip() for img in body.images if str(img or "").strip()]
+    if not images:
+        images = [body.image_base64.strip()]
 
-    def call_provider(vision_model, vision_base_url, vision_api_key):
-        budget = remaining()
-        if budget <= 2:
-            raise RuntimeError("整体识别预算耗尽")
-        return ai_service.vision_extract_text(
-            body.image_base64,
-            timeout=_vision_timeout_for(vision_model, budget),
-            instruction=body.instruction,
-            model=vision_model,
-            base_url=vision_base_url,
-            api_key=vision_api_key,
-        )
-
-    raw_text = ""
-    if providers:
-        futures = {
-            _VISION_EXECUTOR.submit(call_provider, model, base_url, api_key): (
-                model,
-                base_url,
-                api_key,
-            )
-            for model, base_url, api_key in providers
-        }
-        pending = set(futures)
-        while pending:
-            wait_timeout = max(0.1, min(2.0, remaining()))
-            done, _ = wait(
-                pending,
-                timeout=wait_timeout,
-                return_when=FIRST_COMPLETED,
-            )
-            if not done:
-                if remaining() <= 2:
-                    break
-                continue
-            for future in done:
-                pending.discard(future)
-                try:
-                    text = future.result()
-                    if text and text.strip():
-                        raw_text = text.strip()
-                        break
-                except Exception as exc:
-                    last_vision_error = str(exc)
-            if raw_text:
-                for f in pending:
-                    f.cancel()
-                break
-
-    # 视觉失败降级本地 OCR
-    if not raw_text and local_ocr.is_available():
-        try:
-            raw_text = local_ocr.recognize_base64(body.image_base64).strip()
-        except Exception as exc:
-            last_vision_error = f"{last_vision_error or '视觉失败'}; 本地 OCR: {exc}"
+    raw_text, last_vision_error = _vision_extract_with_fallback(images, body.instruction)
 
     if not raw_text:
         return error(502, f"图片识别失败：{last_vision_error or '未能提取到文字'}")

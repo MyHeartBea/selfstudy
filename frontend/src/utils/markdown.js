@@ -226,3 +226,40 @@ export function renderMarkdown(text) {
   }
   return html.join('')
 }
+
+/**
+ * 把 Markdown 压成纯文本单行摘要，供**卡片预览**使用。
+ *
+ * 卡片上直接截断 Markdown 原文会把 `## 核心概念`、`**加粗**`、表格竖线、列表符号
+ * 原样显示出来，很难看。这里剥掉标记只留正文，再用 CSS line-clamp 截断；
+ * 完整排版仍由详情弹窗的 RichText 负责。
+ */
+export function markdownToPlain(text) {
+  return String(text || '')
+    .replace(/\r/g, '')
+    // 代码块
+    .replace(/```[\s\S]*?```/g, ' ')
+    // 表格分隔行（| --- | --- |）
+    .replace(/^\s*\|?[\s:|-]{3,}\|?\s*$/gm, ' ')
+    // 标题符号
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    // 引用
+    .replace(/^\s{0,3}>\s?/gm, '')
+    // 列表符号
+    .replace(/^\s{0,3}[-*+]\s+/gm, '')
+    .replace(/^\s{0,3}\d+[.)]\s+/gm, '')
+    // 图片 / 链接
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    // 行内代码
+    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
+    // 强调
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    // 表格竖线
+    .replace(/\|/g, ' ')
+    // 压缩空白
+    .replace(/\s+/g, ' ')
+    .trim()
+}

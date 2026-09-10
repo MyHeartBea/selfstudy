@@ -80,7 +80,10 @@
 - `POST /api/ai/analyze`：`{"text", "instruction"}` 文本解析
 - `POST /api/ai/ocr`：`{"image_base64", "instruction", "reference_image_base64"}` 三视觉通道轮询，
   全败退回本地 OCR
-- `POST /api/ai/knowledge-from-image`：图片生成知识点草稿
+- `POST /api/ai/knowledge-from-image`：图片生成知识点草稿。支持一次提交**多张图**（知识点截图常分多张）：
+  - `{"images": [b64, b64, ...], "instruction"}` —— 按顺序分批（每批 3 张）提文字后合并，**只生成一条草稿**；
+  - 兼容旧调用 `{"image_base64": b64}`；`image_base64` 与 `images` 至少给一个（否则 422）。
+  - 逐批失败不整体中断，未识别的批次会在文本里标注「未能识别」。
 
 AI 端点需在 `backend/.env` 配置密钥；有每分钟限流（默认 30）。设置 `API_TOKEN` 后所有 `/api`
 请求需携带 `X-API-Token` 或 `Authorization: Bearer`。

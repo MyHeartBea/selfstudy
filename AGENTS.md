@@ -31,7 +31,8 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（54 个）
+cd frontend && npm test                                  # Vitest 31 个；含 DOM 级交互回归（happy-dom）
 ```
 
 ## 3. 提交与数据规范（务必遵守）
@@ -69,6 +70,9 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 6. **多图全存**：长题多张截图**全部**保存到 `images`；错题列表卡片**只显示第 1 张**，点进详情显示全部。
 7. **表格 / 图**：`RichText` 支持 Markdown 表格 + 十六进制等宽 `hex-dump`；AI 只会识别图不会重绘，正确表格 / 拓扑图看**原图**。
 8. **生词本**：`vocab_items` 有 `kind`（word / phrase）+「全部 / 单词 / 短语」筛选 +「词语」标签；点词查义 `/api/ai/sense`；导入 `/vocab/import-english`（去重）。
+9. **多图 = 一次分析**：`/ai/knowledge-from-image` 接受 `{images:[...]}`（≥2 张按 3 张一批、按序提文字后合并），**只产出一条知识点草稿**——不要把「粘一张分析一张」改回来。`AiOcrRequest` 的 `image_base64` 与 `images` 至少给一个。
+10. **卡片点击**：知识点/公式卡片必须**整卡可点**打开详情。实现方式是在卡片里放一个铺满的 `.k-hit` / `.f-hit` 按钮（位于操作按钮**之下**），操作按钮加 `position:relative; z-index` 压在点击层之上；**不要**把按钮嵌套进按钮、也不要用一个整卡 `@click` 把操作按钮一起吞掉。装饰性元素（色脊/水印）加 `pointer-events:none`。卡片预览要用 `markdownToPlain()` 剥掉 `##`/`**`/表格竖线，详情才走 RichText。
+11. **弹窗状态**：`KnowledgeEditModal` 打开时必须重置（新增清空、编辑载入）；监听器（如 Ctrl+V 粘贴）要用 `watchEffect` 按「是否打开」同步挂载，**不要**只在 `false→true` 的 watch 回调里挂——组件若以 `modelValue=true` 挂载会静默失效。多文件读取用 `Promise.all(accepted.map(...))`，**禁止** `for (const f of files) { await read(f) }`（`for...of` 复用绑定会导致只留下最后一张）。
 
 ## 6. 关键文件
 后端（`backend/app/`）：
@@ -84,6 +88,9 @@ cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真�
 - `ui/`：基件库（GlassCard/MetricTile/RingProgress/AreaChart/BarRow/Heatmap/Skeleton/StageBadge + 全套表单反馈件）。
 - `views/DesignView.vue`：/design 画廊（全组件双主题打磨场，不入导航）。
 - `components/EnglishAnalysisPanel.vue`：整篇精读（核心）。
+- `components/KnowledgeEditModal.vue`：知识点新增/编辑（多图暂存 → 一次分析、打开即重置）。
+- `views/KnowledgeView.vue`：知识点卡片墙（整卡可点 `.k-hit` + 只读详情弹窗）；`views/FormulaView.vue`：公式卡（`.f-hit`）。
+- `utils/markdown.js`：`renderMarkdown`（详情排版）与 `markdownToPlain`（卡片纯文本预览）。
 - `views/CaptureView.vue`：多图 / 粘贴目标 / 自动检测 / 分析进度叙事。
 - `views/StatsView.vue`：Bento 统计；`views/ReviewView.vue`：复习沉浸舞台。
 - `components/MistakeCard.vue`：列表首图；`components/DetailMeta.vue` + `ui/QuestionImages.vue`：详情全图 / 首图。

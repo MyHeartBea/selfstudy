@@ -13,10 +13,12 @@ import {
 } from '../composables/useBaseData'
 import { useSubSubject } from '../composables/useSubSubject'
 import KnowledgeEditModal from '../components/KnowledgeEditModal.vue'
-import MathText from '../components/MathText.vue'
+import RichText from '../components/RichText.vue'
+import { markdownToPlain } from '../utils/markdown'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
 import UiButton from '../ui/UiButton.vue'
+import UiModal from '../ui/UiModal.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
@@ -39,6 +41,8 @@ const filters = reactive({
 const editVisible = ref(false)
 const createVisible = ref(false)
 const editing = ref(null)
+const detailVisible = ref(false)
+const detailItem = ref(null)
 const summarizingId = ref(null)
 
 const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
@@ -66,6 +70,11 @@ async function loadKnowledge() {
     // 错误提示由请求拦截器统一处理
   } finally {
     loading.value = false
+    // 详情弹窗打开时，列表刷新后同步最新内容（如刚做完 AI 总结）
+    if (detailItem.value) {
+      const fresh = items.value.find((it) => it.id === detailItem.value.id)
+      if (fresh) detailItem.value = fresh
+    }
   }
 }
 
@@ -88,18 +97,30 @@ function practiceTag(tag) {
   })
 }
 
+/** 卡片摘要：剥掉 Markdown 标记再截断，避免把 ## / ** / 表格竖线显示出来。 */
+function plainSummary(text) {
+  return markdownToPlain(text)
+}
+
 function onSubjectChange() {
   filters.subSubjectId = null
   searchKnowledge()
 }
 
+function openDetail(row) {
+  detailItem.value = row
+  detailVisible.value = true
+}
+
 function openEdit(row) {
+  detailVisible.value = false
   editing.value = row
   createVisible.value = false
   editVisible.value = true
 }
 
 function openCreate() {
+  detailVisible.value = false
   editing.value = null
   editVisible.value = false
   createVisible.value = true
@@ -112,6 +133,7 @@ function onSaved() {
 }
 
 async function autoSummarize(row) {
+  if (!row || summarizingId.value) return
   summarizingId.value = row.id
   try {
     await request.post(`/knowledge/${row.id}/auto-summarize`)
@@ -214,6 +236,13 @@ onMounted(() => {
           class="k-card card"
           :style="{ '--enter-delay': Math.min(i, 11) * 50 + 'ms', '--kcol': subjectColor(row.subject_id) }"
         >
+          <!-- 整卡可点：铺满卡片且位于操作按钮之下的点击层，避免按钮嵌套在按钮里 -->
+          <button
+            type="button"
+            class="k-hit"
+            :aria-label="`查看知识点 ${row.tag_name}`"
+            @click="openDetail(row)"
+          ></button>
           <i class="k-spine" aria-hidden="true"></i>
           <div class="k-head">
             <h3 class="k-name">{{ row.tag_name }}</h3>
@@ -223,7 +252,7 @@ onMounted(() => {
             <UiTag size="sm" color="var(--teal)" soft>{{ subjectName(row.subject_id) }}</UiTag>
             <UiTag v-if="subSubjectName(row.sub_subject_id)" size="sm" soft>{{ subSubjectName(row.sub_subject_id) }}</UiTag>
           </div>
-          <p v-if="row.summary" class="k-summary"><MathText :text="row.summary" /></p>
+          <p v-if="row.summary" class="k-summary">{{ plainSummary(row.summary) }}</p>
           <div v-if="row.related_tags && row.related_tags.length" class="k-rel">
             <span class="k-rel-label">关联</span>
             <UiTag
@@ -244,6 +273,7 @@ onMounted(() => {
               {{ summarizingId === row.id ? '总结中…' : 'AI 总结' }}
             </button>
             <button class="op-link danger" @click="remove(row)"><Icon name="trash" :size="12" /></button>
+            <span class="k-open-hint" aria-hidden="true">点击查看全文</span>
           </div>
         </article>
       </div>
@@ -257,6 +287,54 @@ onMounted(() => {
         />
       </div>
     </template>
+
+    <!-- 知识点详情（点卡片直接查看全文） -->
+    <UiModal v-model="detailVisible" :title="detailItem ? detailItem.tag_name : ''" size="lg">
+      <div v-if="detailItem" class="k-detail">
+        <div class="k-detail-meta">
+          <UiTag size="sm" color="var(--teal)" soft>{{ subjectName(detailItem.subject_id) }}</UiTag>
+          <UiTag v-if="subSubjectName(detailItem.sub_subject_id)" size="sm" soft>
+            {{ subSubjectName(detailItem.sub_subject_id) }}
+          </UiTag>
+          <span class="k-detail-time num">
+            创建于 {{ formatTime(detailItem.created_at).slice(0, 10) }}
+          </span>
+        </div>
+
+        <div v-if="detailItem.related_tags && detailItem.related_tags.length" class="k-detail-rel">
+          <span class="k-rel-label">关联知识点</span>
+          <UiTag
+            v-for="t in detailItem.related_tags"
+            :key="t"
+            color="var(--gold)"
+            size="sm"
+            clickable
+            @click="() => { filters.tag = t; detailVisible = false; searchKnowledge() }"
+          >
+            {{ t }}
+          </UiTag>
+        </div>
+
+        <div v-if="detailItem.summary" class="k-detail-body">
+          <RichText :text="detailItem.summary" />
+        </div>
+        <p v-else class="muted">这条知识点还没有摘要，可以点「AI 总结」自动生成。</p>
+      </div>
+      <template #footer>
+        <UiButton variant="ghost" @click="detailVisible = false">关闭</UiButton>
+        <UiButton variant="outline" @click="practiceTag(detailItem.tag_name)">
+          <Icon name="play" :size="12" /> 练这道
+        </UiButton>
+        <UiButton
+          variant="outline"
+          :disabled="summarizingId === detailItem?.id"
+          @click="autoSummarize(detailItem)"
+        >
+          {{ summarizingId === detailItem?.id ? '总结中…' : 'AI 总结' }}
+        </UiButton>
+        <UiButton variant="primary" @click="openEdit(detailItem)">编辑</UiButton>
+      </template>
+    </UiModal>
 
     <KnowledgeEditModal v-model="editVisible" :row="editing" @saved="onSaved" />
     <KnowledgeEditModal v-model="createVisible" :row="null" is-create @saved="onSaved" />
@@ -312,6 +390,47 @@ onMounted(() => {
   box-shadow: var(--shadow-2);
   transform: translateY(-3px);
 }
+/* 整卡点击层：铺满卡片，位于操作按钮之下（z-index 0 < 2），
+   既能让整卡可点，又不会把按钮嵌套进按钮里（避免交互/无障碍问题） */
+.k-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: inherit;
+}
+.k-hit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+/* 卡片内部可交互元素一律压在点击层之上 */
+.k-spine,
+.k-head,
+.k-chips,
+.k-summary,
+.k-rel,
+.k-ops {
+  position: relative;
+  z-index: 2;
+}
+.k-spine { pointer-events: none; }
+.k-rel :deep(.ui-tag) { position: relative; z-index: 3; }
+/* 操作按钮要压在整卡点击层之上，保证点按钮不会误触"查看" */
+.k-ops .op-link { position: relative; z-index: 3; }
+.k-open-hint {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+  white-space: nowrap;
+}
+.k-card:hover .k-open-hint,
+.k-card:focus-within .k-open-hint { opacity: 1; }
 .k-spine {
   position: absolute;
   left: 0;
@@ -322,6 +441,8 @@ onMounted(() => {
   background: linear-gradient(180deg, var(--kcol), color-mix(in srgb, var(--kcol) 35%, transparent));
   opacity: 0.85;
   transition: width 0.25s var(--spring);
+  /* 色脊是纯装饰：不参与命中测试，避免盖住整卡点击层 */
+  pointer-events: none;
 }
 .k-card:hover .k-spine { width: 6px; opacity: 1; }
 .sk-card { animation: none; }
@@ -386,6 +507,19 @@ onMounted(() => {
 .op-link.warning:hover { background: var(--gold-soft); }
 .op-link.danger { color: var(--red); }
 .op-link.danger:hover { background: var(--red-soft); }
+
+/* 知识点详情弹窗 */
+.k-detail { display: flex; flex-direction: column; gap: 14px; }
+.k-detail-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.k-detail-time { font-size: 12px; color: var(--ink-3); margin-left: auto; }
+.k-detail-rel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.k-detail-body {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  background: var(--surface-2);
+}
+.muted { color: var(--ink-3); font-size: 13px; }
 
 .pagination-wrap {
   display: flex;
