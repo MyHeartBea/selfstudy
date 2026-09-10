@@ -43,6 +43,8 @@ const createVisible = ref(false)
 const editing = ref(null)
 const detailVisible = ref(false)
 const detailItem = ref(null)
+const linked = ref(null)
+const linkedLoading = ref(false)
 const summarizingId = ref(null)
 
 const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
@@ -110,6 +112,35 @@ function onSubjectChange() {
 function openDetail(row) {
   detailItem.value = row
   detailVisible.value = true
+  loadLinkedMistakes(row)
+}
+
+/** 知识点 ↔ 错题：拉取该知识点关联的错题与掌握情况 */
+async function loadLinkedMistakes(row) {
+  linked.value = null
+  linkedLoading.value = true
+  try {
+    const res = await request.get('/knowledge/linked-mistakes', {
+      params: { tag: row.tag_name, limit: 20 },
+      silent: true,
+    })
+    linked.value = res.data.data
+  } catch (err) {
+    linked.value = null
+  } finally {
+    linkedLoading.value = false
+  }
+}
+
+/** 一键练这个知识点下的错题（走按标签筛练习，后端原生支持 tag） */
+function practiceLinked() {
+  if (!detailItem.value) return
+  practiceTag(detailItem.value.tag_name)
+}
+
+function practiceOne(id) {
+  detailVisible.value = false
+  router.push({ path: '/review', query: { mode: 'curve', count: 1, mistake_id: id } })
 }
 
 function openEdit(row) {
@@ -319,11 +350,60 @@ onMounted(() => {
           <RichText :text="detailItem.summary" />
         </div>
         <p v-else class="muted">这条知识点还没有摘要，可以点「AI 总结」自动生成。</p>
+
+        <!-- 知识点 ↔ 错题：关联错题与掌握情况 -->
+        <div class="k-linked">
+          <div class="section-label">
+            关联错题
+            <span v-if="linked && linked.total" class="kl-count">共 {{ linked.total }} 题</span>
+            <span v-else-if="!linkedLoading" class="kl-count muted">无</span>
+          </div>
+          <div v-if="linkedLoading" class="muted">正在统计…</div>
+          <template v-else-if="linked && linked.total">
+            <div class="k-linked-stats">
+              <span class="ls-item"><b>{{ linked.total }}</b> 题</span>
+              <span class="ls-item">平均掌握 <b>{{ linked.stats.avg_mastery }}</b></span>
+              <span class="ls-item">累计答错 <b>{{ linked.stats.wrong_total }}</b> 次</span>
+              <span class="ls-item" :class="{ warn: linked.stats.due_now > 0 }">
+                今天到期 <b>{{ linked.stats.due_now }}</b>
+              </span>
+              <span v-if="linked.stats.never_reviewed" class="ls-item warn">
+                从未复习 <b>{{ linked.stats.never_reviewed }}</b>
+              </span>
+            </div>
+            <p v-if="linked.matched_by === 'related_tags'" class="field-hint">
+              本知识点名称与错题标签不同名，以下是通过关联标签
+              <b>{{ (linked.hit_tags || []).join('、') }}</b> 找到的错题
+            </p>
+            <ul class="k-linked-list">
+              <li v-for="m in linked.items" :key="m.id" class="kl-row">
+                <button class="kl-main" :title="m.question" @click="practiceOne(m.id)">
+                  <span class="kl-q">{{ plainSummary(m.question).slice(0, 60) }}</span>
+                  <span class="kl-meta">
+                    答错 {{ m.wrong_count }} 次 · 复习 {{ m.review_count }} 次 · 掌握 {{ m.mastery_level }}
+                  </span>
+                </button>
+                <button class="op-link primary" @click="practiceOne(m.id)">练这题</button>
+              </li>
+            </ul>
+            <p v-if="linked.total > linked.items.length" class="field-hint">
+              仅显示前 {{ linked.items.length }} 题（共 {{ linked.total }} 题）
+            </p>
+          </template>
+          <p v-else class="muted">
+            还没有关联到错题。错题的「知识点」标签与这条知识点同名时会自动关联；
+            也可以在下面补「关联知识点」来建立联系。
+          </p>
+        </div>
       </div>
       <template #footer>
         <UiButton variant="ghost" @click="detailVisible = false">关闭</UiButton>
-        <UiButton variant="outline" @click="practiceTag(detailItem.tag_name)">
-          <Icon name="play" :size="12" /> 练这道
+        <UiButton
+          v-if="linked && linked.total"
+          variant="outline"
+          @click="practiceLinked"
+        >
+          <Icon name="play" :size="12" /> 练这些题（{{ linked.total }}）
         </UiButton>
         <UiButton
           variant="outline"
@@ -497,6 +577,67 @@ onMounted(() => {
   background: var(--surface-2);
 }
 .muted { color: var(--ink-3); font-size: 13px; }
+
+/* 知识点 ↔ 错题链接 */
+.k-linked { display: flex; flex-direction: column; gap: 10px; }
+/* 弹窗正文可能很长（知识点摘要+关联错题），用一条分隔线把两者分开，滚动时更清楚 */
+.k-linked { border-top: 1px dashed var(--line); padding-top: 12px; }
+.kl-count { margin-left: 6px; font-weight: 700; color: var(--accent-ink); font-size: 12px; }
+.kl-count.muted { color: var(--ink-3); font-weight: 600; }
+.k-linked-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.ls-item b { color: var(--ink); font-size: 14px; }
+.ls-item.warn b { color: var(--accent-ink); }
+.field-hint { font-size: 12px; color: var(--ink-3); margin: 0; }
+.k-linked-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.kl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 0.14s var(--ease);
+}
+.kl-row:hover { background: var(--surface-2); }
+.kl-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+.kl-q {
+  font-size: 12.8px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kl-meta { font-size: 11px; color: var(--ink-3); }
 
 .pagination-wrap {
   display: flex;

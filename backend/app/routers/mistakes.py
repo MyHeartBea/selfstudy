@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 
-from app.database import get_connection, mistake_to_dict
+from app.database import get_connection, mistake_to_dict, snapshot_database
 from app.responses import error, ok, server_error
 from app.schemas import BatchMistakeRequest, GradeRequest, JudgeRequest, MistakeCreate, MistakeUpdate, SourceTypeUpdate
 from app.security import ai_rate_limit
@@ -219,7 +219,13 @@ def create_mistake(body: MistakeCreate):
 
 @router.post("/batch")
 def batch_mistakes(body: BatchMistakeRequest):
-    """批量暂停、恢复、删除错题或修改来源分类。"""
+    """批量暂停、恢复、删除错题或修改来源分类。
+
+    批量删除属于不可逆操作：先打一份数据快照，误删可回滚（快照见 /api/snapshots）。
+    """
+    snapshot = None
+    if body.action == "delete" and body.ids:
+        snapshot = snapshot_database(f"before-batch-delete-{len(body.ids)}")
     conn = get_connection()
     try:
         count = mistake_service.batch_mistakes(
@@ -230,7 +236,7 @@ def batch_mistakes(body: BatchMistakeRequest):
             source_year=body.source_year,
             source_name=body.source_name,
         )
-        return ok({"count": count}, "批量操作完成")
+        return ok({"count": count, "snapshot": snapshot}, "批量操作完成")
     except ValueError as exc:
         return error(400, str(exc))
     except Exception as exc:

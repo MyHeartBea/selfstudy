@@ -29,8 +29,10 @@ _load_env_file(BACKEND_DIR / ".env")
 class Settings:
     APP_NAME = "考研错题本 API"
     VERSION = "2.1.0"
-    HOST = "127.0.0.1"
-    PORT = 8000
+    # 监听地址：默认只听本机。要手机/局域网访问改成 .env 里的 HOST=0.0.0.0
+    # （务必同时设置 API_TOKEN，否则同网段任何人可读写全部数据）。
+    HOST = os.environ.get("HOST", "127.0.0.1")
+    PORT = int(os.environ.get("PORT", "8000"))
     DB_PATH = PROJECT_ROOT / "data" / "kaoyan_mistakes.db"
     BACKUP_DIR = PROJECT_ROOT / "data" / "backups"
     MAX_BACKUPS = 20
@@ -80,6 +82,13 @@ class Settings:
     API_TOKEN = os.environ.get("API_TOKEN", "")
     # AI 端点限流：每分钟最大请求数（默认 30，单机个人使用足够）。
     AI_RATE_LIMIT = int(os.environ.get("AI_RATE_LIMIT", "30"))
+
+    # 每日复习配额：每天最多做多少题（含新题），0 = 不限制。
+    # 错题积压时"今天到期 98 题"不必全做完；新题优先 + 逾期轮转，
+    # 今天没轮到的题会按 last_reviewed_at 顺序在之后的日子里轮到（不淘汰、不毕业）。
+    REVIEW_DAILY_LIMIT = int(os.environ.get("REVIEW_DAILY_LIMIT", "50"))
+    # 慢请求/错误监控阈值（毫秒）：超过则在日志里打 WARN 并在 /api/health 暴露计数
+    SLOW_REQUEST_MS = int(os.environ.get("SLOW_REQUEST_MS", "3000"))
 
 
 settings = Settings()

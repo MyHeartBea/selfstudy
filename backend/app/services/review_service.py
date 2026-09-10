@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
+from app.config import settings
 from app.database import local_day_bounds_utc, mistake_tag_condition, mistake_to_dict
 from app.services.answer_service import judge_fill
 
@@ -78,17 +79,100 @@ def _expand_passage_items(data: List[dict]) -> List[dict]:
     return out
 
 
-def get_due_mistakes(conn: sqlite3.Connection, limit: int = 50) -> List[dict]:
-    """返回今日待复习错题：新录入的错题优先，其次按下次复习时间升序。"""
-    rows = conn.execute(
-        "SELECT * FROM mistakes "
-        "WHERE COALESCE(review_paused, 0) = 0 "
-        "AND (next_review_at IS NULL OR next_review_at <= datetime('now')) "
-        "ORDER BY (next_review_at IS NULL) DESC, "
-        "COALESCE(next_review_at, '9999-12-31 23:59:59') ASC, id ASC LIMIT ?",
-        (limit,),
-    ).fetchall()
-    return _expand_passage_items([mistake_to_dict(row) for row in rows])
+def get_due_mistakes(
+    conn: sqlite3.Connection,
+    limit: int = 50,
+    daily_limit: Optional[int] = None,
+) -> List[dict]:
+    """返回今日待复习错题（带每日配额与轮转，见 get_today_queue）。"""
+    return get_today_queue(conn, limit=limit, daily_limit=daily_limit)["items"]
+
+
+def _count_reviewed_today(conn: sqlite3.Connection) -> int:
+    """今日已复习的条数（用于把每日配额算成"今天还能做多少"）。"""
+    day_start_utc, day_end_utc = local_day_bounds_utc()
+    row = conn.execute(
+        "SELECT COUNT(*) AS c FROM review_records "
+        "WHERE reviewed_at >= ? AND reviewed_at < ?",
+        (day_start_utc, day_end_utc),
+    ).fetchone()
+    return int(row["c"] or 0)
+
+
+def get_today_queue(
+    conn: sqlite3.Connection,
+    limit: int = 50,
+    daily_limit: Optional[int] = None,
+) -> dict:
+    """今日复习队列：**新题优先 + 逾期轮转 + 每日配额**。
+
+    为什么要这么排（原实现的问题）：
+    原排序是「最旧的 next_review_at 最先」，于是 8 月答错、逾期 20 天的题永远霸占
+    队列前排，8 月之后转好的题再也轮不到（实测 98/99 题为到期、16 题从未复习、
+    55 题只复习过 0~1 次）——即越差的题越被反复刷，没暴露过的题一直饿着。
+
+    现在的规则：
+    1. **新题优先**：从未复习过（无 next_review_at 或 review_count=0）的题排最前，
+       保证新录入的错题一定会被看到；
+    2. **逾期轮转**：其余按 last_reviewed_at 升序（最久没碰过的先来）。复习一次
+       last_reviewed_at 就刷新，该题自动排到队尾，于是整个积压会被像轮盘一样
+       逐日推过一遍，而不是天天砸同几道题；
+    3. **每日配额**：daily_limit（默认 settings.REVIEW_DAILY_LIMIT）是"今天总共
+       做多少"，已减去今日已复习数——所以你做完就收工，不会无底洞；
+    4. **不淘汰**：题不会被移出队列（没有"毕业/归档"），只是按顺序轮转。
+
+    返回 {"items", "dueTotal", "returned", "dailyLimit", "reviewedToday", "remaining"}：
+    remaining 是今天做完这一批后还剩多少（用于前端提示"积压 N 题，明天继续"）。
+    """
+    if daily_limit is None:
+        daily_limit = settings.REVIEW_DAILY_LIMIT
+
+    due_total = int(
+        conn.execute(
+            "SELECT COUNT(*) AS c FROM mistakes "
+            "WHERE COALESCE(review_paused, 0) = 0 "
+            "AND (next_review_at IS NULL OR next_review_at <= datetime('now') "
+            "     OR review_count = 0)"
+        ).fetchone()["c"]
+    )
+
+    reviewed_today = _count_reviewed_today(conn)
+
+    # 今天还能做多少：每日配额 - 今日已做
+    budget = limit
+    if daily_limit and daily_limit > 0:
+        remaining_today = max(0, daily_limit - reviewed_today)
+        budget = min(limit, remaining_today)
+
+    rows = []
+    if budget > 0:
+        # 注意顺序：**先展开再截断**。英语整篇会被 _expand_passage_items 展开成多道小题，
+        # 若先按 budget 截断行数再展开，实际题量会超过每日配额（实测 50 行 → 59 题）。
+        # 这里多取一些候选行（英语整篇最多展开 4 项，取 3 倍余量足够），展开后再按配额截断。
+        fetch = min(max(budget * 3, budget + 20), 300)
+        rows = conn.execute(
+            "SELECT * FROM mistakes "
+            "WHERE COALESCE(review_paused, 0) = 0 "
+            "AND (next_review_at IS NULL OR next_review_at <= datetime('now') "
+            "     OR review_count = 0) "
+            "ORDER BY "
+            "  CASE WHEN review_count = 0 OR next_review_at IS NULL THEN 0 ELSE 1 END ASC, "
+            "  COALESCE(last_reviewed_at, '1970-01-01 00:00:00') ASC, "
+            "  COALESCE(next_review_at, '9999-12-31 23:59:59') ASC, "
+            "  id ASC "
+            "LIMIT ?",
+            (fetch,),
+        ).fetchall()
+
+    items = _expand_passage_items([mistake_to_dict(row) for row in rows])[:budget] if budget > 0 else []
+    return {
+        "items": items,
+        "dueTotal": due_total,
+        "returned": len(items),
+        "dailyLimit": int(daily_limit or 0),
+        "reviewedToday": reviewed_today,
+        "remaining": max(0, due_total - len(items)),
+    }
 
 
 def get_practice_mistakes(

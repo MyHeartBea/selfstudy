@@ -22,6 +22,10 @@
 11. **临时文件放 `D:\temp`**；**密钥不打印**（`.env` 不入库）；改完 **`git add -A && git commit && git push`**。
 12. **卡片整卡可点**：知识点/公式卡片＝卡片本体 `role=button tabindex=0 @click`，卡内按钮/关联标签各自 `@click.stop`，装饰元素 `pointer-events:none`。**别用铺满卡片的透明点击层**（会被带 `position/z-index` 的子元素盖住 → 只有窄缝可点，用户实测点不动）；卡片 hover 别做 `translateY`（边缘抖动）。卡片预览用 `markdownToPlain()` 去 Markdown 标记，详情才用 `RichText`。
 13. **知识点多图**：`/ai/knowledge-from-image` 收 `{images:[...]}`，按序分批提文字后合并成**一条**草稿；弹窗打开即重置（新增清空/编辑载入），粘贴监听用 `watchEffect` 同步挂载；多文件读取用 `Promise.all` 而非 `for...of + await`。
+14. **今日复习队列**（`get_today_queue`）：新题优先 → 逾期按 `last_reviewed_at` 轮转 → `REVIEW_DAILY_LIMIT`（默认 50）配额。**配额要在英语整篇展开之后截断**（否则 50 行会变 59 题）。**不做毕业机制，题永不淘汰**。`/reviews/today` 返回对象不是数组。
+15. **真题库扫描**：`classify_file` 区分 `question`/`answer_key`/**`mixed`（题+答案合卷，以前被误判成纯答卷 → 52 份孤儿）**，按 (科目,年份) 去重合并，年份支持 `26考研→2026`，数学一/二/三 分开。实测可导入 **1 → 59 份**。
+16. **知识点↔错题**：`GET /api/knowledge/linked-mistakes?tag=`，名称没命中时用 `related_tags` 兜底（`matched_by`/`hit_tags` 标明）。`knowledge_service` 里 `mistake_to_dict` 必须**局部导入**（顶层会与 `database.py` 循环导入）。
+17. **运行参数**：`HOST`/`PORT`/`REVIEW_DAILY_LIMIT`/`SLOW_REQUEST_MS` 都可从 `.env` 配。改 `HOST=0.0.0.0` 暴露局域网**必须同时设 `API_TOKEN`**。监控见 `/api/health` 的 `metrics`；导入/批量删除会自动打快照（`/api/snapshots`）。
 
 ## 关键文件
 - 后端：`app/services/ai_service.py`、`app/routers/ai.py`（`/ai/english`、`/ai/ocr`、`/ai/analyze`、`/ai/sense`、`_auto_subject_ids`、`_vision_extract_with_fallback`）、`app/services/vocab_service.py`、`app/models/tables.py`、`app/database.py`。

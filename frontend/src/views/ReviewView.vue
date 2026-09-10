@@ -25,6 +25,8 @@ import RingProgress from '../ui/RingProgress.vue'
 const router = useRouter()
 const route = useRoute()
 const queue = ref([])
+// 今日队列的配额信息（dueTotal/remaining/dailyLimit/reviewedToday），旧接口无此字段
+const queueInfo = ref(null)
 const index = ref(0)
 const loading = ref(false)
 const selected = ref(null)
@@ -341,7 +343,16 @@ async function loadQueue() {
       res = await request.get('/reviews/today')
     }
     if (!route.query.paper_id) {
-      queue.value = res.data.data || []
+      // /reviews/today 现在返回 {items, dueTotal, remaining, dailyLimit, reviewedToday}
+      // （每日配额 + 逾期轮转），旧格式是纯数组，这里两种都兼容
+      const payload = res.data.data
+      if (Array.isArray(payload)) {
+        queue.value = payload
+        queueInfo.value = null
+      } else {
+        queue.value = payload?.items || []
+        queueInfo.value = payload || null
+      }
       if (!queue.value.length) done.value = !isPractice.value
     }
     if (isMock.value) {
@@ -594,6 +605,13 @@ onUnmounted(() => {
           {{ mockClock }}
         </span>
         <span class="count-tip remaining">待复习 {{ Math.max(0, queue.length - index) }} 题</span>
+        <span
+          v-if="!isPractice && queueInfo && queueInfo.remaining > 0"
+          class="count-tip backlog"
+          :title="`今日配额 ${queueInfo.dailyLimit} 题；今日已做 ${queueInfo.reviewedToday} 题。积压的题会按顺序在之后的日子里轮到你，不会被丢掉。`"
+        >
+          积压 {{ queueInfo.remaining }} 题（每日上限 {{ queueInfo.dailyLimit }}）
+        </span>
       </div>
     </div>
 
@@ -647,6 +665,10 @@ onUnmounted(() => {
         <p class="done-sub">
           答对 <b class="ok pop-num">{{ resultCount.correct }}</b> 题，答错
           <b class="bad pop-num">{{ resultCount.wrong }}</b> 题 · 朱砂印为证
+        </p>
+        <p v-if="!isPractice && queueInfo && queueInfo.remaining > 0" class="done-backlog">
+          还有 <b>{{ queueInfo.remaining }}</b> 题积压没做完（每日上限 {{ queueInfo.dailyLimit }} 题）。
+          不用一次做完 —— 它们会按"最久没碰过"的顺序往后排，明天继续轮。
         </p>
         <div class="done-actions">
           <UiButton v-if="isPractice" variant="outline" @click="router.push('/practice')">再练一组</UiButton>
@@ -1016,6 +1038,15 @@ onUnmounted(() => {
 .done-sub { color: var(--ink-2); margin: 0; }
 .done-sub .ok { color: var(--green); }
 .done-sub .bad { color: var(--red); }
+.done-backlog {
+  max-width: 480px;
+  margin: 2px auto 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-3);
+}
+.done-backlog b { color: var(--accent-ink); }
+.count-tip.backlog { color: var(--gold); }
 .done-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
 
 /* ---------- 真题模考 ---------- */

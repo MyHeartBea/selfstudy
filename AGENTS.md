@@ -54,6 +54,18 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
 | `AI_VISION_BASE_URL` | `https://open.bigmodel.cn/api/paas/v4` | 智谱视觉端点 |
 | `AI_VISION_API_KEY` | 智谱 key | 智谱视觉 / 嵌入 |
 
+### 4.1 运行参数（同样在 backend/.env）
+
+| 变量 | 默认 | 用途 |
+|---|---|---|
+| `HOST` | `127.0.0.1` | 监听地址。改 `0.0.0.0` 可手机/局域网访问，**必须同时设 `API_TOKEN`**（否则同网段任何人可读写全部数据） |
+| `PORT` | `8000` | 监听端口 |
+| `API_TOKEN` | 空 | 设置后所有 `/api` 需携带 `X-API-Token` 或 `Authorization: Bearer` |
+| `AI_RATE_LIMIT` | `30` | AI 端点每分钟限流 |
+| `REVIEW_DAILY_LIMIT` | `50` | 每日复习配额（含新题）；`0` = 不限 |
+| `SLOW_REQUEST_MS` | `3000` | 超过则日志 WARN，并计入 `/api/health` 的慢请求统计 |
+| `PAPERS_DIR` | `D:\km-v2\真题` | 真题库扫描根目录 |
+
 > 约定：视觉**首选 DeepSeek** `deepseek-v4-flash-vision-exp`（走 `AI_API_KEY` 同一把 DeepSeek key，已在 `GET /v1/models` 确认可用）。当前 `.env` 的 `AI_VISION_MODEL` 为智谱 `glm-4.6v-flash`。改视觉时以 `.env` 实际值为准，并遵循下方「先提文字再分析」。
 
 超时：前端 axios 300s；后端 `AI_TIMEOUT=240`、`AI_OCR_TOTAL_TIMEOUT=290`、`AI_VISION_PRIMARY_TIMEOUT=240`。
@@ -141,6 +153,18 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
 
 ## 7. 功能备忘（改功能时留意）
 - **复习调度 = SM-2 简化版（迁移 v6/v7）**：`mistakes.ease_factor`（2.5 起，答对+0.1 上探封顶 2.8、答错-0.2 下限 1.3）+ `last_interval`（答对=上次间隔×系数四舍五入，首次 1 天，封顶 180；答错重置 1 天）。`INTERVALS` 常量仅迁移回填用。mastery 阶梯保留仅供统计展示。**mock_records 表（v7）**：模考成绩存档（`GET/POST /api/mocks`），统计页画趋势。
+- **今日队列 = 新题优先 + 逾期轮转 + 每日配额（`review_service.get_today_queue`）**：旧排序「最旧的 next_review_at 最先」会让 8 月逾期 20 天的题永远霸占前排，新题（`next_review_at` 为空）排最后、之后转好的题再也轮不到（实测 98/99 到期、16 题从未复习）。现在的排序是：① `review_count = 0 OR next_review_at IS NULL`（新题）优先；② 其余按 `COALESCE(last_reviewed_at,'1970…')` 升序 —— 复习一次 `last_reviewed_at` 就刷新，该题自动退到队尾，整个积压被逐日轮过；③ `REVIEW_DAILY_LIMIT`（默认 50，0=不限）是"今天总共做多少"，会减去今日已复习数。
+  - ⚠️ **配额必须在 `_expand_passage_items` 展开之后截断**：英语整篇会展开成多道小题，先按行数截断再展开会让实际题量超过配额（实测 50 行 → 59 题）。所以候选行取 `budget*3`（下限 budget+20，上限 300），展开后再 `[:budget]`。
+  - **明确不做毕业机制**：题永远不会被移出队列（用户要求以后再说）。答错的题重置 1 天，所以明天仍会出现——这是设计而非 bug。
+  - 响应是对象 `{items, dueTotal, returned, dailyLimit, reviewedToday, remaining}`（旧格式是纯数组，前端两种都兼容）。
+- **真题库扫描（`exam_paper_service.scan_folder`）**：按 `(科目, 年份)` **去重合并**，每条候选带 `sources`（该年份涉及的真题/合卷/答案速查）。角色判定见 `classify_file`：
+  - `mixed` = **题+答案合卷**（`真题解析`/`真题及参考答案`）——旧实现把它们当"纯答卷"，导致 150 份候选里 **52 份变成孤儿（既当不成试卷也配不到答案）**；
+  - `answer_key` = 答案册（`答案速查`/`参考答案`/`选择题解析`）；`question` = 纯试卷；`other` = 答题卡等（不产生候选）。
+  - 判定顺序：`答案速查` → `真题/试题/试卷 + 解析/答案`(=mixed) → `参考答案` → `解析/答案` → `真题/试题/试卷` → other。
+  - **年份**：4 位优先，否则识别两位缩写 `26考研→2026`（旧实现 10 份年份为空）。**科目**：数学一/二/三 用全角与半角括号都覆盖的键分开（旧实现把 `2024年数学（一）` 判成数学二），且规则要包含 `数二/数一/数三` 简写（否则 `2011年数二真题答案速查.pdf` 识别为空）。
+  - 实测效果：可导入候选 **1 份 → 59 份**、年份空 0 份、答案配 55/59、无重复。
+- **知识点 ↔ 错题链接（`GET /api/knowledge/linked-mistakes?tag=`）**：按 `mistake_tag_map` 找该知识点下的错题 + 统计（几题/平均掌握/累计答错/今天到期/从未复习）。知识点名与错题标签只有 83/134 同名，所以支持 **`related_tags` 兜底**：名称没直接命中就用关联标签找，响应里 `matched_by`（tag_name/related_tags/none）标明命中方式、`hit_tags` 是真正挂有错题的标签。前端在知识点详情弹窗底部展示（含逐题「练这题」与「练这些题」）。
+  - ⚠️ `knowledge_service` 里**不能顶层** `from app.database import mistake_to_dict`：`database.py` 反过来要 import 本模块的 `canonical_tags`，会循环导入。用局部导入（见 `_mistake_to_dict`）。
 - **错题库**：题型按科目感知（数学 / 408：选择·填空·解答；政治：单选·多选·分析；英语：客观题·翻译·作文）；筛选 / 排序 / 分页 / 批量操作 / URL 同步筛选状态 / 导入导出 JSON / **Anki TSV 导出（`/api/export/anki?type=mistakes|vocab`）** / 打印（`window.print()` + 全局 print 样式）。列表首图走**缩略图**：`/images/thumb/{name}`（懒生成 WebP 到 `data/images/_thumbs/`，失败回退原图；删除错题同步清缩略图）。
 - **今日复习**：间隔重复由 SM-2 驱动；选择 / 多选（全对判分，顺序无关，判分统一走 `utils/examScoring.js` 的 scoreLetters）/ 填空（别名 + 数值容差）/ 翻译（对照参考译文自评）/ 解答（AI 按步骤给分 0-100）；全键盘流（1-4 选答、Enter 下一题、Q/W 标记）；`?` 呼出快捷键速查。**单题直练**：practice 接口支持 `mistake_id` 参数（详情「练这道题」用）。
 - **真题模考（mode=mock）**：练习页选年份+时长 → `mode=mock&duration=分钟&source_type=real_exam&source_year=年`；ReviewView mock 分支：倒计时（归零自动交卷）、作答暂存不判分、自由翻题、交卷统一判分（choice/multi 本地、fill 走 /judge）并逐题写入复习记录 + POST /mocks 存档；卷面客户端过滤为客观题。
@@ -167,4 +191,5 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
 - 测试：后端 41 + 前端 Vitest 10（`cd frontend && npm test`，判分纯函数 + useMistakeFilters）全绿。
 - **真题库已上线**：真机验证英语二 2013 全链路（导入拆题 33 题 50 秒 / 答案配对 20/27 / 整卷模考 / 错题自动入本）。**扫描版/乱码文本层 PDF 已支持且公式更准**：数学/408 优先 DeepSeek 视觉（输出 LaTeX），实测 2025 数二 22 题/配答案 10/10（公式/偏导/积分限/矩阵准确）、**2009 计算机408 问卷乱码文本层 → 视觉逐页提取 47 题/配答案 40/40，且图示题（二叉排序树等）自动存整页原图 `/images/exam_papers/<pid>/p<n>.webp` 供模考查看**；仅当视觉与 OCR 都提不出文字时才报 error。公式密集的数学题如不满意，仍可走「智能录入」识图逐题精修。每份卷导入约 1-3 分钟 + 数次 AI 调用（含视觉，成本低）。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`；架构与硬规则见第 6.5 节。
-- 后端 8000 运行中（HOST 默认 127.0.0.1，改 0.0.0.0 可手机局域网访问，建议配 API_TOKEN）；前端 dist 已构建；openviking 正常（第 8 节）。
+- 后端 8000 运行中（HOST 默认 127.0.0.1，`.env` 里设 `HOST=0.0.0.0` 可手机局域网访问，**必须同时设 `API_TOKEN`**）；前端 dist 已构建；openviking 正常（第 8 节）。
+- **2026-09-10 优化批次（已完成）**：①复习队列＝新题优先+逾期轮转+每日配额（不做毕业机制）；②真题库扫描＝合卷识别+按科目年份去重+年份/科目修正（可导入 1→59 份）；③知识点↔错题链接（`/api/knowledge/linked-mistakes` + 详情弹窗展示，支持 related_tags 兜底）；④工程项＝`HOST`/`PORT` 可配、请求耗时与错误监控（`app/metrics.py` + `/api/health` 摘要）、`/api/snapshots` 快照（导入/批量删除自动先快照）。测试：后端 95、前端 49。

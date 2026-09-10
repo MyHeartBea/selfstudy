@@ -35,7 +35,11 @@
 
 ## 复习
 
-- `GET /api/reviews/today`：今日到期错题
+- `GET /api/reviews/today`：今日复习队列，返回**对象**（旧版是纯数组）：
+  `{items, dueTotal, returned, dailyLimit, reviewedToday, remaining}`
+  - 排序 = 新题优先（`review_count=0` 或 `next_review_at` 为空）→ 其余按"最久没碰过"（`last_reviewed_at` 升序）轮转
+  - `dailyLimit` 来自 `REVIEW_DAILY_LIMIT`（默认 50，`0`=不限），是"今天总共做多少"，已减去今日已复习数
+  - 查询参数：`limit`（单批上限，默认 50）、`daily_limit`（覆盖配置，`0`=不限）
 - `GET /api/reviews/practice`：练习队列（mode=curve|wrong_time|random|real_exam + count + 筛选）
 - `GET /api/reviews/stats`：复习统计、正确率、连续天数、掌握度分布、薄弱知识点、7 天趋势
 - `GET /api/reviews/calendar?days=140`：按天聚合 `[{day, total, correct}]`（热力图）
@@ -57,6 +61,10 @@
 - `GET /api/knowledge`：subject_id/sub_subject_id/tag 筛选 + 分页
 - `GET /api/knowledge/tags?limit=50`：热门标签（按关联错题数，供录入联想）
 - `GET /api/knowledge/by-tag?tag=`：精确查询
+- `GET /api/knowledge/linked-mistakes?tag=&limit=`：**知识点 ↔ 错题链接**
+  - 返回 `{tag_name, matched_by, matched_tags, hit_tags, total, items, stats}`
+  - `matched_by`：`tag_name`（知识点名与错题标签同名）/ `related_tags`（用关联标签兜底命中）/ `none`
+  - `stats`：`avg_mastery / wrong_total / review_total / due_now / never_reviewed / shown`
 - `POST /api/knowledge` / `PATCH|DELETE /api/knowledge/{id}`
 - `POST /api/knowledge/{id}/auto-summarize`：AI 总结
 
@@ -74,6 +82,14 @@
 
 - `GET /api/stats`：总数/今日新增/题型/来源/科目分布
 - `GET /api/export` / `POST /api/import`（≤5000 条）
+
+## 系统
+
+- `GET /api/health`：健康检查 + **进程内监控摘要**（`metrics`：请求数/错误数/慢请求数/最慢端点/最近错误）+ 当前 `host`/`reviewDailyLimit`
+- `GET /api/dashboard`：统计 + 复习聚合
+- `GET /api/snapshots?limit=20`：数据快照列表（启动备份 + 导入前快照）
+- `POST /api/snapshots?label=manual`：手动打一份快照（批量操作前建议先点）
+  - `POST /api/mistakes/batch`（`action=delete`）与 `POST /api/import` 会**自动先打快照**，响应里带 `snapshot` 文件名
 
 ## AI
 

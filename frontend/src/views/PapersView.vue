@@ -33,8 +33,10 @@ const SUBJECT_TONES = {
   政治: 'var(--gold)',
 }
 
+// 可导入候选：后端已按 科目+年份 去重，kind 固定为 'paper'
+// （旧后端会给出 kind='answer' 的条目，这里一并兼容过滤）
 const paperCandidates = computed(() =>
-  candidates.value.filter((c) => c.kind === 'paper'),
+  candidates.value.filter((c) => c.kind === 'paper' || c.kind === 'mixed'),
 )
 
 const activeImporting = computed(() =>
@@ -252,7 +254,9 @@ onUnmounted(stopPolling)
     <section class="sec">
       <div class="sec-title">
         <span>扫描结果</span>
-        <span class="cap">来自 D:\km-v2\真题 · 只列试卷文件（解析/答案自动配对）</span>
+        <span class="cap">
+          来自 D:\km-v2\真题 · 已按科目+年份合并（同年的真题/解析/答案速查算一份）
+        </span>
       </div>
       <UiEmpty v-if="!paperCandidates.length && !scanning" text="没有扫到试卷文件" icon="inbox" />
       <div v-else class="cand-grid">
@@ -263,6 +267,11 @@ onUnmounted(stopPolling)
             <span class="c-sub">
               {{ c.subject || '未识别' }} · {{ c.size_kb }} KB
               <UiTag v-if="c.answer_path" size="sm" color="var(--green)" soft>已配答案</UiTag>
+              <UiTag v-else-if="c.mixed" size="sm" color="var(--teal)" soft>合卷自带答案</UiTag>
+              <UiTag v-else size="sm" color="var(--gold)" soft>无答案</UiTag>
+              <UiTag v-if="c.sources && c.sources.length > 1" size="sm" soft>
+                合并 {{ c.sources.length }} 个文件
+              </UiTag>
               <UiTag v-if="c.imported" size="sm" soft>已导入</UiTag>
             </span>
           </div>

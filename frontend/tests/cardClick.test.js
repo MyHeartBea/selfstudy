@@ -49,7 +49,7 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('../src/api/request', () => {
-  const get = vi.fn((url) => {
+  const get = vi.fn((url, config) => {
     if (url === '/knowledge') {
       return Promise.resolve({
         data: { data: { items: knowledgeRows, total: knowledgeRows.length } },
@@ -57,6 +57,67 @@ vi.mock('../src/api/request', () => {
     }
     if (url === '/formulas') {
       return Promise.resolve({ data: { data: formulaRows } })
+    }
+    if (url === '/knowledge/linked-mistakes') {
+      const tag = config?.params?.tag
+      // 「地址转换」这条故意不返回错题，用于覆盖空态
+      if (tag === '地址转换') {
+        return Promise.resolve({
+          data: {
+            data: {
+              tag_name: tag,
+              matched_by: 'none',
+              matched_tags: [tag],
+              hit_tags: [],
+              total: 0,
+              items: [],
+              stats: {
+                avg_mastery: 0,
+                wrong_total: 0,
+                review_total: 0,
+                due_now: 0,
+                never_reviewed: 0,
+                shown: 0,
+              },
+            },
+          },
+        })
+      }
+      return Promise.resolve({
+        data: {
+          data: {
+            tag_name: tag,
+            matched_by: 'tag_name',
+            matched_tags: [tag],
+            hit_tags: [tag],
+            total: 2,
+            items: [
+              {
+                id: 71,
+                question: '当 x→0 时，sin x 与 x 的关系是？',
+                wrong_count: 2,
+                review_count: 3,
+                mastery_level: 0,
+              },
+              {
+                id: 72,
+                question: '求极限 lim (1-cos x)/x^2',
+                wrong_count: 0,
+                review_count: 1,
+                mastery_level: 1,
+              },
+            ],
+            stats: {
+              avg_mastery: 0.5,
+              wrong_total: 2,
+              review_total: 4,
+              due_now: 2,
+              never_reviewed: 1,
+              shown: 2,
+            },
+          },
+        },
+      })
     }
     return Promise.resolve({ data: { data: [] } })
   })
@@ -193,6 +254,53 @@ describe('知识点库：整卡可点', () => {
     await flush()
 
     expect(document.querySelectorAll('.k-detail').length).toBe(0)
+  })
+})
+
+describe('知识点详情：关联错题链接', () => {
+  it('打开详情会拉取并展示关联错题与掌握情况', async () => {
+    const wrapper = mount(KnowledgeView, { attachTo: document.body })
+    await flush()
+    await wrapper.find('.k-card').trigger('click')
+    await flush()
+
+    const linked = document.querySelector('.k-linked')
+    expect(linked).toBeTruthy()
+    const text = linked.textContent.replace(/\s+/g, ' ')
+    expect(text).toContain('关联错题')
+    expect(text).toContain('2 题')
+    expect(text).toContain('累计答错')
+    expect(text).toContain('今天到期')
+    expect(text).toContain('从未复习')
+    // 逐题列出，且能单题直练
+    expect(document.querySelectorAll('.k-linked-list .kl-row').length).toBe(2)
+    expect(text).toContain('sin x')
+  })
+
+  it('有错题时提供「练这些题」入口', async () => {
+    const wrapper = mount(KnowledgeView, { attachTo: document.body })
+    await flush()
+    await wrapper.find('.k-card').trigger('click')
+    await flush()
+
+    const btn = Array.from(document.querySelectorAll('button')).find((b) =>
+      (b.textContent || '').includes('练这些题'),
+    )
+    expect(btn).toBeTruthy()
+    expect(btn.textContent).toContain('2')
+  })
+
+  it('没有关联错题时给出说明而不是空白', async () => {
+    // 第二张卡（地址转换）没有 mock 关联错题 → 走空态
+    const wrapper = mount(KnowledgeView, { attachTo: document.body })
+    await flush()
+    const cards = wrapper.findAll('.k-card')
+    await cards[1].trigger('click')
+    await flush()
+
+    const linked = document.querySelector('.k-linked')
+    expect(linked).toBeTruthy()
+    expect(linked.textContent).toContain('还没有关联到错题')
   })
 })
 

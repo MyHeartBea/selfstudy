@@ -3,6 +3,10 @@
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+# 注意：不能在模块顶层 `from app.database import mistake_to_dict`——
+# database.py 反过来要 import 本模块的 canonical_tags，会形成循环导入。
+# 这里在使用处局部导入。
+
 # 知识点标签统一规范：变体一律归一到标准名，保证检索一致。
 TAG_SYNONYMS = {
     "线性微分方程": "微分方程",
@@ -61,6 +65,113 @@ def knowledge_to_dict(row) -> dict:
         tag.strip() for tag in related.split(",") if tag.strip()
     ]
     return data
+
+
+def _mistake_to_dict(row) -> dict:
+    """局部包装：避免与 app.database 的循环导入（见文件顶部说明）。"""
+    from app.database import mistake_to_dict
+
+    return mistake_to_dict(row)
+
+
+def get_knowledge_mistakes(
+    conn: sqlite3.Connection,
+    tag_name: str,
+    limit: int = 50,
+    related_tags: Optional[List[str]] = None,
+) -> dict:
+    """知识点 ↔ 错题双向链接：返回该知识点关联的错题与其掌握情况。
+
+    关联依据 `mistake_tag_map`（错题的知识点标签）。**知识点名与错题标签常常不完全同名**
+    （实测 134 个知识点里只有 83 个能直接按同名对上），所以这里允许传入该知识点的
+    `related_tags` 作为兜底：名称没命中时，再用关联标签去找错题，并标明命中方式。
+
+    返回里同时给出汇总统计（几题、平均掌握度、总错误次数、到期数、未复习数），
+    供知识点详情弹窗展示"这个知识点掌握得怎么样 / 一键练这些题"。
+    """
+    tag = str(tag_name or "").strip()
+    if not tag:
+        return {
+            "tag_name": tag,
+            "matched_by": "none",
+            "matched_tags": [],
+            "hit_tags": [],
+            "total": 0,
+            "items": [],
+            "stats": {},
+        }
+
+    direct = conn.execute(
+        "SELECT COUNT(*) AS c FROM mistake_tag_map WHERE tag = ?", (tag,)
+    ).fetchone()["c"]
+
+    direct_match = bool(direct)
+
+    tags = [tag]
+    if not direct:
+        # 名称没直接命中 → 用关联标签兜底（去重、去掉空值）
+        extras = []
+        for item in related_tags or []:
+            item = str(item or "").strip()
+            if item and item not in tags:
+                extras.append(item)
+        tags = extras if extras else [tag]
+
+    placeholders = ", ".join("?" for _ in tags)
+    rows = conn.execute(
+        "SELECT DISTINCT m.* FROM mistakes m "
+        "JOIN mistake_tag_map t ON t.mistake_id = m.id "
+        f"WHERE t.tag IN ({placeholders}) "
+        "ORDER BY m.wrong_count DESC, m.mastery_level ASC, m.id DESC "
+        "LIMIT ?",
+        (*tags, limit),
+    ).fetchall()
+    items = [_mistake_to_dict(row) for row in rows]
+
+    stats_row = conn.execute(
+        "SELECT COUNT(DISTINCT m.id) AS total, "
+        "COALESCE(AVG(m.mastery_level), 0) AS avg_mastery, "
+        "COALESCE(SUM(m.wrong_count), 0) AS wrong_total, "
+        "COALESCE(SUM(m.review_count), 0) AS review_total, "
+        "COALESCE(SUM(CASE WHEN m.next_review_at IS NULL "
+        "  OR m.next_review_at <= datetime('now') THEN 1 ELSE 0 END), 0) AS due_now, "
+        "COALESCE(SUM(CASE WHEN m.review_count = 0 THEN 1 ELSE 0 END), 0) AS never_reviewed "
+        f"FROM mistakes m JOIN mistake_tag_map t ON t.mistake_id = m.id "
+        f"WHERE t.tag IN ({placeholders})",
+        tuple(tags),
+    ).fetchone()
+
+    # matched_by：名称直接命中 / 靠 related_tags 兜底命中 / 两种情况都没找到错题
+    if direct_match:
+        matched_by = "tag_name"
+    elif int(stats_row["total"] or 0) > 0:
+        matched_by = "related_tags"
+    else:
+        matched_by = "none"
+
+    # hit_tags：本次查询用到的标签里，**真正挂有错题**的那些（前端展示"通过哪些标签关联到"）
+    hit_rows = conn.execute(
+        f"SELECT DISTINCT tag FROM mistake_tag_map WHERE tag IN ({placeholders}) ORDER BY tag",
+        tuple(tags),
+    ).fetchall()
+    hit_tags = [r["tag"] for r in hit_rows]
+
+    return {
+        "tag_name": tag,
+        "matched_by": matched_by,
+        "matched_tags": tags,
+        "hit_tags": hit_tags,
+        "total": int(stats_row["total"] or 0),
+        "items": items,
+        "stats": {
+            "avg_mastery": round(float(stats_row["avg_mastery"] or 0), 2),
+            "wrong_total": int(stats_row["wrong_total"] or 0),
+            "review_total": int(stats_row["review_total"] or 0),
+            "due_now": int(stats_row["due_now"] or 0),
+            "never_reviewed": int(stats_row["never_reviewed"] or 0),
+            "shown": len(items),
+        },
+    }
 
 
 def get_related_knowledge(

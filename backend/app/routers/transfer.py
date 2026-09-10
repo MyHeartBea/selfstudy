@@ -7,7 +7,13 @@ from datetime import datetime
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
 
-from app.database import get_connection, mistake_field, mistake_to_dict, sync_mistake_tags
+from app.database import (
+    get_connection,
+    mistake_field,
+    mistake_to_dict,
+    snapshot_database,
+    sync_mistake_tags,
+)
 from app.models.tables import MISTAKE_COLUMNS
 from app.responses import error, ok, server_error
 from app.schemas import ImportPayload
@@ -141,7 +147,11 @@ def export_anki(type: str = Query("mistakes", pattern="^(mistakes|vocab)$")):
 
 @router.post("/import")
 def import_mistakes(body: ImportPayload):
-    """批量导入错题，自动处理知识点词条。"""
+    """批量导入错题，自动处理知识点词条。
+
+    导入是批量写操作：先打一份数据快照，出问题可以回滚（快照见 /api/snapshots）。
+    """
+    snapshot = snapshot_database(f"before-import-{len(body.mistakes)}")
     conn = get_connection()
     try:
         created = 0
@@ -187,7 +197,7 @@ def import_mistakes(body: ImportPayload):
                 sync_mistake_tags(conn, cur.lastrowid, fields["knowledge_tags"])
                 created += 1
         return ok(
-            {"created": created, "failed": failed},
+            {"created": created, "failed": failed, "snapshot": snapshot},
             f"成功导入 {created} 条错题",
         )
     except Exception as exc:

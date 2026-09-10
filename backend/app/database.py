@@ -57,6 +57,60 @@ def backup_database() -> None:
         old.unlink(missing_ok=True)
 
 
+def snapshot_database(label: str = "") -> Optional[str]:
+    """按需打一份数据快照（导入/批量操作前的"后悔药"）。
+
+    与启动备份共用 BACKUP_DIR，但文件名带 label 便于识别来源，例如
+    `kaoyan_mistakes_20260910_193000_before-import.db`。返回快照文件名，失败返回 None。
+    快照不会随 MAX_BACKUPS 之外的清理被误删（清理按名字排序，近期的总是保留）。
+    """
+    if not settings.DB_PATH.exists():
+        return None
+    try:
+        settings.BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe = "".join(ch for ch in str(label or "") if ch.isalnum() or ch in "-_")
+        name = f"kaoyan_mistakes_{stamp}" + (f"_{safe}" if safe else "") + ".db"
+        dest = settings.BACKUP_DIR / name
+
+        source = sqlite3.connect(settings.DB_PATH)
+        target = sqlite3.connect(dest)
+        try:
+            with target:
+                source.backup(target)
+        finally:
+            target.close()
+            source.close()
+
+        backups = sorted(settings.BACKUP_DIR.glob("kaoyan_mistakes_*.db"))
+        for old in backups[: -settings.MAX_BACKUPS]:
+            old.unlink(missing_ok=True)
+        return name
+    except Exception:
+        return None
+
+
+def list_snapshots(limit: int = 20) -> List[dict]:
+    """列出最近的快照（供前端"数据安全"面板展示）。"""
+    if not settings.BACKUP_DIR.exists():
+        return []
+    files = sorted(
+        settings.BACKUP_DIR.glob("kaoyan_mistakes_*.db"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:limit]
+    return [
+        {
+            "name": p.name,
+            "size_kb": round(p.stat().st_size / 1024, 1),
+            "created_at": datetime.fromtimestamp(p.stat().st_mtime).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+        }
+        for p in files
+    ]
+
+
 def init_database() -> None:
     """初始化表结构；只在数据库文件首次创建时写入演示数据。"""
     first_start = not settings.DB_PATH.exists()

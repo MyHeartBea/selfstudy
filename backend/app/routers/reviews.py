@@ -14,11 +14,18 @@ router = APIRouter(prefix="/api", tags=["复习"])
 
 
 @router.get("/reviews/today")
-def get_today_reviews(limit: int = Query(50, ge=1, le=200)):
-    """返回今日待复习错题。"""
+def get_today_reviews(
+    limit: int = Query(50, ge=1, le=200),
+    daily_limit: Optional[int] = Query(None, ge=0, le=500),
+):
+    """返回今日复习队列：新题优先 + 逾期轮转 + 每日配额。
+
+    响应除 items 外还带配额信息（dueTotal/remaining/dailyLimit/reviewedToday），
+    供前端提示"今天做多少、积压还剩多少"。
+    """
     conn = get_connection()
     try:
-        return ok(review_service.get_due_mistakes(conn, limit))
+        return ok(review_service.get_today_queue(conn, limit, daily_limit))
     except Exception as exc:
         return server_error(exc)
     finally:

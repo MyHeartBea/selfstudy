@@ -77,6 +77,33 @@ def get_knowledge_by_tag(tag: str = Query(..., min_length=1)):
         conn.close()
 
 
+@router.get("/linked-mistakes")
+def get_linked_mistakes(
+    tag: str = Query(..., min_length=1),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """知识点 ↔ 错题双向链接：该知识点关联的错题清单 + 掌握情况汇总。
+
+    知识点名与错题标签常常不同名（实测只有 83/134 能同名对上），所以先用知识点名精确匹配，
+    没命中则回退到该知识点的 related_tags 去找（响应里的 matched_by 标明用了哪种）。
+    """
+    conn = get_connection()
+    try:
+        related = []
+        kb = knowledge_service.get_by_tag(conn, tag)
+        if kb:
+            raw = kb.get("related_tags")
+            if isinstance(raw, str):
+                related = [t.strip() for t in raw.split(",") if t.strip()]
+            elif isinstance(raw, list):
+                related = [str(t).strip() for t in raw if str(t).strip()]
+        return ok(knowledge_service.get_knowledge_mistakes(conn, tag, limit, related))
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
 @router.post("")
 def create_knowledge(body: KnowledgeCreate):
     """手动创建知识点词条（标签名唯一，重名返回 400）。"""

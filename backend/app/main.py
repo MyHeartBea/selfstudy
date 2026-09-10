@@ -1,6 +1,7 @@
 """FastAPI 应用入口：路由注册、中间件、异常处理与前端静态资源挂载。"""
 
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Request
@@ -10,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import metrics
 from app.config import settings
 from app.database import init_database
 from app.routers import (
@@ -50,13 +52,37 @@ app = FastAPI(
 @app.middleware("http")
 async def log_http_errors(request: Request, call_next):
     # 未捕获异常由 unhandled_exception_handler 统一记录并返回约定 JSON，这里只记录 5xx 响应
-    response = await call_next(request)
+    # 同时统计耗时：慢请求打 WARN 并进入 /api/health 的监控摘要（单用户应用够用了）
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.perf_counter() - started) * 1000
+        metrics.record(request.method, request.url.path, 500, duration_ms)
+        logger.exception(
+            "请求异常：%s %s（%.0fms）", request.method, request.url.path, duration_ms
+        )
+        raise
+
+    duration_ms = (time.perf_counter() - started) * 1000
+    metrics.record(request.method, request.url.path, response.status_code, duration_ms)
+
     if response.status_code >= 500:
         logger.error(
-            "HTTP 错误：%s %s -> %s",
+            "HTTP 错误：%s %s -> %s（%.0fms）",
             request.method,
             request.url.path,
             response.status_code,
+            duration_ms,
+        )
+    elif duration_ms >= settings.SLOW_REQUEST_MS:
+        logger.warning(
+            "慢请求：%s %s -> %s（%.0fms，阈值 %dms）",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+            settings.SLOW_REQUEST_MS,
         )
     return response
 
