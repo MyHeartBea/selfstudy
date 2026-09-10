@@ -28,6 +28,12 @@ jobs:
       - run: pip install "fastapi>=0.110" "uvicorn[standard]>=0.29" "pydantic>=2.5" "httpx>=0.27" coverage
       - name: Run backend tests
         shell: bash
+        # 给一个假 key：CI 没有 backend/.env，`is_configured()` 会为 False，
+        # 涉及 AI 的端点会提前返回 400。测试自己也会打桩，这里再兜一层，
+        # 避免以后新增测试又踩同一个坑。
+        env:
+          AI_API_KEY: ci-dummy-key
+          AI_VISION_API_KEY: ci-dummy-key
         run: |
           coverage run -m unittest discover -s tests -v
           coverage report --fail-under=35

@@ -9,6 +9,7 @@
 全程 mock `ai_service._chat`，不发起任何真实 AI 调用。
 """
 
+import json
 import unittest
 from unittest.mock import patch
 
@@ -110,13 +111,52 @@ class OcrRequestSchemaTest(unittest.TestCase):
             AiOcrRequest()
 
 
+def _body_of(resp) -> dict:
+    """把路由返回值统一成 dict。
+
+    直接调用路由处理函数时，成功走 `ok()`（普通 dict），但**未配置 AI 时会走
+    `error()` 返回 `JSONResponse`**。CI 上没有 backend/.env，`is_configured()` 为 False，
+    于是这里拿到的是 JSONResponse —— 旧写法 `resp["code"]` 会抛
+    `TypeError: 'JSONResponse' object is not subscriptable`（CI 红了 6 次就是这个）。
+    """
+    if isinstance(resp, dict):
+        return resp
+    body = getattr(resp, "body", None)
+    if body is not None:
+        return json.loads(body.decode("utf-8"))
+    raise AssertionError(f"无法解析的响应类型：{type(resp).__name__}")
+
+
 class KnowledgeFromImageRouteTest(unittest.TestCase):
     """路由层：多图 → 一次整理（不会每张各写一条知识点）。"""
 
     def _call(self, body):
         from app.routers import ai as ai_router
 
-        return ai_router.knowledge_from_image(body)
+        return _body_of(ai_router.knowledge_from_image(body))
+
+    def _patch_ai(self, **analyze):
+        """同时假装「AI 已配置 + 有视觉通道」并替换提字/整理两步。
+
+        CI 上没有 backend/.env，会连环踩两个坑：
+        1. `is_configured()` 为 False → 路由直接返回 400「未配置 AI 服务」；
+        2. 即使放行，`_vision_providers()` 也会因为没 key 返回空列表，
+           `_vision_extract_with_fallback` 根本不会调用提字函数 → 502。
+        所以这三处都要打桩，测试才真正跑在多图逻辑上。
+        """
+        from app.routers import ai as ai_router
+
+        return [
+            patch.object(ai_router.ai_service, "is_configured", return_value=True),
+            patch.object(
+                ai_router,
+                "_vision_providers",
+                return_value=[("fake-vision", None, None)],
+            ),
+            patch.object(ai_router.ai_service, "vision_extract_text_multi", **analyze["extract"]),
+            patch.object(ai_router.ai_service, "analyze_knowledge", **analyze["analyze"]),
+            patch("app.routers.ai.local_ocr.is_available", return_value=False),
+        ]
 
     def test_multi_image_produces_one_draft(self):
         analyze_calls = []
@@ -129,12 +169,17 @@ class KnowledgeFromImageRouteTest(unittest.TestCase):
             self.assertEqual(len(images), 3, "应把 3 张图交给同一次提取")
             return "【第1-3张】\n文字内容"
 
-        with patch.object(ai_router_service(), "vision_extract_text_multi", side_effect=fake_extract), \
-             patch.object(ai_router_service(), "analyze_knowledge", side_effect=fake_analyze), \
-             patch("app.routers.ai.local_ocr.is_available", return_value=False):
-            resp = self._call(AiOcrRequest(images=["a", "b", "c"]))
+        patches = self._patch_ai(
+            extract={"side_effect": fake_extract},
+            analyze={"side_effect": fake_analyze},
+        )
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
 
-        self.assertEqual(resp["code"], 200)
+        resp = self._call(AiOcrRequest(images=["a", "b", "c"]))
+
+        self.assertEqual(resp["code"], 200, f"响应异常：{resp.get('message')}")
         self.assertEqual(resp["data"]["tag_name"], "合并知识点")
         self.assertEqual(len(analyze_calls), 1, "多图只应整理一次")
 
@@ -143,13 +188,26 @@ class KnowledgeFromImageRouteTest(unittest.TestCase):
             self.assertEqual(images, ["solo"])
             return "文字"
 
-        with patch.object(ai_router_service(), "vision_extract_text_multi", side_effect=fake_extract), \
-             patch.object(ai_router_service(), "analyze_knowledge",
-                          return_value={"tag_name": "t", "summary": "s", "related_tags": []}), \
-             patch("app.routers.ai.local_ocr.is_available", return_value=False):
-            resp = self._call(AiOcrRequest(image_base64="solo"))
+        patches = self._patch_ai(
+            extract={"side_effect": fake_extract},
+            analyze={"return_value": {"tag_name": "t", "summary": "s", "related_tags": []}},
+        )
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
 
-        self.assertEqual(resp["code"], 200)
+        resp = self._call(AiOcrRequest(image_base64="solo"))
+        self.assertEqual(resp["code"], 200, f"响应异常：{resp.get('message')}")
+
+    def test_unconfigured_ai_returns_readable_error(self):
+        """没配 AI 时必须返回结构化错误（而不是抛异常），前端才能提示配置方式。"""
+        from app.routers import ai as ai_router
+
+        with patch.object(ai_router.ai_service, "is_configured", return_value=False):
+            resp = ai_router.knowledge_from_image(AiOcrRequest(images=["a"]))
+        body = _body_of(resp)
+        self.assertNotEqual(body["code"], 200)
+        self.assertTrue(body.get("message"))
 
 
 def ai_router_service():
