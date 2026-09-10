@@ -179,8 +179,10 @@ def scan_folder() -> List[dict]:
         pool.sort(key=lambda f: (f["kind"] != "question", f["size_kb"]))
         primary = pool[0]
 
-        # 答案来源：明确答案册优先（小文件速查版最干净），其次合卷
-        ans_pool = answers or mixed
+        # 答案来源：明确答案册优先（小文件速查版最干净），其次合卷（合卷里题面会干扰提取）
+        answer_keys = answers
+        mixed_only = [f for f in mixed if f["rel_path"] != primary["rel_path"]]
+        ans_pool = answer_keys or mixed_only
         ans_pool = [f for f in ans_pool if f["rel_path"] != primary["rel_path"]]
         ans_pool.sort(
             key=lambda f: (
@@ -547,12 +549,119 @@ def _structure_prompt(subject: str, year: str, chunk: str) -> str:
     )
 
 
+def _answer_letter(segment: str) -> str:
+    """从一段答案文本里取选择题答案字母（A-D），取不到返回空串。"""
+    seg = segment[:60]
+    for pat in (
+        r"^\s*[（(]\s*([A-Da-d])\s*[)）]",   # (A) / （A）
+        r"^\s*([A-Da-d])\s*[.、．)）]",       # A. / A、
+        r"^\s*([A-Da-d])(?![A-Za-z])",        # 裸 A
+    ):
+        m = re.match(pat, seg)
+        if m:
+            return m.group(1).upper()
+    return ""
+
+
+# 一、选择题:1～10 小题 …（用题干里的题号区间关联答案，而不是答案文件自己的序号）
+# 注意分隔符里 `-` 必须放最后或转义，否则会被当成范围（`[～~\-—至]` 里 `~-—` 是范围
+# 且不含 `-`，曾导致 "17-22题" 匹配失败）
+_QUESTION_RANGE_RE = re.compile(
+    r"([一二三四五六七八九十]+)\s*[、.．]?\s*(选择题|填空题|解答题|单项选择|多项选择)"
+    r"[^\n\d]{0,30}?(\d{1,2})\s*[～~—至\-–]\s*(\d{1,2})"
+)
+# 题型关键字 → 统一题型
+_SECTION_TYPE = {
+    "选择题": "choice",
+    "单项选择": "choice",
+    "填空题": "fill",
+    "多项选择": "choice",
+    "解答题": "solution",
+}
+
+
+def _answer_section_map(exam_text: str) -> dict:
+    """从**试卷**文本里解析「题号 → 题型」映射。
+
+    答案文件里的 `1～10` 是答案册自己的序号，而卷面题号可能是连续的
+    （如选择题 1-10，解答题 17-22），不能按序号硬套；用它来校正题型。
+    """
+    mapping: dict = {}
+    for m in _QUESTION_RANGE_RE.finditer(exam_text or ""):
+        qtype = _SECTION_TYPE.get(m.group(2))
+        if not qtype:
+            continue
+        try:
+            start, end = int(m.group(3)), int(m.group(4))
+        except ValueError:
+            continue
+        if end < start or end - start > 60:
+            continue
+        for n in range(start, end + 1):
+            mapping.setdefault(str(n), qtype)
+    return mapping
+
+
+def _normalize_answer_text(text: str) -> str:
+    """把各种"答案册"写法归一成 `题号:答案` 行，大幅提高答案匹配成功率。
+
+    实测过会失败的两种写法（此前 10 道选择题只配到 1 道，而且配错）：
+      1) 连排速查式：`(1)C. (2)B. (3)C. …`        → 1:C 2:B 3:C …
+      2) 逐题式：    `1【答案】（A）$a=\\frac{1}{3}$ 考点：泰勒公式`
+                    → 1:A（选择题只取字母，后面的解析不参与匹配）
+    已经是 `1.A` / `1:A` 这类写法的则原样保留。
+    """
+    if not text or not text.strip():
+        return text
+
+    out_lines = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            out_lines.append(line)
+            continue
+
+        # 1) 连排速查：(1)C. (2)B. → 拆成多行
+        pairs = re.findall(
+            r"[（(]?\s*(\d{1,2})\s*[)）.、．:：]\s*[（(]?\s*([A-Da-d])\s*[)）.、．]?",
+            stripped,
+        )
+        if len(pairs) >= 3:
+            for no, letter in pairs:
+                out_lines.append(f"{int(no)}:{letter.upper()}")
+            continue
+
+        # 2) 逐题式：1【答案】（A）/ 1.【答案】A / 11【答案】$0<p<2$
+        m = re.match(r"^\s*(\d{1,2})\s*[.、．]?\s*[【\[]\s*答案\s*[】\]]\s*(.+)$", stripped)
+        if m:
+            no, rest = m.group(1), m.group(2).strip()
+            letter = _answer_letter(rest)
+            # 判断"这是选择题字母答案还是数学表达式"：
+            # 只看开头 —— `（A）$a=\frac{1}{3}$` 里的 `$` 出现在字母之后，
+            # 不能因此否认它是选择题答案（这是之前 1:A 提取不到的根因）
+            is_expression = re.match(r"^\s*(\\|\$\$|[a-zA-Z]\s*[=<>])", rest)
+            if letter and not is_expression:
+                out_lines.append(f"{int(no)}:{letter}")
+            else:
+                out_lines.append(f"{int(no)}:{rest}")
+            continue
+
+        out_lines.append(line)
+
+    return "\n".join(out_lines)
+
+
 def _answers_prompt(subject: str, year: str, nos: List[str], answer_text: str) -> str:
     return (
-        f"以下是{subject} {year} 年真题的答案材料（可能格式凌乱）。"
-        "请为每道题匹配正确答案，输出严格 JSON："
-        '{"answers": {"题号": "A/B/C/D 或答案文本"}}。'
-        "只填能从材料中确定的题；确定不了不要输出该题。\n\n"
+        f"以下是{subject} {year} 年真题的答案材料。\n"
+        "材料可能已经过预处理，形如 `题号:答案`（如 `3:C`）；也可能格式凌乱。\n\n"
+        "任务：为下面列出的每个题号给出正确答案，输出严格 JSON："
+        '{"answers": {"题号": "A/B/C/D"}}\n\n'
+        "**准确优先，宁缺勿错**（重要）：\n"
+        "1. 逐条核对材料里的题号，只填你能在材料中找到明确依据的题；\n"
+        "2. 材料里找不到的题号**必须省略**，绝对不要靠推理、经验或“看起来像”来猜；\n"
+        "3. 材料里若出现题号重复或互相矛盾，以第一次出现为准，仍不确定就省略；\n"
+        "4. value 只填单个大写字母 A/B/C/D，不要带括号、句点或中文解释。\n\n"
         f"需要匹配的题号：{json.dumps(nos, ensure_ascii=False)}\n\n"
         f"答案材料：\n{answer_text[:12000]}"
     )
@@ -613,13 +722,23 @@ def _run_import(paper_id: int) -> None:
             return
 
         _set_status(conn, paper_id, "extracting", "正在提取试卷文本")
-        text_layer = _pdf_text_layer(source)
-        scanned = not _pdf_text_usable(text_layer)
         page_pils: dict = {}
-        if scanned:
-            pages = _pdf_pages(source, paper["subject"])
-        else:
+        if source.suffix.lower() == ".docx":
+            # docx 没有"文本层/扫描版"之分：直接抽全文。
+            # 原实现无条件调用 _pdf_text_layer（只认 PDF），docx 会得到空串 →
+            # 被误判成"扫描版" → 白跑一轮视觉/OCR → 失败时还报出错误的
+            # "扫描版且 OCR/视觉均失败"（实测 25考研政治真题.docx、2024考研英语二真题.docx 都栽在这）。
             pages = []
+            scanned = False
+            try:
+                text_layer = extract_text(source, paper["subject"])
+            except Exception as exc:
+                _set_status(conn, paper_id, "error", f"docx 读取失败：{exc}")
+                return
+        else:
+            text_layer = _pdf_text_layer(source)
+            scanned = not _pdf_text_usable(text_layer)
+            pages = _pdf_pages(source, paper["subject"]) if scanned else []
         if scanned and not pages:
             _set_status(conn, paper_id, "error", "未能从文件提取到文本（扫描版且 OCR/视觉均失败）")
             return
@@ -636,6 +755,12 @@ def _run_import(paper_id: int) -> None:
                     answer_text = extract_text(answer_path)
                 except Exception:
                     answer_text = ""
+        # 答案册写法五花八门（连排速查 `(1)C. (2)B.`、逐题 `1【答案】（A）…考点：…`），
+        # 先归一成 `题号:答案` 行再交给 AI，否则匹配率极低（实测 10 题只配到 1 题且配错）
+        if answer_text:
+            answer_text = _normalize_answer_text(answer_text)
+        # 从卷面解析题号→题型，用于校正答案册序号与卷面题号不一致的情况
+        answer_section_map = _answer_section_map(exam_text)
 
         _set_status(conn, paper_id, "structuring", "AI 正在拆题")
         questions: List[dict] = []
@@ -700,6 +825,20 @@ def _run_import(paper_id: int) -> None:
         if not questions:
             _set_status(conn, paper_id, "error", "AI 未能从文本中整理出试题")
             return
+
+        # 用卷面的「题型-题号区间」校正题型：AI 有时把解答题也标成 choice，
+        # 那会让答案匹配去问根本不存在的选项答案（也影响模考只取客观题）。
+        if answer_section_map:
+            fixed = 0
+            for q in questions:
+                expect = answer_section_map.get(str(q["no"]))
+                if expect and q["type"] != expect:
+                    q["type"] = expect
+                    fixed += 1
+                    if expect != "choice":
+                        q["correct_answer"] = ""  # 主观题不留选择题式答案
+            if fixed:
+                _set_status(conn, paper_id, "structuring", f"已按卷面校正 {fixed} 道题的题型")
 
         # 答案匹配：仅客观题，从配对答案文件文本推断
         if answer_text:

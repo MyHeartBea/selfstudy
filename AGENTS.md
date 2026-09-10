@@ -81,7 +81,10 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
    - 数学 / 408 = 「懂一题会三题」+「先讲透考点（当作读者不会）」+ 1.1 / 1.2 分步详细。
    - 英语解析**不用** 1.1/1.2，用【定位 / 来源 / 思路 / 总结】；【定位】必须点名具体句并引用关键词。
 3. **自动识别科目 / 二级科目**：解析输出 `subject_hint`（数学 / 英语 / 408 / 政治），后端 `_auto_subject_ids` 映射填 `subject_id` / `sub_subject_id`（英语→阅读理解，数学→高等数学，408→计算机网络，政治→马原）。
-4. **超大 JSON 健壮性**：`_extract_json` 自动修复「未转义反斜杠 / 缺失逗号 / 尾逗号 / 空内容」；`_chat_json` 对空 / 畸形**重试 3 次**、`max_tokens=8000`；连接级错误重试。
+4. **超大 JSON 健壮性**：`_extract_json` 自动修复「未转义反斜杠 / 缺失逗号 / 尾逗号 / 空内容」；`_chat_json` 对空 / 畸形**重试 3 次**、并按下面的推理预算给足 `max_tokens`；连接级错误重试。
+   - ⚠️ **`deepseek-flash` 是推理模型**：它先产出 `reasoning_content` 再产出正文。若 `max_tokens` 只按"正文长度"估算，预算会被推理吃光 → `finish_reason=length` 且 `content` 为空（实测拆题调用 12000 预算里有 11998 是 `reasoning_tokens`、正文 0 字，导致整份试卷导入失败并报出误导性的"AI 返回内容为空"）。
+   - 处理方式：`_json_chat_budget()` 给首轮加 1.5 倍余量；`_chat_json` 识别 `finish_reason=length` 后**翻倍预算重试**（上限 `MAX_TOKENS_CEILING`）。`_chat(..., with_meta=True)` 返回 `(content, meta)`，`meta` 含 `finish_reason` / `reasoning_tokens`，排查空返回先看它。
+   - 新增 AI 调用时**不要**把 `max_tokens` 当成"正文长度"来设。
 5. **英语整篇 = 一条错题**：存一条错题（含 `english_questions` 全部题目，每题带 `wrong` 标记；错的题自动打「答题失误」标签 + 思路前缀）；详情用 `EnglishAnalysisPanel`（readonly）展示整篇；词汇只在智能录入显示，保存后只在生词本。
 6. **多图全存**：长题多张截图**全部**保存到 `images`；错题列表卡片**只显示第 1 张**，点进详情显示全部。
 7. **表格 / 图**：`RichText` 支持 Markdown 表格 + 十六进制等宽 `hex-dump`；AI 只会识别图不会重绘，正确表格 / 拓扑图看**原图**。

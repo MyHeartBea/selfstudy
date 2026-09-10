@@ -188,9 +188,12 @@ class TestCapturePrompt(unittest.TestCase):
     def _capture_chat(self, fn, *args, **kwargs):
         captured = {}
 
-        def fake_chat(messages, **kw):
+        def fake_chat(messages, with_meta=False, **kw):
             captured["messages"] = messages
-            return '{"question": "q"}'
+            content = '{"question": "q"}'
+            if with_meta:
+                return content, {"finish_reason": "stop", "reasoning_tokens": 0}
+            return content
 
         original = ai_service._chat
         ai_service._chat = fake_chat
@@ -201,12 +204,19 @@ class TestCapturePrompt(unittest.TestCase):
         return captured["messages"]
 
     def _capture_calls(self, fn, *args, **kwargs):
-        """捕获每一次 _chat 调用（消息 + 关键字参数），用于断言视觉通道契约。"""
+        """捕获每一次 _chat 调用（消息 + 关键字参数），用于断言视觉通道契约。
+
+        注意：_chat 在 with_meta=True 时返回 (content, meta)，_chat_json 依赖它判断
+        finish_reason；假实现必须照此返回，否则会 unpack 失败。
+        """
         calls = []
 
-        def fake_chat(messages, **kw):
+        def fake_chat(messages, with_meta=False, **kw):
             calls.append((messages, kw))
-            return '{"question": "q"}'
+            content = '{"question": "q"}'
+            if with_meta:
+                return content, {"finish_reason": "stop", "reasoning_tokens": 0}
+            return content
 
         original = ai_service._chat
         ai_service._chat = fake_chat

@@ -40,7 +40,13 @@ def _chat(
     api_key: str | None = None,
     response_format: dict | None = None,
     max_tokens: int | None = None,
-) -> str:
+    with_meta: bool = False,
+):
+    """调用对话补全。默认返回纯文本；with_meta=True 时返回 (文本, 元信息)。
+
+    元信息含 finish_reason 与 reasoning_tokens，用于识别「推理模型把预算全用在
+    reasoning_content 上、content 为空」这种失败。
+    """
     if not is_configured():
         raise AiNotConfigured()
     url = (base_url or settings.AI_BASE_URL).rstrip("/") + "/chat/completions"
@@ -107,18 +113,67 @@ def _chat(
     except Exception as exc:
         raise AiRequestError(str(exc)) from exc
     try:
-        return data["choices"][0]["message"]["content"]
+        choice = data["choices"][0]
     except (KeyError, IndexError) as exc:
         raise AiRequestError("AI 服务响应格式异常") from exc
 
+    message = choice.get("message") or {}
+    content = message.get("content") or ""
+    if not with_meta:
+        return content
+
+    usage = data.get("usage") or {}
+    reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
+        "reasoning_tokens"
+    )
+    meta = {
+        "finish_reason": choice.get("finish_reason") or "",
+        "reasoning_tokens": int(reasoning_tokens or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "has_reasoning": bool(message.get("reasoning_content")),
+        "requested_max_tokens": max_tokens,
+    }
+    return content, meta
+
+
+# 推理模型（deepseek-flash）会先花掉一段 reasoning_tokens 再产出正文。
+# 若 max_tokens 只按"输出正文"估算，预算会被推理吃光 → finish_reason=length、
+# content 为空（实测 12000 预算里有 11998 是 reasoning_tokens，正文 0 字）。
+# 策略：首轮只按原预算的 1.5 倍（省时间省钱），**一旦真的被截断就翻倍重试**，
+# 而不是直接判定失败——这样绝大多数调用首轮就过，只有重活才付额外成本。
+_REASONING_TOKEN_HEADROOM = 1.5
+
+# 单次调用的 max_tokens 上限
+MAX_TOKENS_CEILING = 64000
+
+
+def _json_chat_budget(max_tokens: int | None) -> int:
+    """为推理 token 预留少量余量后的 max_tokens。"""
+    if not max_tokens:
+        return 16000
+    return min(MAX_TOKENS_CEILING, int(max_tokens * _REASONING_TOKEN_HEADROOM))
+
 
 def _chat_json(messages: List[dict], attempts: int = 3, **kwargs) -> dict:
-    """调用 AI 并解析严格 JSON。空内容/畸形/截断都算失败并重试（最多 3 次）。"""
+    """调用 AI 并解析严格 JSON。空内容/畸形/截断都算失败并重试（最多 3 次）。
+
+    对推理模型特别处理：先用留了推理余量的预算调用；若 finish_reason=length
+    （预算被推理耗光导致正文为空），翻倍预算再试，避免"拆题结果为空"这种假失败。
+    """
     last = None
+    budget = _json_chat_budget(kwargs.pop("max_tokens", None))
     for i in range(max(1, attempts)):
-        content = _chat(messages, **kwargs)
+        content, meta = _chat(messages, max_tokens=budget, with_meta=True, **kwargs)
         if content is None or not str(content).strip():
-            last = ValueError("AI 返回内容为空")
+            reason = meta.get("finish_reason") or "未知"
+            if reason == "length":
+                last = ValueError(
+                    f"输出预算被耗尽（finish_reason=length，推理用了 "
+                    f"{meta.get('reasoning_tokens')} tokens）；已调大预算重试"
+                )
+                budget = min(MAX_TOKENS_CEILING, budget * 2)
+            else:
+                last = ValueError(f"AI 返回内容为空（finish_reason={reason}）")
             if i < attempts - 1:
                 time.sleep(1.5 * (i + 1))
                 continue

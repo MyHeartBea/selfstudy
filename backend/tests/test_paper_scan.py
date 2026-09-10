@@ -152,11 +152,124 @@ class ScanFolderTest(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(len(items[0]["sources"]), 1)
 
+    def test_prefers_real_answer_key_over_mixed_paper(self):
+        """有真正的答案册时不要用「解析合卷」当答案来源（合卷里题面会干扰答案提取）。"""
+        make_tree(
+            self.root,
+            {
+                "英语二/2024年真题.docx": "q",
+                "英语二/2024年真题解析.pdf": "mixed",
+                "英语二/2024答案速查.pdf": "a",
+            },
+        )
+        item = self.scan()[0]
+        self.assertIn("答案速查", item["answer_path"])
+        self.assertEqual(item["answer_kind"], "answer_key")
+
+    def test_falls_back_to_mixed_when_no_answer_key(self):
+        make_tree(
+            self.root,
+            {
+                "英语二/2024年真题.docx": "q",
+                "英语二/2024年真题解析.pdf": "mixed",
+            },
+        )
+        item = self.scan()[0]
+        self.assertIn("解析", item["answer_path"])
+        self.assertEqual(item["answer_kind"], "mixed")
+
     def test_result_shape_matches_frontend_contract(self):
         make_tree(self.root, {"英语二/2013真题.pdf": "q", "英语二/2013答案速查.pdf": "a"})
         item = self.scan()[0]
         for key in ("rel_path", "name", "subject", "year", "answer_path", "size_kb"):
             self.assertIn(key, item, f"缺少前端依赖字段 {key}")
+
+
+class NormalizeAnswerTextTest(unittest.TestCase):
+    """答案册写法归一：实测这两种写法会让 10 道选择题只配到 1 道（还配错）。"""
+
+    def test_dense_quick_list_is_split(self):
+        from app.services.exam_paper_service import _normalize_answer_text
+
+        raw = "一、选择题\n(1)C. (2)B. (3)C. (4)C. (5)A. (6)B. (7)D. (8)D."
+        out = _normalize_answer_text(raw)
+        for expect in ["1:C", "2:B", "3:C", "4:C", "5:A", "6:B", "7:D", "8:D"]:
+            self.assertIn(expect, out, f"缺少 {expect}\n{out}")
+
+    def test_per_question_with_explanation_keeps_letter_only(self):
+        from app.services.exam_paper_service import _normalize_answer_text
+
+        raw = (
+            "1【答案】（A）$a=\\frac{1}{3},b=-1$ 考点：泰勒公式求参数\n"
+            "2【答案】（B）$\\lambda=\\frac{2}{5}$ 考点：齐与非解的关系"
+        )
+        out = _normalize_answer_text(raw)
+        self.assertIn("1:A", out)
+        self.assertIn("2:B", out)
+        # 选择题只留字母，考点文字不应参与匹配（避免干扰 AI）
+        self.assertNotIn("泰勒公式", out)
+
+    def test_per_question_fill_keeps_expression(self):
+        from app.services.exam_paper_service import _normalize_answer_text
+
+        out = _normalize_answer_text("11【答案】$0<p<2$ 考点：反常积分敛散性")
+        self.assertIn("11:$0<p<2$", out)
+
+    def test_already_normalized_untouched(self):
+        from app.services.exam_paper_service import _normalize_answer_text
+
+        raw = "1.A\n2:B\n3、C"
+        self.assertEqual(_normalize_answer_text(raw), raw)
+
+    def test_empty_safe(self):
+        from app.services.exam_paper_service import _normalize_answer_text
+
+        self.assertEqual(_normalize_answer_text(""), "")
+
+
+class AnswerSectionMapTest(unittest.TestCase):
+    def test_parses_question_number_ranges(self):
+        from app.services.exam_paper_service import _answer_section_map
+
+        exam = (
+            "一、选择题:1～10 小题,每小题 5 分\n"
+            "二、填空题 11-16题 每题5分\n"
+            "三 解答题 17-22题 共70分"
+        )
+        m = _answer_section_map(exam)
+        self.assertEqual(m.get("3"), "choice")
+        self.assertEqual(m.get("11"), "fill")
+        self.assertEqual(m.get("20"), "solution")
+
+    def test_ignores_absurd_ranges(self):
+        from app.services.exam_paper_service import _answer_section_map
+
+        self.assertEqual(_answer_section_map("一、选择题 1～999 小题"), {})
+
+
+class DocxImportBranchTest(unittest.TestCase):
+    """docx 不能被当成"扫描版 PDF"（原实现无条件调 _pdf_text_layer，docx 得到空串）。"""
+
+    def test_docx_uses_extract_text_not_pdf_text_layer(self):
+        import inspect
+
+        from app.services import exam_paper_service as svc
+
+        src = inspect.getsource(svc._run_import)
+        self.assertIn('suffix.lower() == ".docx"', src, "缺少 docx 专用分支")
+        self.assertIn("page_pils: dict = {}", src, "page_pils 必须在分支前初始化")
+
+    def test_docx_extraction_returns_text(self):
+        """真实 docx（若样例存在）应能抽出文本，且不被判为扫描版。"""
+        sample = None
+        for p in Path(r"D:\km-v2\真题").rglob("*.docx"):
+            if not p.name.startswith("~$") and p.stat().st_size > 10000:
+                sample = p
+                break
+        if sample is None:
+            self.skipTest("真题目录里没有可用的 docx 样例")
+        text = eps.extract_text(sample)
+        self.assertGreater(len(text.strip()), 500, f"{sample.name} 抽出的文本过少")
 
 
 if __name__ == "__main__":
