@@ -71,7 +71,10 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
 7. **表格 / 图**：`RichText` 支持 Markdown 表格 + 十六进制等宽 `hex-dump`；AI 只会识别图不会重绘，正确表格 / 拓扑图看**原图**。
 8. **生词本**：`vocab_items` 有 `kind`（word / phrase）+「全部 / 单词 / 短语」筛选 +「词语」标签；点词查义 `/api/ai/sense`；导入 `/vocab/import-english`（去重）。
 9. **多图 = 一次分析**：`/ai/knowledge-from-image` 接受 `{images:[...]}`（≥2 张按 3 张一批、按序提文字后合并），**只产出一条知识点草稿**——不要把「粘一张分析一张」改回来。`AiOcrRequest` 的 `image_base64` 与 `images` 至少给一个。
-10. **卡片点击**：知识点/公式卡片必须**整卡可点**打开详情。实现方式是在卡片里放一个铺满的 `.k-hit` / `.f-hit` 按钮（位于操作按钮**之下**），操作按钮加 `position:relative; z-index` 压在点击层之上；**不要**把按钮嵌套进按钮、也不要用一个整卡 `@click` 把操作按钮一起吞掉。装饰性元素（色脊/水印）加 `pointer-events:none`。卡片预览要用 `markdownToPlain()` 剥掉 `##`/`**`/表格竖线，详情才走 RichText。
+10. **卡片点击**：知识点/公式卡片必须**整卡可点**打开详情。做法是给卡片本体加 `role="button" tabindex="0"` + `@click`（键盘 Enter/Space 同效），卡片内的显式控件（操作按钮、关联标签）各自加 `@click.stop`，装饰元素（色脊/水印）加 `pointer-events:none`。
+   **不要用「铺满卡片的透明点击层（.k-hit/.f-hit）」**：一旦卡内子元素为了定位而带上 `position:relative; z-index`，它们就会盖住点击层，导致「只有某条窄缝可点、点标题/摘要都没反应」（已翻车过一次，用户实测点不动）。
+   卡片 hover **不要做 `translateY` 位移**：鼠标停在卡片边缘时上浮会让指针落到卡外，触发 mouseleave→落回→再进入的抖动循环。
+   卡片预览要用 `markdownToPlain()` 剥掉 `##`/`**`/表格竖线，详情才走 RichText。
 11. **弹窗状态**：`KnowledgeEditModal` 打开时必须重置（新增清空、编辑载入）；监听器（如 Ctrl+V 粘贴）要用 `watchEffect` 按「是否打开」同步挂载，**不要**只在 `false→true` 的 watch 回调里挂——组件若以 `modelValue=true` 挂载会静默失效。多文件读取用 `Promise.all(accepted.map(...))`，**禁止** `for (const f of files) { await read(f) }`（`for...of` 复用绑定会导致只留下最后一张）。
 
 ## 6. 关键文件
@@ -89,7 +92,7 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
 - `views/DesignView.vue`：/design 画廊（全组件双主题打磨场，不入导航）。
 - `components/EnglishAnalysisPanel.vue`：整篇精读（核心）。
 - `components/KnowledgeEditModal.vue`：知识点新增/编辑（多图暂存 → 一次分析、打开即重置）。
-- `views/KnowledgeView.vue`：知识点卡片墙（整卡可点 `.k-hit` + 只读详情弹窗）；`views/FormulaView.vue`：公式卡（`.f-hit`）。
+- `views/KnowledgeView.vue`：知识点卡片墙（整卡可点 + 只读详情弹窗）；`views/FormulaView.vue`：公式卡（同样整卡可点）。
 - `utils/markdown.js`：`renderMarkdown`（详情排版）与 `markdownToPlain`（卡片纯文本预览）。
 - `views/CaptureView.vue`：多图 / 粘贴目标 / 自动检测 / 分析进度叙事。
 - `views/StatsView.vue`：Bento 统计；`views/ReviewView.vue`：复习沉浸舞台。

@@ -238,16 +238,15 @@ onMounted(loadFormulas)
         v-for="(item, i) in filteredItems"
         :key="item.id"
         class="formula-card card"
+        role="button"
+        tabindex="0"
+        :aria-label="`查看公式 ${item.title}`"
         :style="{ '--enter-delay': Math.min(i, 11) * 50 + 'ms', '--fcol': catColor(item.category) }"
+        @click="openDetail(item)"
+        @keydown.enter.prevent="openDetail(item)"
+        @keydown.space.prevent="openDetail(item)"
       >
         <span class="f-mark" aria-hidden="true">∑</span>
-        <!-- 整卡可点：铺满卡片、位于操作按钮之下的点击层 -->
-        <button
-          type="button"
-          class="f-hit"
-          :aria-label="`查看公式 ${item.title}`"
-          @click="openDetail(item)"
-        ></button>
         <div class="formula-head">
           <span class="cat-seal">{{ item.category }}</span>
           <span class="formula-title">{{ item.title }}</span>
@@ -255,10 +254,11 @@ onMounted(loadFormulas)
         <div class="formula-preview">{{ plainPreview(item) }}</div>
         <div class="formula-foot">
           <span class="muted">{{ formatTime(item.updated_at || item.created_at) }}</span>
+          <!-- 操作按钮阻止冒泡：点它们不会顺带打开详情 -->
           <div class="formula-actions">
-            <button class="op-link" @click="openDetail(item)">查看</button>
-            <button class="op-link" @click="openEdit(item)">编辑</button>
-            <button class="op-link danger" @click="remove(item)">删除</button>
+            <button class="op-link" @click.stop="openDetail(item)">查看</button>
+            <button class="op-link" @click.stop="openEdit(item)">编辑</button>
+            <button class="op-link danger" @click.stop="remove(item)">删除</button>
           </div>
         </div>
       </article>
@@ -372,7 +372,7 @@ onMounted(loadFormulas)
   gap: 10px;
   padding: 16px 16px 14px 20px;
   cursor: pointer;
-  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease), transform 0.25s var(--spring);
+  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease);
   animation: fcard-in 0.5s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
@@ -394,27 +394,11 @@ onMounted(loadFormulas)
   /* 左侧色条是纯装饰：不参与命中测试，避免盖住整卡点击层 */
   pointer-events: none;
 }
-.formula-card:hover { border-color: color-mix(in srgb, var(--fcol) 45%, var(--line)); box-shadow: var(--shadow-2); transform: translateY(-3px); }
+.formula-card:hover { border-color: color-mix(in srgb, var(--fcol) 45%, var(--line)); box-shadow: var(--shadow-2); }
 .formula-card:hover::before { width: 6px; }
-/* 整卡点击层（位于操作按钮之下，避免按钮嵌套按钮） */
-.f-hit {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border: none;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
-  border-radius: inherit;
-}
-.f-hit:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
-/* 卡片内部可交互元素压在点击层之上，防止"点按钮变成查看" */
-.formula-head,
-.formula-preview,
-.formula-foot,
-.cat-seal { position: relative; z-index: 2; }
-.formula-actions .op-link { position: relative; z-index: 3; }
+/* 同知识点卡片：hover 不做位移，避免鼠标停在边缘时抖动 */
+.formula-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 水墨 ∑ 水印是纯装饰（已有 pointer-events:none），不参与命中测试 */
 /* 水墨 ∑ 水印 */
 .f-mark {
   position: absolute;

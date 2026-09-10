@@ -95,26 +95,64 @@ beforeEach(() => {
 })
 
 describe('知识点库：整卡可点', () => {
-  it('点击卡片命中层打开详情，并渲染完整摘要', async () => {
+  it('卡片是整卡按钮语义（role=button + tabindex），带可读名称', async () => {
     const wrapper = mount(KnowledgeView, { attachTo: document.body })
     await flush()
 
     const card = wrapper.find('.k-card')
     expect(card.exists()).toBe(true)
+    expect(card.attributes('role')).toBe('button')
+    expect(card.attributes('tabindex')).toBe('0')
+    expect(card.attributes('aria-label')).toContain('等价无穷小')
+  })
 
-    const hit = card.find('.k-hit')
-    expect(hit.exists()).toBe(true)
-    expect(hit.attributes('aria-label')).toContain('等价无穷小')
+  // 关键回归：以前只有「点击层」那条窄缝有反应，点标题/摘要/标签/空白都没反应。
+  // 现在必须卡片的每个区域都能打开详情。
+  const regions = [
+    ['标题 .k-name', '.k-name'],
+    ['头部 .k-head', '.k-head'],
+    ['日期 .k-time', '.k-time'],
+    ['科目标签 .k-chips', '.k-chips'],
+    ['摘要 .k-summary', '.k-summary'],
+    ['关联区 .k-rel', '.k-rel'],
+    ['操作栏空白 .k-ops', '.k-ops'],
+  ]
 
-    await hit.trigger('click')
+  for (const [label, sel] of regions) {
+    it(`点击${label} 也能打开详情`, async () => {
+      const wrapper = mount(KnowledgeView, { attachTo: document.body })
+      await flush()
+
+      const el = wrapper.find(`.k-card ${sel}`)
+      expect(el.exists()).toBe(true)
+      await el.trigger('click')
+      await flush()
+
+      expect(document.querySelectorAll('.k-detail').length).toBe(1)
+    })
+  }
+
+  it('点击卡片本体打开详情，并渲染完整摘要', async () => {
+    const wrapper = mount(KnowledgeView, { attachTo: document.body })
     await flush()
 
-    // 详情弹窗（teleport 到 body）已打开并带出标题
+    await wrapper.find('.k-card').trigger('click')
+    await flush()
+
     expect(modalTitles().some((t) => t.includes('等价无穷小'))).toBe(true)
-    // 全文正文与关联标签都在详情里
     const body = bodyText()
     expect(body).toContain('sin')
     expect(body).toContain('极限')
+  })
+
+  it('键盘可达：Enter / Space 打开详情', async () => {
+    const wrapper = mount(KnowledgeView, { attachTo: document.body })
+    await flush()
+
+    const card = wrapper.find('.k-card')
+    await card.trigger('keydown', { key: 'Enter' })
+    await flush()
+    expect(document.querySelectorAll('.k-detail').length).toBe(1)
   })
 
   it('点「编辑」进编辑态，不会误触详情', async () => {
@@ -129,8 +167,8 @@ describe('知识点库：整卡可点', () => {
     await flush()
 
     expect(modalTitles().some((t) => t.includes('编辑知识点'))).toBe(true)
-    // 不应同时弹出详情
-    expect(modalTitles().some((t) => t.includes('等价无穷小'))).toBe(false)
+    // 操作按钮阻止了冒泡：不应同时弹出详情
+    expect(document.querySelectorAll('.k-detail').length).toBe(0)
   })
 
   it('点「练习」跳转复习，不打开任何弹窗', async () => {
@@ -144,25 +182,61 @@ describe('知识点库：整卡可点', () => {
 
     expect(modalTitles().length).toBe(0)
   })
+
+  it('点关联标签只做筛选，不打开详情', async () => {
+    const wrapper = mount(KnowledgeView, { attachTo: document.body })
+    await flush()
+
+    const tag = wrapper.find('.k-card .k-rel .ui-tag')
+    expect(tag.exists()).toBe(true)
+    await tag.trigger('click')
+    await flush()
+
+    expect(document.querySelectorAll('.k-detail').length).toBe(0)
+  })
 })
 
 describe('公式库：整卡可点', () => {
-  it('点击卡片命中层打开详情并渲染公式内容', async () => {
+  it('卡片是整卡按钮语义', async () => {
     const wrapper = mount(FormulaView, { attachTo: document.body })
     await flush()
 
     const card = wrapper.find('.formula-card')
-    expect(card.exists()).toBe(true)
+    expect(card.attributes('role')).toBe('button')
+    expect(card.attributes('aria-label')).toContain('基本积分表')
+  })
 
-    const hit = card.find('.f-hit')
-    expect(hit.exists()).toBe(true)
-    expect(hit.attributes('aria-label')).toContain('基本积分表')
+  for (const [label, sel] of [
+    ['分类印章 .cat-seal', '.cat-seal'],
+    ['标题 .formula-title', '.formula-title'],
+    ['预览 .formula-preview', '.formula-preview'],
+    ['底部信息 .formula-foot', '.formula-foot'],
+  ]) {
+    it(`点击${label} 也能打开公式详情`, async () => {
+      const wrapper = mount(FormulaView, { attachTo: document.body })
+      await flush()
 
-    await hit.trigger('click')
+      const el = wrapper.find(`.formula-card ${sel}`)
+      expect(el.exists()).toBe(true)
+      await el.trigger('click')
+      await flush()
+
+      expect(modalTitles().some((t) => t.includes('基本积分表'))).toBe(true)
+      expect(bodyText()).toContain('积分公式正文内容')
+    })
+  }
+
+  it('点「编辑」不打开详情', async () => {
+    const wrapper = mount(FormulaView, { attachTo: document.body })
     await flush()
 
-    expect(modalTitles().some((t) => t.includes('基本积分表'))).toBe(true)
-    expect(bodyText()).toContain('积分公式正文内容')
+    const card = wrapper.find('.formula-card')
+    const editBtn = card.findAll('button').find((b) => b.text().includes('编辑'))
+    await editBtn.trigger('click')
+    await flush()
+
+    expect(modalTitles().some((t) => t.includes('编辑公式'))).toBe(true)
+    expect(modalTitles().some((t) => t === '基本积分表')).toBe(false)
   })
 
   it('点「删除」只弹确认框，不打开公式详情', async () => {

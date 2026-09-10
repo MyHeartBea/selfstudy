@@ -20,7 +20,7 @@
 9. **超时**：前端 axios 300s；后端 `AI_TIMEOUT=240`、`AI_OCR_TOTAL_TIMEOUT=290`、`AI_VISION_PRIMARY_TIMEOUT=240`。
 10. **生词本**：`vocab_items.kind`(word/phrase) + 分类筛选 + 点词查义 `/api/ai/sense` + 去重导入 `/vocab/import-english`。
 11. **临时文件放 `D:\temp`**；**密钥不打印**（`.env` 不入库）；改完 **`git add -A && git commit && git push`**。
-12. **卡片整卡可点**：知识点/公式卡片点任意位置直接开详情（铺满的 `.k-hit`/`.f-hit` 点击层，操作按钮压在它之上，装饰元素 `pointer-events:none`）；卡片预览用 `markdownToPlain()` 去 Markdown 标记，详情才用 `RichText`。
+12. **卡片整卡可点**：知识点/公式卡片＝卡片本体 `role=button tabindex=0 @click`，卡内按钮/关联标签各自 `@click.stop`，装饰元素 `pointer-events:none`。**别用铺满卡片的透明点击层**（会被带 `position/z-index` 的子元素盖住 → 只有窄缝可点，用户实测点不动）；卡片 hover 别做 `translateY`（边缘抖动）。卡片预览用 `markdownToPlain()` 去 Markdown 标记，详情才用 `RichText`。
 13. **知识点多图**：`/ai/knowledge-from-image` 收 `{images:[...]}`，按序分批提文字后合并成**一条**草稿；弹窗打开即重置（新增清空/编辑载入），粘贴监听用 `watchEffect` 同步挂载；多文件读取用 `Promise.all` 而非 `for...of + await`。
 
 ## 关键文件

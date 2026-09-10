@@ -234,15 +234,14 @@ onMounted(() => {
           v-for="(row, i) in items"
           :key="row.id"
           class="k-card card"
+          role="button"
+          tabindex="0"
+          :aria-label="`查看知识点 ${row.tag_name}`"
           :style="{ '--enter-delay': Math.min(i, 11) * 50 + 'ms', '--kcol': subjectColor(row.subject_id) }"
+          @click="openDetail(row)"
+          @keydown.enter.prevent="openDetail(row)"
+          @keydown.space.prevent="openDetail(row)"
         >
-          <!-- 整卡可点：铺满卡片且位于操作按钮之下的点击层，避免按钮嵌套在按钮里 -->
-          <button
-            type="button"
-            class="k-hit"
-            :aria-label="`查看知识点 ${row.tag_name}`"
-            @click="openDetail(row)"
-          ></button>
           <i class="k-spine" aria-hidden="true"></i>
           <div class="k-head">
             <h3 class="k-name">{{ row.tag_name }}</h3>
@@ -255,24 +254,25 @@ onMounted(() => {
           <p v-if="row.summary" class="k-summary">{{ plainSummary(row.summary) }}</p>
           <div v-if="row.related_tags && row.related_tags.length" class="k-rel">
             <span class="k-rel-label">关联</span>
+            <!-- 关联标签是独立筛选入口：阻止冒泡，避免顺带打开详情 -->
             <UiTag
               v-for="t in row.related_tags"
               :key="t"
               color="var(--gold)"
               size="sm"
               clickable
-              @click="() => { filters.tag = t; searchKnowledge() }"
+              @click.stop="() => { filters.tag = t; searchKnowledge() }"
             >
               {{ t }}
             </UiTag>
           </div>
           <div class="k-ops">
-            <button class="op-link primary" @click="practiceTag(row.tag_name)"><Icon name="play" :size="12" /> 练习</button>
-            <button class="op-link primary" @click="openEdit(row)">编辑</button>
-            <button class="op-link warning" :disabled="summarizingId === row.id" @click="autoSummarize(row)">
+            <button class="op-link primary" @click.stop="practiceTag(row.tag_name)"><Icon name="play" :size="12" /> 练习</button>
+            <button class="op-link primary" @click.stop="openEdit(row)">编辑</button>
+            <button class="op-link warning" :disabled="summarizingId === row.id" @click.stop="autoSummarize(row)">
               {{ summarizingId === row.id ? '总结中…' : 'AI 总结' }}
             </button>
-            <button class="op-link danger" @click="remove(row)"><Icon name="trash" :size="12" /></button>
+            <button class="op-link danger" @click.stop="remove(row)"><Icon name="trash" :size="12" /></button>
             <span class="k-open-hint" aria-hidden="true">点击查看全文</span>
           </div>
         </article>
@@ -377,7 +377,8 @@ onMounted(() => {
   flex-direction: column;
   gap: 9px;
   padding: 15px 16px 13px 21px;
-  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease), transform 0.25s var(--spring);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease);
   animation: kcard-in 0.5s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
@@ -388,39 +389,15 @@ onMounted(() => {
 .k-card:hover {
   border-color: color-mix(in srgb, var(--kcol) 45%, var(--line));
   box-shadow: var(--shadow-2);
-  transform: translateY(-3px);
 }
-/* 整卡点击层：铺满卡片，位于操作按钮之下（z-index 0 < 2），
-   既能让整卡可点，又不会把按钮嵌套进按钮里（避免交互/无障碍问题） */
-.k-hit {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border: none;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  cursor: pointer;
-  border-radius: inherit;
-}
-.k-hit:focus-visible {
+/* 注意：卡片 hover 不做 translateY 位移。
+   整卡可点后，鼠标停在卡片下沿时上浮会让指针落到卡片外，触发 mouseleave、
+   卡片落回、指针又进入……形成抖动循环（点了像没反应）。用边框+阴影表达 hover 即可。 */
+.k-card:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -3px;
+  outline-offset: 2px;
 }
-/* 卡片内部可交互元素一律压在点击层之上 */
-.k-spine,
-.k-head,
-.k-chips,
-.k-summary,
-.k-rel,
-.k-ops {
-  position: relative;
-  z-index: 2;
-}
-.k-spine { pointer-events: none; }
-.k-rel :deep(.ui-tag) { position: relative; z-index: 3; }
-/* 操作按钮要压在整卡点击层之上，保证点按钮不会误触"查看" */
-.k-ops .op-link { position: relative; z-index: 3; }
+/* 卡片内可交互元素（关联标签、操作按钮）自带 @click.stop，独立生效 */
 .k-open-hint {
   margin-left: auto;
   font-size: 11.5px;
@@ -441,7 +418,7 @@ onMounted(() => {
   background: linear-gradient(180deg, var(--kcol), color-mix(in srgb, var(--kcol) 35%, transparent));
   opacity: 0.85;
   transition: width 0.25s var(--spring);
-  /* 色脊是纯装饰：不参与命中测试，避免盖住整卡点击层 */
+  /* 色脊是纯装饰：不参与命中测试 */
   pointer-events: none;
 }
 .k-card:hover .k-spine { width: 6px; opacity: 1; }
