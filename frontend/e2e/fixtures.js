@@ -14,6 +14,29 @@ export function ok(data, message = 'success') {
   return { code: 200, data, message }
 }
 
+/**
+ * CRC32（PNG 分块校验用）。
+ *
+ * 不用 `zlib.crc32`：那是 Node ≥20.15 才有的 API（22.2.0 才回移到 22.x），
+ * 而 package.json 没有 engines 约束 —— 本机 Node 18/早期 20 会直接
+ * `TypeError: zlib.crc32 is not a function`。手搓一张查表实现（15 行）彻底免掉这个版本坑。
+ */
+const CRC_TABLE = (() => {
+  const table = new Int32Array(256)
+  for (let n = 0; n < 256; n += 1) {
+    let c = n
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    table[n] = c
+  }
+  return table
+})()
+
+function crc32(buf) {
+  let c = 0xffffffff
+  for (let i = 0; i < buf.length; i += 1) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8)
+  return (c ^ 0xffffffff) >>> 0
+}
+
 /** 造一张合法的最小 PNG（纯 zlib 手搓，不依赖任何图形库）。 */
 export function tinyPng({ w = 8, h = 8, rgb = [255, 255, 255] } = {}) {
   const chunk = (tag, data) => {
@@ -21,7 +44,7 @@ export function tinyPng({ w = 8, h = 8, rgb = [255, 255, 255] } = {}) {
     len.writeUInt32BE(data.length)
     const body = Buffer.concat([Buffer.from(tag, 'ascii'), data])
     const crc = Buffer.alloc(4)
-    crc.writeUInt32BE(zlib.crc32(body) >>> 0)
+    crc.writeUInt32BE(crc32(body))
     return Buffer.concat([len, body, crc])
   }
   const ihdr = Buffer.alloc(13)

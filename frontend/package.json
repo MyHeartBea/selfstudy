@@ -4,6 +4,9 @@
   "private": true,
   "description": "考研错题本前端 v2 - Vue 3 自建设计系统（无 UI 框架依赖）",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
