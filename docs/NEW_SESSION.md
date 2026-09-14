@@ -32,8 +32,10 @@
 - 前端：`components/EnglishAnalysisPanel.vue`（核心）、`views/CaptureView.vue`、`components/KnowledgeEditModal.vue`、`views/KnowledgeView.vue`、`views/FormulaView.vue`、`components/MistakeCard.vue`、`components/DetailMeta.vue`、`ui/QuestionImages.vue`、`utils/markdown.js`、`components/RichText.vue`、`ui/UiModal.vue`。
 
 ## 测试与验证（含手法的坑）
-- 后端：`cd backend && python -m unittest discover -s tests`（54 个）。
-- 前端：`cd frontend && npm test`（Vitest 31 个，含 DOM 级交互回归；`vite.config.js` 里 `test.environment='happy-dom'`）。
+- 后端：`cd backend && python -m unittest discover -s tests`（138 个）。
+- 前端：`cd frontend && npm test`（Vitest 49 个，含 DOM 级交互回归；`vite.config.js` 里 `test.environment='happy-dom'`）。
+- 静态检查：`cd backend && ruff check app tests && ruff format --check app tests`；`cd frontend && npx eslint src tests && npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js"`；一次性 `pre-commit run --all-files`。
+- **改前端必须再跑 `npm run build`**：Vue 模板编译错误只有 build 能发现（lint 与单测都会放过）。
 - **UiModal 是 Teleport 到 `document.body`**：测试里查弹窗必须 `document.querySelector`，不要用 `wrapper.find`。
 - **测试收尾必须 `unmount()`**，不要在 `beforeEach` 里 `document.body.innerHTML=''`——直接清空会让 Vue 的 Teleport 记账错乱，组件监听器静默失效（踩过）。
 - 真实浏览器端到端（可选）：Chrome `--headless=new --remote-debugging-port` + 裸 CDP（标准库即可），

@@ -31,9 +31,21 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（54 个）
-cd frontend && npm test                                  # Vitest 31 个；含 DOM 级交互回归（happy-dom）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（138 个）
+cd frontend && npm test                                  # Vitest 49 个；含 DOM 级交互回归（happy-dom）
+
+# 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
+cd backend && ruff check app tests && ruff format --check app tests
+cd frontend && npx eslint src tests && npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js"
+pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / 密钥扫描
 ```
+
+> **质量工具链**：后端 Ruff（`backend/pyproject.toml`，只选 F/B/T201，**刻意不含 I(isort)** ——
+> isort 与 `ruff format` 在导入段空行上互不认账，会让 pre-commit 反复震荡）；前端 ESLint 扁平配置 +
+> Prettier（`.prettierrc.json`）；钩子脚本在 `scripts/`（`check_secrets.py` / `preflight_check.py` /
+> `frontend_lint.mjs`，用 Node 包装避免 Windows 上找不到 `bash`）。
+> **改完前端必须跑 `npm run build`**：Vue 模板编译错误只有 build 抓得到（lint 和单测都会放过，
+> 曾因此把两处多语句内联 `@click` 改坏）。CI 覆盖率门槛 55%，当前约 62%。
 
 ## 3. 提交与数据规范（务必遵守）
 - 每次完成代码 / 数据 / 文档修改并**验证通过**后：`git add -A && git commit -m "简短说明" && git push`
@@ -196,8 +208,18 @@ cd frontend && npm test                                  # Vitest 31 个；含 D
 ## 9. 当前状态（2026-09-06）
 - **前端墨韵 2.0 重构 + 功能补全批次全部完成**。UI：7 Phase（`2c1e52b`…`1458fdc`）+ 三轮反馈迭代；功能批：详情卷宗v3+缩略图+预报（`d19bf5a`）、SM-2 调度（`ccedc90`）、错因周报+Anki 导出（`e66a24e`）、真题模考（`e5c3481`）、层叠修复+模考存档+高亮+打印+速查+Vitest（本批）。
 - **后端契约注意**：迁移已到 **v8**（v6=ease_factor/last_interval，v7=mock_records 表，v8=exam_papers/exam_questions 真题库）；`/api` 新增 `/mocks`、`/ai/weekly-report`（按天缓存 app_meta）、`/export/anki`、`/reviews/forecast`、`/images/thumb/{name}`；`/reviews/practice` 支持 `mistake_id` 与 `mode=mock`。改调度/判分先看第 7 节。
-- 测试：后端 41 + 前端 Vitest 10（`cd frontend && npm test`，判分纯函数 + useMistakeFilters）全绿。
+- 测试：后端 41 + 前端 Vitest 10（历史上限；**当前 138 + 49**，见文末最新批次）。
 - **真题库已上线**：真机验证英语二 2013 全链路（导入拆题 33 题 50 秒 / 答案配对 20/27 / 整卷模考 / 错题自动入本）。**扫描版/乱码文本层 PDF 已支持且公式更准**：数学/408 优先 DeepSeek 视觉（输出 LaTeX），实测 2025 数二 22 题/配答案 10/10（公式/偏导/积分限/矩阵准确）、**2009 计算机408 问卷乱码文本层 → 视觉逐页提取 47 题/配答案 40/40，且图示题（二叉排序树等）自动存整页原图 `/images/exam_papers/<pid>/p<n>.webp` 供模考查看**；仅当视觉与 OCR 都提不出文字时才报 error。公式密集的数学题如不满意，仍可走「智能录入」识图逐题精修。每份卷导入约 1-3 分钟 + 数次 AI 调用（含视觉，成本低）。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`；架构与硬规则见第 6.5 节。
 - 后端 8000 运行中（HOST 默认 127.0.0.1，`.env` 里设 `HOST=0.0.0.0` 可手机局域网访问，**必须同时设 `API_TOKEN`**）；前端 dist 已构建；openviking 正常（第 8 节）。
 - **2026-09-10 优化批次（已完成）**：①复习队列＝新题优先+逾期轮转+每日配额（不做毕业机制）；②真题库扫描＝合卷识别+按科目年份去重+年份/科目修正（可导入 1→59 份）；③知识点↔错题链接（`/api/knowledge/linked-mistakes` + 详情弹窗展示，支持 related_tags 兜底）；④工程项＝`HOST`/`PORT` 可配、请求耗时与错误监控（`app/metrics.py` + `/api/health` 摘要）、`/api/snapshots` 快照（导入/批量删除自动先快照）。测试：后端 95、前端 49。
+- **2026-09-14 质量与架构批次（已完成）**：
+  ①**卡片整块可点**：知识笺/公式卡改为卡体 `@click` + 控件 `@click.stop`（原 `.k-hit` 覆盖层被 z-index:2 的子元素盖住，只有缝隙能点）；
+  ②**智能录入多图暂存**：粘贴先暂存成图组再一次分析（原 `for...of` 里 `await` 让所有回调都用了最后一个绑定）；
+  ③**录入表单保存后整表重置**（新增模式 `row` 恒为 null，原先 watch 不触发）；
+  ④**deepseek-flash 回归修复**：视觉 `max_tokens` 4000 → 16000 + `finish_reason=length` 翻倍重试（原来推理 token 吃光预算 → 原文只剩一两段）；OCR 提示词加 `【原文】/【题目】` 分段标记 + `_split_ocr_sections`（原来题目段被混进原文导致「题目完全不一致」）；`qa["passage"]` 取纯原文（原先错取 `source_text`）；数学/英语/标题提示词加「原样照抄」约束与页眉页脚/水印排除；
+  ⑤**答案文件解析**：`_normalize_answer_text` 支持 `(1)C. (2)B.` 与 `1【答案】（A）` 两种版式；`classify_file` 新增 **mixed（问答合卷）** 判定，无答案文件时同文件文本回填；docx 后缀分派（原先被当扫描 PDF）；
+  ⑥**安全**：`/api/papers` 的 `source_path`/`answer_path` 增加 `_resolve_inside()` —— 拒绝绝对路径、`..` 段、越出根目录的路径（生产实测 7 种穿越全部 400）；`routers/system.py` 补 `error` 导入（F821 真 bug）；
+  ⑦**架构拆分**：`ai_service.py` 1402 → 约 950 行，英语整篇流水线抽到 `app/services/ai_english.py`（约 500 行，真并发 `executor.submit` + `.result()`，通过 `_svc()` 惰性引用模块以便 mock 生效），底部保留兼容 re-export；
+  ⑧**工具链**：后端 Ruff、前端 ESLint 扁平配置 + Prettier、`pre-commit`（含密钥扫描与大文件检查，`scripts/`）、CI 增加 ruff/eslint/prettier/前端单测/覆盖率门槛 55%；顺带修出两个真 bug（`FormulaView.vue` 的 `reciteRevealed` 未声明、`system.py` 的 F821）。
+  测试：**后端 138、前端 49**，覆盖率约 62%。

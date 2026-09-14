@@ -630,11 +630,13 @@ def _normalize_answer_text(text: str) -> str:
             continue
 
         # 1) 连排速查：(1)C. (2)B. → 拆成多行
+        # 阈值取 2：只有两组（如 "(1)C. (2)B."）的小速查段同样要能拆出来；
+        # 原实现要求 >=3，导致这类短速查行完全抽不到答案。
         pairs = re.findall(
             r"[（(]?\s*(\d{1,2})\s*[)）.、．:：]\s*[（(]?\s*([A-Da-d])\s*[)）.、．]?",
             stripped,
         )
-        if len(pairs) >= 3:
+        if len(pairs) >= 2 and len(pairs) >= stripped.count("\n") + 2:
             for no, letter in pairs:
                 out_lines.append(f"{int(no)}:{letter.upper()}")
             continue
@@ -657,6 +659,24 @@ def _normalize_answer_text(text: str) -> str:
         out_lines.append(line)
 
     return "\n".join(out_lines)
+
+
+def _answer_pairs_from_text(text: str, expected: int = 1) -> dict:
+    """从答案文本里**确定性地**抽出 {题号: 答案字母}。
+
+    先归一化（连排速查 `(1)C. (2)B.`、逐题 `1【答案】（A）…` 都会变成 `1:A` 行），
+    再只取形如 `1:A` / `1:A-` 的行，并按**首次出现**保留。
+
+    返回空 dict 表示"这份材料里取不到成对答案"——调用方据此判定文本层是否真的可用
+    （扫描版详解 PDF 的乱码文本层会被 `_pdf_text_usable` 误判为可用，必须靠这个信号兜住）。
+    """
+    normalized = _normalize_answer_text(text or "")
+    pairs: dict = {}
+    for m in re.finditer(r"^\s*(\d{1,3})\s*[:：]\s*([A-Da-d])\b", normalized, re.M):
+        pairs.setdefault(str(int(m.group(1))), m.group(2).upper())
+    if expected > 0 and len(pairs) < expected:
+        return {}
+    return pairs
 
 
 def _answers_prompt(subject: str, year: str, nos: List[str], answer_text: str) -> str:
@@ -768,6 +788,19 @@ def _run_import(paper_id: int) -> None:
                     answer_text = extract_text(answer_path)
                 except Exception:
                     answer_text = ""
+                # 文本层"看着能读"不等于"能取到答案"：扫描版详解 PDF 的乱码文本层
+                # CJK 占比很高，会被 _pdf_text_usable 判为可用，于是 OCR/视觉兜底
+                # 永不触发，12000 字乱码被当答案材料送进 AI → 客观题答案基本配不上。
+                # 这里对答案文件加一道结构化判据：归一化后拿不到成对答案就强制 OCR。
+                if answer_path.suffix.lower() == ".pdf" and not _answer_pairs_from_text(
+                    answer_text, expected=8
+                ):
+                    try:
+                        ocr_text = _pdf_ocr(answer_path, paper["subject"])
+                    except Exception:
+                        ocr_text = ""
+                    if _answer_pairs_from_text(ocr_text, expected=8) or not answer_text.strip():
+                        answer_text = ocr_text or answer_text
         # 答案册写法五花八门（连排速查 `(1)C. (2)B.`、逐题 `1【答案】（A）…考点：…`），
         # 先归一成 `题号:答案` 行再交给 AI，否则匹配率极低（实测 10 题只配到 1 题且配错）
         if answer_text:
@@ -791,7 +824,17 @@ def _run_import(paper_id: int) -> None:
                 if key in seen_nos:
                     continue
                 seen_nos.add(key)
-                q_page = page_idx if page_idx is not None else int(q.get("page") or 0)
+                # page 由模型生成，可能是 "第3页"/"3页" 这类非数字。原来直接 int()，
+                # 异常会穿到 _worker_loop 把整份试卷标记为 error —— 已花的 AI 费用白付。
+                if page_idx is not None:
+                    q_page = page_idx
+                else:
+                    raw_page = str(q.get("page") or "").strip()
+                    try:
+                        q_page = max(0, int(raw_page or 0))
+                    except (TypeError, ValueError):
+                        digits = re.findall(r"\d+", raw_page)
+                        q_page = int(digits[0]) if digits else 0
                 questions.append(
                     {
                         "no": no,
@@ -863,18 +906,38 @@ def _run_import(paper_id: int) -> None:
             if fixed:
                 _set_status(conn, paper_id, "structuring", f"已按卷面校正 {fixed} 道题的题型")
 
+        # 合卷（mixed）被选作主文件时 answer_path 恒为空（scan_folder 会把它从答案池里
+        # 排除掉，避免自己配自己），但同一份文件里就带着答案 —— 直接用卷面文本兜底，
+        # 否则这类年份（实测 政治2023 / 数学一2024 / 数学三2024）永远配不到答案。
+        if not answer_text and classify_file(source.name) == "mixed":
+            answer_text = exam_text
+
         # 答案匹配：仅客观题，从配对答案文件文本推断
         if answer_text:
             need = [q["no"] for q in questions if q["type"] == "choice" and not q["correct_answer"]]
             if need:
                 _set_status(conn, paper_id, "structuring", "正在匹配参考答案")
+
+                # 先用确定性归一化抽出的紧凑答案行：`英语二真题答案速查2010-2024.pdf`
+                # 这类多年份合集可长达 12 万字，直接截前 12000 字会让后段题目拿不到答案；
+                # 归一化后的 `1:A` 行体积小一两个数量级，且不含解析噪音，更适合交给 AI。
+                pairs = _answer_pairs_from_text(answer_text, expected=1)
+                material = (
+                    "\n".join(
+                        f"{no}:{ans}"
+                        for no, ans in sorted(pairs.items(), key=lambda kv: int(kv[0]))
+                    )
+                    if pairs
+                    else answer_text
+                )
+
                 try:
                     parsed = ai_service._chat_json(
                         [
                             {
                                 "role": "user",
                                 "content": _answers_prompt(
-                                    paper["subject"], paper["year"], need, answer_text
+                                    paper["subject"], paper["year"], need, material
                                 ),
                             }
                         ],
