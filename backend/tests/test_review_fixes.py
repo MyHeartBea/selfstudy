@@ -8,13 +8,45 @@
 """
 
 import inspect
+import struct
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
 from unittest.mock import patch
 
 from app.services import exam_paper_service as eps
+
+
+def _tiny_png() -> bytes:
+    """生成一张合法的最小 PNG（不依赖 Pillow，供 byte 级断言用）。"""
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)  # 1x1, 8bit truecolor
+    idat = zlib.compress(b"\x00\xff\xff\xff")  # 一行 + 白色像素
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
+
+
+try:  # CI 只装 fastapi/pydantic/httpx/coverage/ruff，没有 Pillow
+    from PIL import Image as _PILImage
+except Exception:  # pragma: no cover - CI 无 Pillow
+    _PILImage = None
+
+
+def _tiny_image():
+    """返回一张真实的 PIL 图像。
+
+    `_pdf_ocr_pages` 里是 `pil.save(buf, format="PNG")` —— 它要的是**图像对象**。
+    早先这个假件返回 `bytes`，于是 `bytes.save` 抛 AttributeError，被函数内
+    `except Exception: continue` 静默吞掉，测试表现为"_pdf_ocr 返回空串"，
+    排查代价很大。这里明确要求返回图像对象。
+    """
+    if _PILImage is None:  # pragma: no cover - CI 无 Pillow
+        return None
+    return _PILImage.new("RGB", (2, 2), "white")
 
 
 class AnswerPairsTest(unittest.TestCase):
@@ -234,9 +266,7 @@ class PdfHandleReleaseTest(unittest.TestCase):
 
         class _Bmp:
             def to_pil(self):
-                from PIL import Image
-
-                return Image.new("RGB", (4, 4), "white")
+                return _tiny_image()
 
         class _Page:
             def render(self, scale=1.0):
@@ -260,6 +290,7 @@ class PdfHandleReleaseTest(unittest.TestCase):
 
         return _Mod(), state
 
+    @unittest.skipIf(_PILImage is None, "CI 无 Pillow，渲染路径需要真实图像对象")
     def test_ocr_releases_document(self):
         mod, state = self._fake_pdfium()
         from app.services import local_ocr

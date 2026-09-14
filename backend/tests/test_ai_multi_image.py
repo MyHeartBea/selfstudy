@@ -227,6 +227,67 @@ class KnowledgeFromImageRouteTest(unittest.TestCase):
         self.assertNotEqual(body["code"], 200)
         self.assertTrue(body.get("message"))
 
+    def test_providers_tried_in_order_not_raced(self):
+        """多视觉通道必须顺序尝试：首选命中就只花一次调用。
+
+        原来 6 个通道并发提交，成功一个后 `f.cancel()` 对**已发出**的请求无效，
+        等于每次识图都上传同一份图片 6 次、付 6 次钱，只用 1 份结果。
+        """
+        from app.routers import ai as ai_router
+
+        seen = []
+
+        def fake_multi(images, **kwargs):
+            seen.append(kwargs.get("model"))
+            if kwargs.get("model") == "primary":
+                return "主通道文字"
+            raise AssertionError("首选成功后不应再试其它通道")
+
+        with (
+            patch.object(
+                ai_router,
+                "_vision_providers",
+                return_value=[
+                    ("primary", None, None),
+                    ("backup1", None, None),
+                    ("backup2", None, None),
+                ],
+            ),
+            patch.object(ai_router.ai_service, "vision_extract_text_multi", side_effect=fake_multi),
+            patch("app.routers.ai.local_ocr.is_available", return_value=False),
+        ):
+            text, err = ai_router._vision_extract_with_fallback(["a"], "")
+
+        self.assertEqual(text, "主通道文字")
+        self.assertEqual(err, "")
+        self.assertEqual(seen, ["primary"], "只应调用首个通道一次")
+
+    def test_falls_through_to_next_provider_on_failure(self):
+        from app.routers import ai as ai_router
+
+        seen = []
+
+        def fake_multi(images, **kwargs):
+            model = kwargs.get("model")
+            seen.append(model)
+            if model == "backup":
+                return "备用通道文字"
+            raise RuntimeError("主通道不可用")
+
+        with (
+            patch.object(
+                ai_router,
+                "_vision_providers",
+                return_value=[("primary", None, None), ("backup", None, None)],
+            ),
+            patch.object(ai_router.ai_service, "vision_extract_text_multi", side_effect=fake_multi),
+            patch("app.routers.ai.local_ocr.is_available", return_value=False),
+        ):
+            text, _err = ai_router._vision_extract_with_fallback(["a"], "")
+
+        self.assertEqual(text, "备用通道文字")
+        self.assertEqual(seen, ["primary", "backup"])
+
 
 def ai_router_service():
     """路由模块里引用的 ai_service（便于 patch 到同一对象）。"""

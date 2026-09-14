@@ -2,7 +2,6 @@
 
 import json
 import time
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import List
 
 from fastapi import APIRouter, Depends, Query
@@ -16,9 +15,6 @@ from app.services import ai_service, local_ocr
 from app.services.ai_service import AiNotConfigured, AiRequestError
 
 router = APIRouter(prefix="/api/ai", tags=["AI"])
-
-# 视觉模型并发执行器：knowledge-from-image 会并行尝试多个视觉通道
-_VISION_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="km-vision")
 
 # 科目提示词 → (科目关键词, 缺省二级科目名)
 _SUBJECT_MAP = [
@@ -382,10 +378,16 @@ def word_sense(word: str = Query(..., min_length=1, max_length=60)):
 
 
 def _vision_extract_with_fallback(images: List[str], instruction: str) -> tuple:
-    """多通道视觉提文字 + 本地 OCR 兜底。
+    """视觉提文字 + 本地 OCR 兜底，多通道按顺序尝试（不并发）。
 
     返回 (文本, 错误信息)：文本非空即成功（此时错误信息通常为空）；
     文本为空时错误信息说明失败原因。整体受 AI_OCR_TOTAL_TIMEOUT 预算约束。
+
+    **为什么改成顺序而不是并发**：原来把全部视觉通道同时提交，谁先返回用谁。
+    但「成功一个」并不能撤销其它通道已发出的请求 —— HTTP 早已发出、图片早已上传，
+    `f.cancel()` 对运行中的任务无效（只能取消未开始的）。而本机配了 6 个通道
+    （DeepSeek + GLM/Agnes 各代），等于每次识图都把**同一份图片上传 6 次并付 6 次钱**，
+    只留 1 份结果。顺序尝试只多花一点墙钟时间：首选命中即为 1 次调用。
     """
     last_error = ""
     providers = _vision_providers()
@@ -394,54 +396,27 @@ def _vision_extract_with_fallback(images: List[str], instruction: str) -> tuple:
     def remaining() -> float:
         return max(0.0, settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started))
 
-    def call_provider(vision_model, vision_base_url, vision_api_key):
+    raw_text = ""
+    for vision_model, vision_base_url, vision_api_key in providers:
         budget = remaining()
         if budget <= 2:
-            raise RuntimeError("整体识别预算耗尽")
-        return ai_service.vision_extract_text_multi(
-            images,
-            timeout=_vision_timeout_for(vision_model, budget),
-            instruction=instruction,
-            model=vision_model,
-            base_url=vision_base_url,
-            api_key=vision_api_key,
-        )
-
-    raw_text = ""
-    if providers:
-        futures = {
-            _VISION_EXECUTOR.submit(call_provider, model, base_url, api_key): (
-                model,
-                base_url,
-                api_key,
+            last_error = last_error or "整体识别预算耗尽"
+            break
+        try:
+            text = ai_service.vision_extract_text_multi(
+                images,
+                timeout=_vision_timeout_for(vision_model, budget),
+                instruction=instruction,
+                model=vision_model,
+                base_url=vision_base_url,
+                api_key=vision_api_key,
             )
-            for model, base_url, api_key in providers
-        }
-        pending = set(futures)
-        while pending:
-            wait_timeout = max(0.1, min(2.0, remaining()))
-            done, _ = wait(
-                pending,
-                timeout=wait_timeout,
-                return_when=FIRST_COMPLETED,
-            )
-            if not done:
-                if remaining() <= 2:
-                    break
-                continue
-            for future in done:
-                pending.discard(future)
-                try:
-                    text = future.result()
-                    if text and text.strip():
-                        raw_text = text.strip()
-                        break
-                except Exception as exc:
-                    last_error = str(exc)
-            if raw_text:
-                for f in pending:
-                    f.cancel()
-                break
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+        if text and text.strip():
+            raw_text = text.strip()
+            break
 
     # 视觉失败降级本地 OCR
     if not raw_text and local_ocr.is_available():
@@ -461,10 +436,10 @@ def _vision_extract_with_fallback(images: List[str], instruction: str) -> tuple:
 
 
 def _vision_providers() -> List[tuple]:
-    """构建视觉 provider 列表 (model, base_url, api_key)。
+    """构建视觉 provider 列表 (model, base_url, api_key)，按优先级顺序尝试。
 
-    DeepSeek-V4-Flash-Vision-Exp 作为首选（走 AI_BASE_URL/AI_API_KEY，便宜且精度高），
-    其后是 GLM/Agnes 三通道；全失败再降级本地 OCR。
+    DeepSeek 视觉（走 AI_BASE_URL/AI_API_KEY，最准且支持图片缓存）为首选；
+    其后是 GLM/Agnes 各代通道；全失败再降级本地 OCR。
     """
     providers = []
     # DeepSeek 多模态视觉模型（首选）：用文本模型的 base_url/api_key
