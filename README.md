@@ -21,21 +21,26 @@ km-v2/（仓库根 = D:\km-v2）
 ├── backend/            # FastAPI 后端
 │   ├── app/
 │   │   ├── config.py       # 端口(8000)/路径/AI 参数
-│   │   ├── database.py     # 连接、建表、迁移门控(v8)、备份
+│   │   ├── database.py     # 连接、建表、迁移门控(v9)、备份
 │   │   ├── schemas.py      # Pydantic 模型
 │   │   ├── models/tables.py# DDL
-│   │   ├── services/       # 业务逻辑（mistake/review/knowledge/formula/vocab/stats/ai/answer/exam_paper）
+│   │   ├── services/       # 业务逻辑（mistake/review/knowledge/formula/vocab/stats/ai/ai_english/answer/exam_paper）
 │   │   └── routers/        # mistakes/reviews/knowledge/formulas/vocab/subjects/stats/papers/transfer/ai/system
 │   ├── main.py         # 启动入口（127.0.0.1:8000）
-│   ├── tests/          # 41 个单元/接口测试（临时库，不碰真实数据）
+│   ├── tests/          # 148 个单元/接口测试（临时库，不碰真实数据）
 │   └── .env            # AI 密钥（不入库）
 ├── frontend/           # Vue 3 前端（自建组件库 src/ui/）
-│   └── src/{views,components,ui,composables,utils,styles,directives}
-├── scripts/vision_request.py   # 三通道视觉识别脚本（DSH vision 技能调用）
+│   ├── src/{views,components,ui,composables,utils,styles,directives}
+│   ├── tests/          # Vitest 单测（happy-dom）
+│   └── e2e/            # Playwright E2E（真 Chrome，/api 浏览器层打桩，不需要后端）
+├── scripts/            # vision_request.py（视觉识别脚本）+ 质量检查脚本
+│                       #   （check_secrets.py / preflight_check.py / frontend_lint.mjs）
 ├── docs/               # api.md / architecture.md / notes/
 ├── data/               # SQLite 数据（不入库）
 ├── start_backend.cmd   # Windows 一键启动
-└── .github/workflows/  # CI（后端测试 + 前端构建）
+├── backend/pyproject.toml  # Ruff 配置（lint + format）
+├── .pre-commit-config.yaml # 提交钩子（ruff / eslint+prettier / 卫生检查 / 密钥拦截）
+└── .github/workflows/   # CI（后端测试 + 覆盖率门槛 / 前端测试+构建 / Playwright E2E）
 ```
 
 ## 启动方式
@@ -123,9 +128,17 @@ AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 
 ## 测试与 CI
 
-- 后端 **95 个**测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）；
+- 后端 **148 个**测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）；
   前端 Vitest **49 个**：`cd frontend && npm test`（判分/筛选/Markdown 纯函数 + **卡片点击、知识点弹窗、关联错题区的 DOM 级交互回归**，环境 happy-dom）
-- GitHub Actions：push 触发 backend 测试 + frontend 构建
+- 前端 **E2E 23 个**（Playwright，真浏览器）：`cd frontend && npm run test:e2e` —— 补单测抓不到的盲区：
+  **卡片整块可点的真命中测试**（单测 `trigger('click')` 会绕过命中测试）、**真实 paste 事件驱动的多图暂存**
+  （断言只暂存 / 只发一次请求 / 请求体带齐全部图片）、**8 条主路由渲染烟测**（零 console 错误）。
+  用例内所有 `/api/**` 在浏览器层打桩，**不需要启动后端**。
+- GitHub Actions（`.github/workflows/ci.yml`）三个 job：`backend-tests`（ruff check + format --check、
+  unittest、**覆盖率门槛 55%**）、`frontend-test-build`（eslint + prettier、vitest、build）、
+  `frontend-e2e`（装 chromium 后跑 Playwright，失败上传报告）
+- 本地提交钩子（`pip install pre-commit && pre-commit install`）：ruff、eslint+prettier、
+  大文件/行尾空白/文件末尾换行、**密钥泄漏拦截**（只扫暂存新增行，命中即拦且不回显密钥内容）
 
 ## Git 约定（继承自原 AGENTS.md）
 
