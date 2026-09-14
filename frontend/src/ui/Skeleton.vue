@@ -20,7 +20,8 @@ defineProps({
       class="skeleton"
       :class="`sk-${variant}`"
       :style="{
-        width: variant === 'circle' ? height + 'px' : typeof width === 'number' ? width + 'px' : width,
+        width:
+          variant === 'circle' ? height + 'px' : typeof width === 'number' ? width + 'px' : width,
         height: height + 'px',
         borderRadius: variant === 'circle' ? '50%' : radius + 'px',
       }"
@@ -29,7 +30,11 @@ defineProps({
 </template>
 
 <style scoped>
-.skeleton-group { display: inline-flex; flex-direction: column; gap: 8px; }
+.skeleton-group {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .skeleton {
   position: relative;
   display: inline-block;
@@ -41,9 +46,20 @@ defineProps({
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 7%, transparent), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ink) 7%, transparent),
+    transparent
+  );
   animation: sk-sweep 1.4s ease-in-out infinite;
 }
-@keyframes sk-sweep { to { transform: translateX(100%); } }
-.sk-text { height: 14px !important; }
+@keyframes sk-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+.sk-text {
+  height: 14px !important;
+}
 </style>

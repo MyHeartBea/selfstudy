@@ -34,7 +34,14 @@ onMounted(() => {
           <stop offset="1" :stop-color="to" />
         </linearGradient>
       </defs>
-      <circle class="ring-track" :cx="size / 2" :cy="size / 2" :r="R" :stroke-width="stroke" fill="none" />
+      <circle
+        class="ring-track"
+        :cx="size / 2"
+        :cy="size / 2"
+        :r="R"
+        :stroke-width="stroke"
+        fill="none"
+      />
       <circle
         class="ring-fill"
         :cx="size / 2"
@@ -53,10 +60,20 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.ring { position: relative; flex: none; }
-.ring svg { transform: rotate(-90deg); display: block; }
-.ring-track { stroke: var(--surface-2); }
-.ring-fill { transition: stroke-dashoffset 1.2s var(--spring); }
+.ring {
+  position: relative;
+  flex: none;
+}
+.ring svg {
+  transform: rotate(-90deg);
+  display: block;
+}
+.ring-track {
+  stroke: var(--surface-2);
+}
+.ring-fill {
+  transition: stroke-dashoffset 1.2s var(--spring);
+}
 .ring-center {
   position: absolute;
   inset: 0;

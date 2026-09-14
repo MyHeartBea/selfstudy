@@ -32,6 +32,7 @@ defineProps({
     :color="sourceTypeColor(mistake.source_type)"
     :size="compact ? 'sm' : 'md'"
   >
-    {{ sourceTypeName(mistake.source_type) }}{{ mistake.source_year ? ' ' + mistake.source_year : '' }}
+    {{ sourceTypeName(mistake.source_type)
+    }}{{ mistake.source_year ? ' ' + mistake.source_year : '' }}
   </UiTag>
 </template>

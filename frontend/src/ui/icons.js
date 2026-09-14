@@ -19,24 +19,33 @@ export const ICONS = {
   'chevron-right': '<path d="m9 6 6 6-6 6"/>',
   download: '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 19h16"/>',
   upload: '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 19h16"/>',
-  image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5.5-5.5 3 3L16 12l4 4"/>',
+  image:
+    '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m4 18 5.5-5.5 3 3L16 12l4 4"/>',
   alert: '<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4M12 17.5v.5"/>',
-  trash: '<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 7 7 20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l.5-13"/><path d="M10 11v6M14 11v6"/>',
-  pause: '<rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/>',
+  trash:
+    '<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6.5 7 7 20a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l.5-13"/><path d="M10 11v6M14 11v6"/>',
+  pause:
+    '<rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/>',
   play: '<path d="M7 5.5v13a.8.8 0 0 0 1.2.7l10-6.5a.8.8 0 0 0 0-1.4l-10-6.5A.8.8 0 0 0 7 5.5Z"/>',
   tag: '<path d="m3 12 9-9h7a2 2 0 0 1 2 2v7l-9 9a2 2 0 0 1-2.8 0L3 14.8a2 2 0 0 1 0-2.8Z"/><circle cx="16.5" cy="7.5" r="1.2"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
-  flame: '<path d="M12 3s5.5 4.5 5.5 9.5a5.5 5.5 0 0 1-11 0c0-2 1-3.8 2-5 .3 1.2 1 2.3 2 2.5C10 8 10.5 5 12 3Z"/>',
+  flame:
+    '<path d="M12 3s5.5 4.5 5.5 9.5a5.5 5.5 0 0 1-11 0c0-2 1-3.8 2-5 .3 1.2 1 2.3 2 2.5C10 8 10.5 5 12 3Z"/>',
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
-  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
-  sparkles: '<path d="M12 4 13.8 9.2 19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8L12 4Z"/><path d="M19 3.5v3M17.5 5h3M5.5 17v3M4 18.5h3"/>',
-  inbox: '<path d="M3 13.5 5.5 5A2 2 0 0 1 7.4 3.5h9.2A2 2 0 0 1 18.5 5L21 13.5V18a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18v-4.5Z"/><path d="M3 13.5h5l1.2 2.3a1 1 0 0 0 .9.5h3.8a1 1 0 0 0 .9-.5l1.2-2.3h5"/>',
+  target:
+    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>',
+  sparkles:
+    '<path d="M12 4 13.8 9.2 19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8L12 4Z"/><path d="M19 3.5v3M17.5 5h3M5.5 17v3M4 18.5h3"/>',
+  inbox:
+    '<path d="M3 13.5 5.5 5A2 2 0 0 1 7.4 3.5h9.2A2 2 0 0 1 18.5 5L21 13.5V18a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18v-4.5Z"/><path d="M3 13.5h5l1.2 2.3a1 1 0 0 0 .9.5h3.8a1 1 0 0 0 .9-.5l1.2-2.3h5"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
-  notebook: '<rect x="5" y="3" width="15" height="18" rx="2"/><path d="M9 3v18M5 8h4M5 12h4M5 16h4"/>',
+  notebook:
+    '<rect x="5" y="3" width="15" height="18" rx="2"/><path d="M9 3v18M5 8h4M5 12h4M5 16h4"/>',
   arrowLeft: '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
   filter: '<path d="M4 5h16l-6.5 8v5.5L10 20v-7L4 5Z"/>',
   copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-  external: '<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/>',
+  external:
+    '<path d="M14 4h6v6"/><path d="M20 4 10 14"/><path d="M18 13v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h6"/>',
   trending: '<path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
   calendar: '<rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',

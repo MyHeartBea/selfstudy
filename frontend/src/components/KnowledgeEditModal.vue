@@ -280,11 +280,13 @@ async function save() {
             >
               {{ analyzing ? '分析中…' : draftStale ? '重新分析' : '分析图片' }}
             </UiButton>
-            <UiButton v-if="stagedImages.length" variant="ghost" @click="clearAllImages">清除</UiButton>
+            <UiButton v-if="stagedImages.length" variant="ghost" @click="clearAllImages"
+              >清除</UiButton
+            >
           </div>
           <p class="field-hint">
-            直接 <b>Ctrl + V 粘贴</b>（可连续粘贴多张，也可一次多选），图片先暂存在下面，
-            点 <b>分析图片</b> 时再一起交给 AI —— 多张属于同一个知识点时会合并成一条草稿
+            直接 <b>Ctrl + V 粘贴</b>（可连续粘贴多张，也可一次多选），图片先暂存在下面， 点
+            <b>分析图片</b> 时再一起交给 AI —— 多张属于同一个知识点时会合并成一条草稿
           </p>
 
           <div v-if="stagedImages.length" class="img-tray">
@@ -322,7 +324,13 @@ async function save() {
             <label v-if="!stagedImages.length" class="pick-image">
               <Icon name="image" :size="14" />
               选择图片（可多选）
-              <input type="file" accept="image/*" multiple class="visually-hidden" @change="onPickImage" />
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                class="visually-hidden"
+                @change="onPickImage"
+              />
             </label>
           </div>
         </div>
@@ -374,7 +382,11 @@ async function save() {
 
       <div class="field">
         <label class="field-label">关联知识点</label>
-        <TagInput v-model="form.related_tags" color="#a16207" placeholder="输入关联标签后按回车，如：地址转换" />
+        <TagInput
+          v-model="form.related_tags"
+          color="#a16207"
+          placeholder="输入关联标签后按回车，如：地址转换"
+        />
       </div>
 
       <div v-if="form.summary.trim()" class="knowledge-preview">
@@ -393,16 +405,52 @@ async function save() {
 </template>
 
 <style scoped>
-.kform { display: flex; flex-direction: column; gap: 15px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-@media (max-width: 560px) { .field-grid { grid-template-columns: 1fr; } }
-.field-label { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
-.required::after { content: ' *'; color: var(--accent); }
-.field-hint { font-size: 12px; color: var(--ink-3); margin: 0; }
+.kform {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 560px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.field-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.required::after {
+  content: ' *';
+  color: var(--accent);
+}
+.field-hint {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 0;
+}
 
-.img-analyze { display: flex; flex-direction: column; gap: 8px; }
-.img-analyze-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.img-analyze {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.img-analyze-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
 
 /* 暂存图片缩略图条 */
 .img-tray {
@@ -423,7 +471,12 @@ async function save() {
   border: 1px solid var(--line);
   background: var(--surface);
 }
-.img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.img-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .img-idx {
   position: absolute;
   left: 4px;
@@ -453,7 +506,9 @@ async function save() {
   background: rgba(0, 0, 0, 0.55);
   transition: background 0.14s var(--ease);
 }
-.img-del:hover { background: var(--red); }
+.img-del:hover {
+  background: var(--red);
+}
 .img-add {
   display: inline-flex;
   flex-direction: column;
@@ -464,13 +519,30 @@ async function save() {
   color: var(--ink-3);
   font-size: 11.5px;
   cursor: pointer;
-  transition: border-color 0.14s var(--ease), color 0.14s var(--ease);
+  transition:
+    border-color 0.14s var(--ease),
+    color 0.14s var(--ease);
 }
-.img-add:hover { border-color: var(--accent); color: var(--accent-ink); }
+.img-add:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
 
-.img-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.count-tip { font-size: 12px; color: var(--ink-3); }
-.stale-tip { font-size: 12px; font-weight: 600; color: var(--gold); }
+.img-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.count-tip {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.stale-tip {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gold);
+}
 .pick-image {
   display: inline-flex;
   align-items: center;
@@ -484,7 +556,10 @@ async function save() {
   color: var(--ink-2);
   cursor: pointer;
 }
-.pick-image:hover { border-color: var(--accent); color: var(--accent-ink); }
+.pick-image:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
 
 .knowledge-preview {
   border: 1px solid var(--line);

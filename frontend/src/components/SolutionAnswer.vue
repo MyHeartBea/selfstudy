@@ -15,14 +15,16 @@ const props = defineProps({
   reviewSaved: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:userInput', 'grade', 'mark', 'save-result'])
+defineEmits(['update:userInput', 'grade', 'mark', 'save-result'])
 
 const gradeVerdictText = computed(() => {
-  return {
-    correct: '回答正确',
-    partial: '部分得分',
-    wrong: '回答错误',
-  }[props.gradeResult?.verdict] || ''
+  return (
+    {
+      correct: '回答正确',
+      partial: '部分得分',
+      wrong: '回答错误',
+    }[props.gradeResult?.verdict] || ''
+  )
 })
 
 const saveCorrect = computed(() => props.gradeResult?.score >= 60)
@@ -42,10 +44,22 @@ const saveCorrect = computed(() => props.gradeResult?.score >= 60)
         <UiButton variant="primary" size="lg" :loading="grading" @click="$emit('grade')">
           AI 批改我的解答
         </UiButton>
-        <UiButton variant="success" size="lg" :disabled="grading" :loading="submitting" @click="$emit('mark', true)">
+        <UiButton
+          variant="success"
+          size="lg"
+          :disabled="grading"
+          :loading="submitting"
+          @click="$emit('mark', true)"
+        >
           直接标记：记住了
         </UiButton>
-        <UiButton variant="outline" size="lg" :disabled="grading" :loading="submitting" @click="$emit('mark', false)">
+        <UiButton
+          variant="outline"
+          size="lg"
+          :disabled="grading"
+          :loading="submitting"
+          @click="$emit('mark', false)"
+        >
           直接标记：没记住
         </UiButton>
       </div>
@@ -55,7 +69,13 @@ const saveCorrect = computed(() => props.gradeResult?.score >= 60)
         <div class="grade-score" :class="gradeResult.verdict">{{ gradeResult.score }}</div>
         <div class="grade-meta">
           <UiTag
-            :color="gradeResult.verdict === 'correct' ? 'var(--green)' : (gradeResult.verdict === 'partial' ? 'var(--gold)' : 'var(--red)')"
+            :color="
+              gradeResult.verdict === 'correct'
+                ? 'var(--green)'
+                : gradeResult.verdict === 'partial'
+                  ? 'var(--gold)'
+                  : 'var(--red)'
+            "
           >
             {{ gradeVerdictText }}
           </UiTag>
@@ -87,18 +107,33 @@ const saveCorrect = computed(() => props.gradeResult?.score >= 60)
         <MathText :text="gradeResult.solution" />
       </div>
 
-      <div v-if="gradeResult.alternate_methods && gradeResult.alternate_methods.length" class="analysis-block">
+      <div
+        v-if="gradeResult.alternate_methods && gradeResult.alternate_methods.length"
+        class="analysis-block"
+      >
         <div class="block-label">其他解法</div>
         <ol class="grade-list">
-          <li v-for="(item, i) in gradeResult.alternate_methods" :key="i"><MathText :text="item" /></li>
+          <li v-for="(item, i) in gradeResult.alternate_methods" :key="i">
+            <MathText :text="item" />
+          </li>
         </ol>
       </div>
 
       <div class="review-footer">
-        <UiButton variant="success" size="lg" :loading="submitting" @click="$emit('save-result', saveCorrect)">
+        <UiButton
+          variant="success"
+          size="lg"
+          :loading="submitting"
+          @click="$emit('save-result', saveCorrect)"
+        >
           {{ saveCorrect ? '记住了，保存并下一题' : '没掌握，保存并下一题' }}
         </UiButton>
-        <UiButton variant="outline" size="lg" :loading="submitting" @click="$emit('save-result', !saveCorrect)">
+        <UiButton
+          variant="outline"
+          size="lg"
+          :loading="submitting"
+          @click="$emit('save-result', !saveCorrect)"
+        >
           {{ saveCorrect ? '其实还没懂，保存为错误' : '其实已经会了，保存为正确' }}
         </UiButton>
       </div>
@@ -125,10 +160,30 @@ const saveCorrect = computed(() => props.gradeResult?.score >= 60)
   min-width: 64px;
   text-align: center;
 }
-.grade-score.correct { color: var(--green); }
-.grade-score.partial { color: var(--gold); }
-.grade-score.wrong { color: var(--red); }
-.grade-meta { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-.grade-tip { font-size: 12px; color: var(--ink-3); }
-.grade-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.grade-score.correct {
+  color: var(--green);
+}
+.grade-score.partial {
+  color: var(--gold);
+}
+.grade-score.wrong {
+  color: var(--red);
+}
+.grade-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.grade-tip {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.grade-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 </style>

@@ -99,9 +99,16 @@ onMounted(() => {
           :stroke-dashoffset="RING_C * (1 - ringPercent() / 100)"
         />
       </svg>
-      <b class="num">{{ ringDone }}</b><i>/{{ ringTotal }}</i>
+      <b class="num">{{ ringDone }}</b
+      ><i>/{{ ringTotal }}</i>
     </button>
-    <button type="button" class="dock-item" data-label="全局搜索 Ctrl K" aria-label="全局搜索" @click="emit('open-search')">
+    <button
+      type="button"
+      class="dock-item"
+      data-label="全局搜索 Ctrl K"
+      aria-label="全局搜索"
+      @click="emit('open-search')"
+    >
       <Icon name="search" :size="18" />
     </button>
     <button
@@ -113,7 +120,13 @@ onMounted(() => {
     >
       <Icon :name="isDark ? 'sun' : 'moon'" :size="18" />
     </button>
-    <span class="status-dot" :class="{ bad: backendOk === false }" data-label="本地数据状态" role="status" :aria-label="backendOk === false ? '后端连接异常' : '后端连接正常'"></span>
+    <span
+      class="status-dot"
+      :class="{ bad: backendOk === false }"
+      data-label="本地数据状态"
+      role="status"
+      :aria-label="backendOk === false ? '后端连接异常' : '后端连接正常'"
+    ></span>
     <div ref="indEl" class="dock-ind" aria-hidden="true"></div>
   </nav>
 </template>
@@ -135,7 +148,10 @@ onMounted(() => {
   backdrop-filter: blur(22px) saturate(1.3);
   box-shadow: var(--shadow-2);
   opacity: 0;
-  transition: opacity 0.55s var(--ease), transform 0.65s var(--spring), background-color 0.4s var(--ease);
+  transition:
+    opacity 0.55s var(--ease),
+    transform 0.65s var(--spring),
+    background-color 0.4s var(--ease);
 }
 :global(body.app-ready .dock) {
   opacity: 1;
@@ -153,7 +169,9 @@ onMounted(() => {
     transparent 40%,
     color-mix(in srgb, var(--accent) 18%, transparent)
   );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
@@ -178,16 +196,29 @@ onMounted(() => {
   font-family: var(--font-display);
   font-weight: 900;
   font-size: 19px;
-  box-shadow: 0 2px 8px rgba(168, 51, 32, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow:
+    0 2px 8px rgba(168, 51, 32, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transform: rotate(-3deg);
   animation: seal-breathe 5s ease-in-out infinite;
 }
 @keyframes seal-breathe {
-  0%, 100% { transform: rotate(-3deg) scale(1); }
-  50% { transform: rotate(-1.5deg) scale(1.06); }
+  0%,
+  100% {
+    transform: rotate(-3deg) scale(1);
+  }
+  50% {
+    transform: rotate(-1.5deg) scale(1.06);
+  }
 }
 
-.dock-sep { width: 1px; height: 26px; background: var(--line); margin: 0 5px; flex: none; }
+.dock-sep {
+  width: 1px;
+  height: 26px;
+  background: var(--line);
+  margin: 0 5px;
+  flex: none;
+}
 
 .dock-item {
   position: relative;
@@ -201,15 +232,39 @@ onMounted(() => {
   display: grid;
   place-items: center;
   padding: 0;
-  transition: color 0.2s var(--ease), background 0.2s var(--ease), transform 0.25s var(--spring);
+  transition:
+    color 0.2s var(--ease),
+    background 0.2s var(--ease),
+    transform 0.25s var(--spring);
 }
-.dock-item:hover { color: var(--ink); transform: scale(1.12) translateY(-1px); }
-.dock-item:active { transform: scale(0.94); }
-.dock-item.active { color: var(--accent); }
+.dock-item:hover {
+  color: var(--ink);
+  transform: scale(1.12) translateY(-1px);
+}
+.dock-item:active {
+  transform: scale(0.94);
+}
+.dock-item.active {
+  color: var(--accent);
+}
 
-.ring-item { width: auto; padding: 0 12px; gap: 5px; display: inline-flex; align-items: center; }
-.ring-svg { width: 26px; height: 26px; transform: rotate(-90deg); }
-.ring-track { fill: none; stroke: var(--line-strong); stroke-width: 4.5; }
+.ring-item {
+  width: auto;
+  padding: 0 12px;
+  gap: 5px;
+  display: inline-flex;
+  align-items: center;
+}
+.ring-svg {
+  width: 26px;
+  height: 26px;
+  transform: rotate(-90deg);
+}
+.ring-track {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 4.5;
+}
 .ring-value {
   fill: none;
   stroke: var(--accent);
@@ -217,8 +272,16 @@ onMounted(() => {
   stroke-linecap: round;
   transition: stroke-dashoffset 0.9s var(--ease);
 }
-.ring-item b { font-family: var(--font-display); font-size: 14px; color: var(--ink); }
-.ring-item i { font-style: normal; font-size: 11px; color: var(--ink-3); }
+.ring-item b {
+  font-family: var(--font-display);
+  font-size: 14px;
+  color: var(--ink);
+}
+.ring-item i {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ink-3);
+}
 
 .status-dot {
   width: 8px;
@@ -229,10 +292,18 @@ onMounted(() => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 16%, transparent);
   animation: dot-pulse 2.4s ease-in-out infinite;
 }
-.status-dot.bad { background: var(--red); box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 16%, transparent); }
+.status-dot.bad {
+  background: var(--red);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 16%, transparent);
+}
 @keyframes dot-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 12%, transparent); }
-  50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 22%, transparent); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--green) 12%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 22%, transparent);
+  }
 }
 
 .dock-ind {
@@ -274,13 +345,23 @@ onMounted(() => {
 }
 .dock-item:hover::after,
 .dock-logo:hover::after,
-.status-dot:hover::after { opacity: 1; transform: translateY(0) scale(1); }
+.status-dot:hover::after {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
 
 @media (max-width: 1240px) {
-  .ring-item i { display: none; }
-  .dock { gap: 1px; padding: 8px 9px; }
+  .ring-item i {
+    display: none;
+  }
+  .dock {
+    gap: 1px;
+    padding: 8px 9px;
+  }
 }
 @media (max-width: 1100px) {
-  .dock { display: none; }
+  .dock {
+    display: none;
+  }
 }
 </style>

@@ -29,11 +29,21 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-h1, h2, h3, h4, h5, p, ul, ol, figure, blockquote {
+h1,
+h2,
+h3,
+h4,
+h5,
+p,
+ul,
+ol,
+figure,
+blockquote {
   margin: 0;
 }
 
-ul, ol {
+ul,
+ol {
   padding: 0;
 }
 
@@ -46,7 +56,9 @@ button {
   font-family: inherit;
 }
 
-input, textarea, select {
+input,
+textarea,
+select {
   font-family: inherit;
   color: inherit;
 }
@@ -113,7 +125,9 @@ img {
   font-size: 13.5px;
   color: var(--ink);
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 textarea.field-input {
@@ -262,7 +276,8 @@ textarea.field-input {
 .reveal-pending {
   opacity: 0;
   transform: translateY(18px);
-  transition: opacity 0.55s cubic-bezier(0.22, 0.8, 0.36, 1),
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 0.8, 0.36, 1),
     transform 0.55s cubic-bezier(0.22, 0.8, 0.36, 1);
   will-change: opacity, transform;
 }
@@ -273,7 +288,10 @@ textarea.field-input {
 
 /* ---------- 错题卡 3D 倾斜 + 光泽（MistakeCard 配合） ---------- */
 .tilt {
-  transition: transform 0.28s cubic-bezier(0.22, 0.8, 0.36, 1), box-shadow 0.28s, border-color 0.2s;
+  transition:
+    transform 0.28s cubic-bezier(0.22, 0.8, 0.36, 1),
+    box-shadow 0.28s,
+    border-color 0.2s;
   transform-style: preserve-3d;
   will-change: transform;
 }
@@ -296,9 +314,15 @@ textarea.field-input {
 
 /* 数字跳动强调（复习结果等场景可用） */
 @keyframes pop-num {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.18); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 .pop-num {
   animation: pop-num 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -462,7 +486,11 @@ textarea.field-input {
   margin-bottom: 10px;
   background: color-mix(in srgb, var(--surface-2) 55%, transparent);
   backdrop-filter: blur(6px);
-  transition: border-color 0.16s var(--ease), background 0.16s var(--ease), transform 0.16s var(--ease), box-shadow 0.16s var(--ease);
+  transition:
+    border-color 0.16s var(--ease),
+    background 0.16s var(--ease),
+    transform 0.16s var(--ease),
+    box-shadow 0.16s var(--ease);
 }
 
 .option-row.clickable {
@@ -473,7 +501,9 @@ textarea.field-input {
   transform: translateX(5px);
   box-shadow: var(--shadow-1);
 }
-.option-row.clickable:active { transform: translateX(5px) scale(0.985); }
+.option-row.clickable:active {
+  transform: translateX(5px) scale(0.985);
+}
 
 .option-row.selected {
   border-color: var(--accent);
@@ -532,14 +562,29 @@ textarea.field-input {
 }
 
 @keyframes ring-pulse {
-  from { opacity: 0.8; transform: scale(1); }
-  to { opacity: 0; transform: scale(1.09); }
+  from {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.09);
+  }
 }
 @keyframes opt-shake {
-  0%, 100% { transform: translateX(5px); }
-  25% { transform: translateX(0); }
-  50% { transform: translateX(9px); }
-  75% { transform: translateX(3px); }
+  0%,
+  100% {
+    transform: translateX(5px);
+  }
+  25% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(9px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
 }
 
 .review-footer {

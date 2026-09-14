@@ -14,7 +14,11 @@ const props = defineProps({
 const style = computed(() => {
   if (!props.color) return {}
   return props.soft
-    ? { background: `color-mix(in srgb, ${props.color} 13%, transparent)`, color: props.color, borderColor: `color-mix(in srgb, ${props.color} 26%, transparent)` }
+    ? {
+        background: `color-mix(in srgb, ${props.color} 13%, transparent)`,
+        color: props.color,
+        borderColor: `color-mix(in srgb, ${props.color} 26%, transparent)`,
+      }
     : { background: props.color, color: '#fff', borderColor: 'transparent' }
 })
 </script>
@@ -43,7 +47,18 @@ const style = computed(() => {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tag-sm { padding: 1px 7px; font-size: 11px; }
-.clickable { cursor: pointer; transition: filter 0.15s, border-color 0.15s; }
-.clickable:hover { filter: brightness(0.96); border-color: var(--accent); }
+.tag-sm {
+  padding: 1px 7px;
+  font-size: 11px;
+}
+.clickable {
+  cursor: pointer;
+  transition:
+    filter 0.15s,
+    border-color 0.15s;
+}
+.clickable:hover {
+  filter: brightness(0.96);
+  border-color: var(--accent);
+}
 </style>

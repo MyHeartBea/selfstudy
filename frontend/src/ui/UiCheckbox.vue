@@ -15,7 +15,18 @@ defineEmits(['update:modelValue'])
       @change="$emit('update:modelValue', $event.target.checked)"
     />
     <span class="box" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5L20 6.5"/></svg>
+      <svg
+        viewBox="0 0 24 24"
+        width="11"
+        height="11"
+        fill="none"
+        stroke="#fff"
+        stroke-width="3.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="m4.5 12.5 5 5L20 6.5" />
+      </svg>
     </span>
     <span v-if="label" class="text">{{ label }}</span>
   </label>
@@ -31,7 +42,11 @@ defineEmits(['update:modelValue'])
   font-size: 13px;
   color: var(--ink-2);
 }
-.checkbox input { position: absolute; opacity: 0; pointer-events: none; }
+.checkbox input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
 .box {
   width: 17px;
   height: 17px;
@@ -54,5 +69,7 @@ defineEmits(['update:modelValue'])
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.text { line-height: 1; }
+.text {
+  line-height: 1;
+}
 </style>

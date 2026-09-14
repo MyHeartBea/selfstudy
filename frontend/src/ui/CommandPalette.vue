@@ -84,6 +84,16 @@ function onKeydown(event) {
   }
 }
 
+/**
+ * 切换搜索范围并刷新结果。
+ * 抽成函数而不是模板内联多语句：Prettier 会把多语句内联表达式拆行、丢掉语句
+ * 分隔符，导致 Vue 模板编译失败。
+ */
+function chooseScope(scope) {
+  setScope(scope)
+  if (paletteState.query.trim()) onPaletteInput(paletteState.query)
+}
+
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
@@ -112,7 +122,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               type="button"
               class="scope-chip"
               :class="{ active: paletteState.scope === scope.value }"
-              @click="setScope(scope.value); onPaletteInput(paletteState.query)"
+              @click="chooseScope(scope.value)"
             >
               <Icon :name="scope.icon" :size="13" />
               {{ scope.label }}
@@ -162,13 +172,25 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 @click="choose(item)"
                 @mousemove="paletteState.activeIndex = i"
               >
-                <Icon :name="item.kind === 'mistake' ? 'list' : item.kind === 'knowledge' ? 'book' : 'sigma'" :size="16" class="palette-item-icon" />
+                <Icon
+                  :name="
+                    item.kind === 'mistake' ? 'list' : item.kind === 'knowledge' ? 'book' : 'sigma'
+                  "
+                  :size="16"
+                  class="palette-item-icon"
+                />
                 <span class="palette-item-label">
                   {{ truncate(item.title, 52) }}
-                  <small v-if="item.sub" class="palette-item-sub">{{ truncate(item.sub, 36) }}</small>
+                  <small v-if="item.sub" class="palette-item-sub">{{
+                    truncate(item.sub, 36)
+                  }}</small>
                 </span>
-                <UiTag v-if="item.kind === 'mistake'" size="sm">{{ questionTypeName(item.type) }}</UiTag>
-                <UiTag v-if="item.kind === 'mistake'" size="sm" soft>{{ subjectName(item.subject) }}</UiTag>
+                <UiTag v-if="item.kind === 'mistake'" size="sm">{{
+                  questionTypeName(item.type)
+                }}</UiTag>
+                <UiTag v-if="item.kind === 'mistake'" size="sm" soft>{{
+                  subjectName(item.subject)
+                }}</UiTag>
               </button>
               <div v-if="!paletteState.searching && !results.length" class="palette-empty">
                 没有匹配结果，换个关键词试试
@@ -219,7 +241,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   gap: 10px;
   padding: 15px 18px 12px;
 }
-.palette-search-icon { color: var(--accent); }
+.palette-search-icon {
+  color: var(--accent);
+}
 .palette-input {
   flex: 1;
   border: none;
@@ -228,7 +252,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   color: var(--ink);
   outline: none;
 }
-.palette-input::placeholder { color: var(--ink-3); }
+.palette-input::placeholder {
+  color: var(--ink-3);
+}
 .palette-kbd {
   font-size: 10px;
   font-weight: 700;
@@ -259,7 +285,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   cursor: pointer;
   transition: all 0.14s;
 }
-.scope-chip:hover { border-color: var(--accent); color: var(--accent-ink); }
+.scope-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
 .scope-chip.active {
   background: var(--accent);
   border-color: var(--accent);
@@ -297,8 +326,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   background: var(--accent-soft);
   color: var(--accent-ink);
 }
-.palette-item-icon { color: var(--ink-3); }
-.palette-item.active .palette-item-icon { color: var(--accent); }
+.palette-item-icon {
+  color: var(--ink-3);
+}
+.palette-item.active .palette-item-icon {
+  color: var(--accent);
+}
 .palette-item-label {
   flex: 1;
   min-width: 0;
@@ -338,10 +371,25 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   background: var(--surface);
   font-size: 10px;
 }
-.palette-brand { margin-left: auto; letter-spacing: 0.06em; }
+.palette-brand {
+  margin-left: auto;
+  letter-spacing: 0.06em;
+}
 
-.palette-enter-active, .palette-leave-active { transition: opacity 0.18s ease; }
-.palette-enter-active .palette, .palette-leave-active .palette { transition: transform 0.22s cubic-bezier(0.22, 1.2, 0.36, 1); }
-.palette-enter-from, .palette-leave-to { opacity: 0; }
-.palette-enter-from .palette, .palette-leave-to .palette { transform: translateY(-12px) scale(0.98); }
+.palette-enter-active,
+.palette-leave-active {
+  transition: opacity 0.18s ease;
+}
+.palette-enter-active .palette,
+.palette-leave-active .palette {
+  transition: transform 0.22s cubic-bezier(0.22, 1.2, 0.36, 1);
+}
+.palette-enter-from,
+.palette-leave-to {
+  opacity: 0;
+}
+.palette-enter-from .palette,
+.palette-leave-to .palette {
+  transform: translateY(-12px) scale(0.98);
+}
 </style>

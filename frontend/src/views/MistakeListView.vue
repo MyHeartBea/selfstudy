@@ -71,7 +71,6 @@ const {
   page,
   pageSize,
   activeFilterCount,
-  totalPages,
   buildParams,
   loadMistakes,
   searchMistakes,
@@ -128,14 +127,8 @@ const detailKey = ref(0)
 const { batchRunning, bulkPause, bulkResume, bulkSetRealExam, bulkSetOther, bulkDelete } =
   useBulkActions({ selectedIds, onDone: loadMistakes })
 
-const {
-  importDialogVisible,
-  pendingImport,
-  importing,
-  exportJson,
-  onImportFile,
-  confirmImport,
-} = useImportExport({ buildParams, onImported: loadMistakes })
+const { importDialogVisible, pendingImport, importing, exportJson, onImportFile, confirmImport } =
+  useImportExport({ onImported: loadMistakes })
 
 function openDetail(id) {
   detailId.value = id
@@ -341,7 +334,12 @@ watch(
         </div>
         <div class="toolbar-tail">
           <span class="count-tip">共 {{ total }} 条</span>
-          <button type="button" class="more-toggle" :class="{ open: showMore }" @click="showMore = !showMore">
+          <button
+            type="button"
+            class="more-toggle"
+            :class="{ open: showMore }"
+            @click="showMore = !showMore"
+          >
             <Icon name="filter" :size="13" />
             更多筛选
             <Icon name="chevron-down" :size="13" class="more-arrow" />
@@ -374,7 +372,13 @@ watch(
               type="button"
               class="diff-chip"
               :class="{ active: filters.difficulties.includes(n) }"
-              @click="() => { const idx = filters.difficulties.indexOf(n); idx === -1 ? filters.difficulties.push(n) : filters.difficulties.splice(idx, 1); searchMistakes() }"
+              @click="
+                () => {
+                  const idx = filters.difficulties.indexOf(n)
+                  idx === -1 ? filters.difficulties.push(n) : filters.difficulties.splice(idx, 1)
+                  searchMistakes()
+                }
+              "
             >
               {{ '★'.repeat(n) }}
             </button>
@@ -400,11 +404,21 @@ watch(
 
     <div v-if="selectedIds.length" class="bulk-bar">
       <span class="bulk-count">已选 {{ selectedIds.length }} 题</span>
-      <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkPause">暂停</UiButton>
-      <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkResume">恢复</UiButton>
-      <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkSetRealExam">设为真题</UiButton>
-      <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkSetOther">设为自编</UiButton>
-      <UiButton size="sm" variant="danger" :loading="batchRunning" @click="bulkDelete">删除</UiButton>
+      <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkPause"
+        >暂停</UiButton
+      >
+      <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkResume"
+        >恢复</UiButton
+      >
+      <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkSetRealExam"
+        >设为真题</UiButton
+      >
+      <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkSetOther"
+        >设为自编</UiButton
+      >
+      <UiButton size="sm" variant="danger" :loading="batchRunning" @click="bulkDelete"
+        >删除</UiButton
+      >
       <UiButton size="sm" variant="ghost" @click="selectedIds = []">清空</UiButton>
     </div>
 
@@ -508,7 +522,12 @@ watch(
   line-height: 1;
   white-space: nowrap;
   cursor: pointer;
-  transition: border-color 0.15s var(--ease), color 0.15s var(--ease), background 0.15s var(--ease), box-shadow 0.2s var(--ease), transform 0.25s var(--spring);
+  transition:
+    border-color 0.15s var(--ease),
+    color 0.15s var(--ease),
+    background 0.15s var(--ease),
+    box-shadow 0.2s var(--ease),
+    transform 0.25s var(--spring);
 }
 .import-label:hover {
   border-color: var(--accent);
@@ -516,7 +535,9 @@ watch(
   background: var(--accent-soft);
   box-shadow: var(--e-glow);
 }
-.import-label:active { transform: translateY(1px) scale(0.985); }
+.import-label:active {
+  transform: translateY(1px) scale(0.985);
+}
 
 .list-toolbar {
   display: flex;
@@ -531,7 +552,13 @@ watch(
   border-radius: var(--r-lg);
   background:
     linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 45%, color-mix(in srgb, var(--gold) 14%, transparent)) border-box;
+    linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent) 16%, transparent),
+        transparent 45%,
+        color-mix(in srgb, var(--gold) 14%, transparent)
+      )
+      border-box;
   box-shadow: var(--shadow-1);
   backdrop-filter: blur(10px) saturate(1.15);
 }
@@ -597,10 +624,21 @@ watch(
   cursor: pointer;
   transition: all 0.14s;
 }
-.more-toggle:hover { border-color: var(--accent); color: var(--accent-ink); }
-.more-toggle.open { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
-.more-arrow { transition: transform 0.18s; }
-.more-toggle.open .more-arrow { transform: rotate(180deg); }
+.more-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.more-toggle.open {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
+.more-arrow {
+  transition: transform 0.18s;
+}
+.more-toggle.open .more-arrow {
+  transform: rotate(180deg);
+}
 
 .toolbar-more {
   display: flex;
@@ -613,19 +651,30 @@ watch(
   background: var(--surface-2);
   overflow: hidden;
 }
-.fold-enter-active, .fold-leave-active {
+.fold-enter-active,
+.fold-leave-active {
   transition: all 0.22s cubic-bezier(0.22, 0.8, 0.36, 1);
 }
-.fold-enter-from, .fold-leave-to {
+.fold-enter-from,
+.fold-leave-to {
   opacity: 0;
   transform: translateY(-6px);
 }
 
-.year-input { width: 120px; }
-.tag-filter { width: 170px; }
-.approach-filter { width: 140px; }
+.year-input {
+  width: 120px;
+}
+.tag-filter {
+  width: 170px;
+}
+.approach-filter {
+  width: 140px;
+}
 
-.diff-chips { display: inline-flex; gap: 4px; }
+.diff-chips {
+  display: inline-flex;
+  gap: 4px;
+}
 .diff-chip {
   height: 30px;
   padding: 0 9px;
@@ -638,7 +687,10 @@ watch(
   transition: all 0.13s;
   letter-spacing: 0.05em;
 }
-.diff-chip:hover { border-color: var(--gold); color: var(--gold); }
+.diff-chip:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
 .diff-chip.active {
   border-color: var(--gold);
   background: var(--gold-soft);
@@ -668,7 +720,10 @@ watch(
   animation: bulk-in 0.2s cubic-bezier(0.22, 0.8, 0.36, 1);
 }
 @keyframes bulk-in {
-  from { opacity: 0; transform: translateY(-6px); }
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 .bulk-count {
   font-size: 13px;
@@ -689,7 +744,10 @@ watch(
   gap: 14px;
   color: var(--red);
 }
-.load-error-title { font-weight: 700; color: var(--ink); }
+.load-error-title {
+  font-weight: 700;
+  color: var(--ink);
+}
 
 .pagination-wrap {
   display: flex;

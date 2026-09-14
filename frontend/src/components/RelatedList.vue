@@ -51,13 +51,15 @@ function summaryPreview(text) {
     <section class="collapse-item">
       <button type="button" class="collapse-head" @click="togglePanel('knowledge')">
         <span>知识点补充</span>
-        <Icon name="chevron-down" :size="15" class="collapse-arrow" :class="{ open: openPanel === 'knowledge' }" />
+        <Icon
+          name="chevron-down"
+          :size="15"
+          class="collapse-arrow"
+          :class="{ open: openPanel === 'knowledge' }"
+        />
       </button>
       <div v-if="openPanel === 'knowledge'" class="collapse-body">
-        <RichText
-          v-if="knowledgeExtra && knowledgeExtra.summary"
-          :text="knowledgeExtra.summary"
-        />
+        <RichText v-if="knowledgeExtra && knowledgeExtra.summary" :text="knowledgeExtra.summary" />
         <p v-else class="muted">暂无补充，可前往知识点库添加。</p>
 
         <template v-if="relatedKnowledge && relatedKnowledge.length">
@@ -91,7 +93,12 @@ function summaryPreview(text) {
     <section class="collapse-item">
       <button type="button" class="collapse-head" @click="togglePanel('related')">
         <span>同知识点错题（{{ relatedMistakes.length }}）</span>
-        <Icon name="chevron-down" :size="15" class="collapse-arrow" :class="{ open: openPanel === 'related' }" />
+        <Icon
+          name="chevron-down"
+          :size="15"
+          class="collapse-arrow"
+          :class="{ open: openPanel === 'related' }"
+        />
       </button>
       <div v-if="openPanel === 'related'" class="collapse-body">
         <div v-if="relatedMistakes.length" class="related-grid">
@@ -123,7 +130,9 @@ function summaryPreview(text) {
   overflow: hidden;
   margin-top: 14px;
 }
-.collapse-item + .collapse-item { border-top: 1px solid var(--line); }
+.collapse-item + .collapse-item {
+  border-top: 1px solid var(--line);
+}
 
 .collapse-head {
   display: flex;
@@ -138,10 +147,17 @@ function summaryPreview(text) {
   font-weight: 700;
   cursor: pointer;
 }
-.collapse-arrow { transition: transform 0.18s; color: var(--ink-3); }
-.collapse-arrow.open { transform: rotate(180deg); }
+.collapse-arrow {
+  transition: transform 0.18s;
+  color: var(--ink-3);
+}
+.collapse-arrow.open {
+  transform: rotate(180deg);
+}
 
-.collapse-body { padding: 12px 14px; }
+.collapse-body {
+  padding: 12px 14px;
+}
 
 .link-btn {
   border: none;
@@ -161,14 +177,18 @@ function summaryPreview(text) {
   background: var(--surface-2);
   transition: border-color 0.15s;
 }
-.related-kn-card:hover { border-color: var(--accent); }
+.related-kn-card:hover {
+  border-color: var(--accent);
+}
 .related-kn-title {
   font-weight: 600;
   color: var(--ink);
   margin-bottom: 6px;
   cursor: pointer;
 }
-.related-kn-title:hover { color: var(--accent-ink); }
+.related-kn-title:hover {
+  color: var(--accent-ink);
+}
 
 .related-grid {
   display: flex;
@@ -187,6 +207,11 @@ function summaryPreview(text) {
   cursor: pointer;
   transition: border-color 0.15s;
 }
-.related-card:hover { border-color: var(--accent); }
-.related-question { font-size: 13px; color: var(--ink); }
+.related-card:hover {
+  border-color: var(--accent);
+}
+.related-question {
+  font-size: 13px;
+  color: var(--ink);
+}
 </style>

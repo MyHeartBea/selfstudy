@@ -5,7 +5,7 @@
  */
 import { onMounted, ref } from 'vue'
 
-const props = defineProps({
+defineProps({
   label: { type: String, default: '' },
   percentage: { type: Number, default: 0 }, // 0-100
   value: { type: [String, Number], default: '' },
@@ -27,9 +27,17 @@ onMounted(() => {
 
 <template>
   <div class="brow">
-    <span v-if="label" class="b-label" :style="labelWidth ? { width: labelWidth + 'px' } : null">{{ label }}</span>
+    <span v-if="label" class="b-label" :style="labelWidth ? { width: labelWidth + 'px' } : null">{{
+      label
+    }}</span>
     <div class="b-bar" :style="{ height: barHeight + 'px' }">
-      <div class="b-fill" :style="{ width: (shown ? Math.min(100, Math.max(0, percentage)) : 0) + '%', background: color }"></div>
+      <div
+        class="b-fill"
+        :style="{
+          width: (shown ? Math.min(100, Math.max(0, percentage)) : 0) + '%',
+          background: color,
+        }"
+      ></div>
     </div>
     <span v-if="value !== ''" class="b-val num">{{ value }}</span>
   </div>

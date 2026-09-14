@@ -86,37 +86,36 @@ function parseTable(rows) {
     .map((row) => {
       const line = row.trim()
       if (!line.startsWith('|')) return null
-      return line
-        .slice(1, -1)
-        .replace(/\\\|/g, '\u0000')
-        .split('|')
-        .map((cell) => cell.replace(/\u0000/g, '\\|').trim())
+      return (
+        line
+          .slice(1, -1)
+          .replace(/\\\|/g, '\u0000')
+          .split('|')
+          // \u0000 是刻意占位符：先把表格里转义的 \| 换成它，切完列再换回来，
+          // 否则转义竖线会被误当列分隔符。故此处并非"控制字符写错"。
+          // eslint-disable-next-line no-control-regex
+          .map((cell) => cell.replace(/\u0000/g, '\\|').trim())
+      )
     })
     .filter(Boolean)
   if (!body.length) return ''
   const hasSeparator =
-    body.length > 1 &&
-    body[1].every((cell) => /^:?-{2,}:?$/.test(cell.replace(/\s/g, '')))
+    body.length > 1 && body[1].every((cell) => /^:?-{2,}:?$/.test(cell.replace(/\s/g, '')))
   const head = hasSeparator ? body[0] : []
   const rowsData = hasSeparator ? body.slice(2) : body
   const thead = head.length
-    ? `<thead><tr>${head
-        .map((cell) => `<th>${renderInline(cell)}</th>`)
-        .join('')}</tr></thead>`
+    ? `<thead><tr>${head.map((cell) => `<th>${renderInline(cell)}</th>`).join('')}</tr></thead>`
     : ''
   const tbody = `<tbody>${rowsData
-    .map(
-      (cells) =>
-        `<tr>${cells
-          .map((cell) => `<td>${renderInline(cell)}</td>`)
-          .join('')}</tr>`,
-    )
+    .map((cells) => `<tr>${cells.map((cell) => `<td>${renderInline(cell)}</td>`).join('')}</tr>`)
     .join('')}</tbody>`
   return `<table>${thead}${tbody}</table>`
 }
 
 export function renderBlocks(source) {
-  const lines = String(source || '').replace(/\r/g, '').split('\n')
+  const lines = String(source || '')
+    .replace(/\r/g, '')
+    .split('\n')
   const html = []
   let index = 0
   const isHexDump = (raw) => {
@@ -172,9 +171,7 @@ export function renderBlocks(source) {
           ? imgSrc
           : '#'
       html.push(
-        `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(
-          imageMatch[1],
-        )}" loading="lazy">`,
+        `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(imageMatch[1])}" loading="lazy">`,
       )
       index += 1
       continue
@@ -191,9 +188,7 @@ export function renderBlocks(source) {
     if (/^\d+\. /.test(line)) {
       const items = []
       while (index < lines.length && /^\d+\. /.test(lines[index].trim())) {
-        items.push(
-          `<li>${renderInline(lines[index].trim().replace(/^\d+\. /, ''))}</li>`,
-        )
+        items.push(`<li>${renderInline(lines[index].trim().replace(/^\d+\. /, ''))}</li>`)
         index += 1
       }
       html.push(`<ol>${items.join('')}</ol>`)
@@ -217,9 +212,7 @@ export function renderMarkdown(text) {
   for (const part of parts) {
     if (!part) continue
     if (part.startsWith('$$') && part.endsWith('$$') && part.length > 4) {
-      html.push(
-        `<span class="math-block">${renderMath(part.slice(2, -2), true)}</span>`,
-      )
+      html.push(`<span class="math-block">${renderMath(part.slice(2, -2), true)}</span>`)
     } else {
       html.push(renderBlocks(part))
     }
@@ -235,31 +228,33 @@ export function renderMarkdown(text) {
  * 完整排版仍由详情弹窗的 RichText 负责。
  */
 export function markdownToPlain(text) {
-  return String(text || '')
-    .replace(/\r/g, '')
-    // 代码块
-    .replace(/```[\s\S]*?```/g, ' ')
-    // 表格分隔行（| --- | --- |）
-    .replace(/^\s*\|?[\s:|-]{3,}\|?\s*$/gm, ' ')
-    // 标题符号
-    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-    // 引用
-    .replace(/^\s{0,3}>\s?/gm, '')
-    // 列表符号
-    .replace(/^\s{0,3}[-*+]\s+/gm, '')
-    .replace(/^\s{0,3}\d+[.)]\s+/gm, '')
-    // 图片 / 链接
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    // 行内代码
-    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
-    // 强调
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/__([^_]+)__/g, '$1')
-    .replace(/\*([^*\n]+)\*/g, '$1')
-    // 表格竖线
-    .replace(/\|/g, ' ')
-    // 压缩空白
-    .replace(/\s+/g, ' ')
-    .trim()
+  return (
+    String(text || '')
+      .replace(/\r/g, '')
+      // 代码块
+      .replace(/```[\s\S]*?```/g, ' ')
+      // 表格分隔行（| --- | --- |）
+      .replace(/^\s*\|?[\s:|-]{3,}\|?\s*$/gm, ' ')
+      // 标题符号
+      .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+      // 引用
+      .replace(/^\s{0,3}>\s?/gm, '')
+      // 列表符号
+      .replace(/^\s{0,3}[-*+]\s+/gm, '')
+      .replace(/^\s{0,3}\d+[.)]\s+/gm, '')
+      // 图片 / 链接
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      // 行内代码
+      .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
+      // 强调
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/__([^_]+)__/g, '$1')
+      .replace(/\*([^*\n]+)\*/g, '$1')
+      // 表格竖线
+      .replace(/\|/g, ' ')
+      // 压缩空白
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
 }

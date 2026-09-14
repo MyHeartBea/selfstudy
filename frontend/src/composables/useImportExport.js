@@ -5,11 +5,12 @@ import { toast } from '../ui/toast'
 
 /**
  * 错题列表的导入 / 导出逻辑。
+ * 注意：导出走后端 /export（一次性返回全部错题），不需要按当前筛选构建参数，
+ * 因此历史上文档里写过的 buildParams 实际未被使用，已从签名移除。
  * @param {object} options
- * @param {Function} options.buildParams 由当前筛选条件构建请求参数（不含分页）
  * @param {Function} [options.onImported] 导入成功后的回调（重新加载列表）
  */
-export function useImportExport({ buildParams, onImported }) {
+export function useImportExport({ onImported } = {}) {
   const fileInput = ref(null)
   const importDialogVisible = ref(false)
   const pendingImport = ref([])

@@ -58,14 +58,34 @@ function confirmAnswer() {
       :key="opt.key"
       class="option-row clickable review-option"
       :class="{
-        correct: answered && (isMulti ? selectedSet.has(opt.key) && (current.correct_answer || '').includes(opt.key) : opt.key === current.correct_answer),
-        wrong: answered && (isMulti ? selectedSet.has(opt.key) && !(current.correct_answer || '').includes(opt.key) : opt.key === selected && opt.key !== current.correct_answer),
+        correct:
+          answered &&
+          (isMulti
+            ? selectedSet.has(opt.key) && (current.correct_answer || '').includes(opt.key)
+            : opt.key === current.correct_answer),
+        wrong:
+          answered &&
+          (isMulti
+            ? selectedSet.has(opt.key) && !(current.correct_answer || '').includes(opt.key)
+            : opt.key === selected && opt.key !== current.correct_answer),
         selected: !answered && (isMulti ? selectedSet.has(opt.key) : opt.key === selected),
       }"
       @click="choose(opt.key)"
     >
       <span class="option-key">
-        <svg v-if="isMulti && selectedSet.has(opt.key)" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 12.5 5 5L20 6.5"/></svg>
+        <svg
+          v-if="isMulti && selectedSet.has(opt.key)"
+          viewBox="0 0 24 24"
+          width="12"
+          height="12"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="m4.5 12.5 5 5L20 6.5" />
+        </svg>
         <template v-else>{{ opt.key }}</template>
       </span>
       <MathText :text="opt.text || '（未填写）'" />
@@ -91,7 +111,13 @@ function confirmAnswer() {
     </div>
 
     <div class="review-footer">
-      <UiButton v-if="!answered" variant="primary" size="lg" :disabled="!selected" @click="confirmAnswer">
+      <UiButton
+        v-if="!answered"
+        variant="primary"
+        size="lg"
+        :disabled="!selected"
+        @click="confirmAnswer"
+      >
         {{ isMulti ? `提交（已选 ${selected || '0'} 项）` : '确认答案' }}
       </UiButton>
       <UiButton
@@ -120,7 +146,11 @@ function confirmAnswer() {
   animation: key-pop 0.25s var(--spring);
 }
 @keyframes key-pop {
-  from { transform: scale(0.6); }
-  to { transform: scale(1); }
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 </style>

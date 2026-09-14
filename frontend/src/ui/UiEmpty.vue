@@ -36,5 +36,7 @@ defineProps({
   background: var(--surface-2);
   border: 1px dashed var(--line-strong);
 }
-.empty p { font-size: 13.5px; }
+.empty p {
+  font-size: 13.5px;
+}
 </style>

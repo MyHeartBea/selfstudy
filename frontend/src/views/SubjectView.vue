@@ -179,28 +179,51 @@ onMounted(loadProfiles)
   color: var(--ink-2);
   align-items: flex-start;
 }
-.notice p { margin: 0; line-height: 1.7; }
-.notice-icon { color: var(--blue); margin-top: 2px; }
+.notice p {
+  margin: 0;
+  line-height: 1.7;
+}
+.notice-icon {
+  color: var(--blue);
+  margin-top: 2px;
+}
 
 .subject-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 14px;
 }
-@media (max-width: 860px) { .subject-grid { grid-template-columns: 1fr; } }
+@media (max-width: 860px) {
+  .subject-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 .subject-card {
   position: relative;
   overflow: hidden;
-  transition: transform 0.25s var(--spring), box-shadow 0.3s var(--ease), border-color 0.2s var(--ease);
+  transition:
+    transform 0.25s var(--spring),
+    box-shadow 0.3s var(--ease),
+    border-color 0.2s var(--ease);
   animation: subj-in 0.55s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes subj-in {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
-.subject-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-2); border-color: color-mix(in srgb, var(--scol) 40%, var(--line)); }
+.subject-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-2);
+  border-color: color-mix(in srgb, var(--scol) 40%, var(--line));
+}
 /* 顶部科目色条 */
 .s-topbar {
   position: absolute;
@@ -232,8 +255,13 @@ onMounted(loadProfiles)
   transform: rotate(-3deg);
   transition: transform 0.3s var(--spring);
 }
-.subject-card:hover .s-seal { transform: rotate(-1deg) scale(1.06); }
-.s-head-text { min-width: 0; margin-right: auto; }
+.subject-card:hover .s-seal {
+  transform: rotate(-1deg) scale(1.06);
+}
+.s-head-text {
+  min-width: 0;
+  margin-right: auto;
+}
 .subject-name {
   font-family: var(--font-display);
   font-size: 19px;
@@ -248,7 +276,10 @@ onMounted(loadProfiles)
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.focus-wrap { display: flex; flex-wrap: wrap; }
+.focus-wrap {
+  display: flex;
+  flex-wrap: wrap;
+}
 .tips {
   font-size: 13px;
   color: var(--ink-2);
@@ -256,7 +287,19 @@ onMounted(loadProfiles)
   line-height: 1.7;
 }
 
-.edit-form { display: flex; flex-direction: column; gap: 14px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field-label { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
 </style>

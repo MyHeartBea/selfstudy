@@ -17,7 +17,9 @@ const W = 560
 const H = computed(() => props.height)
 const PAD = 34
 
-const n = computed(() => Math.max(props.labels.length, ...props.series.map((s) => s.values.length), 1))
+const n = computed(() =>
+  Math.max(props.labels.length, ...props.series.map((s) => s.values.length), 1),
+)
 const maxValue = computed(() => {
   const all = props.series.flatMap((s) => s.values).filter((v) => Number.isFinite(v))
   if (!all.length) return 10
@@ -47,9 +49,23 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
 
 <template>
   <div class="area-chart">
-    <svg :viewBox="`0 0 ${W} ${H}`" width="100%" :style="{ display: 'block' }" role="img" aria-label="趋势图">
+    <svg
+      :viewBox="`0 0 ${W} ${H}`"
+      width="100%"
+      :style="{ display: 'block' }"
+      role="img"
+      aria-label="趋势图"
+    >
       <defs>
-        <linearGradient v-for="(s, si) in series" :key="si" :id="`${uid}-${si}`" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient
+          v-for="(s, si) in series"
+          :key="si"
+          :id="`${uid}-${si}`"
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="1"
+        >
           <stop offset="0" :stop-color="s.color" stop-opacity="0.22" />
           <stop offset="1" :stop-color="s.color" stop-opacity="0" />
         </linearGradient>
@@ -58,8 +74,12 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
       <line
         v-for="(y, gi) in gridLines"
         :key="gi"
-        :x1="PAD" :y1="y" :x2="W - PAD" :y2="y"
-        stroke="var(--line)" stroke-width="1"
+        :x1="PAD"
+        :y1="y"
+        :x2="W - PAD"
+        :y2="y"
+        stroke="var(--line)"
+        stroke-width="1"
       />
 
       <g v-for="(s, si) in series" :key="s.name">
@@ -73,7 +93,7 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
         <path
           v-if="s.values.length > 1"
           class="ac-line"
-            :d="pathOf(s.values)"
+          :d="pathOf(s.values)"
           fill="none"
           :stroke="s.color"
           stroke-width="2.5"
@@ -86,7 +106,9 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
           v-for="(v, i) in s.values"
           :key="i"
           class="ac-dot"
-          :cx="xs(i)" :cy="ys(v)" r="3.5"
+          :cx="xs(i)"
+          :cy="ys(v)"
+          r="3.5"
           fill="var(--surface)"
           :stroke="s.color"
           stroke-width="2.2"
@@ -97,14 +119,20 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
       <text
         v-for="(label, i) in labels"
         :key="'l' + i"
-        :x="xs(i)" :y="H - 8"
-        text-anchor="middle" font-size="11"
+        :x="xs(i)"
+        :y="H - 8"
+        text-anchor="middle"
+        font-size="11"
         fill="var(--ink-3)"
-      >{{ label }}</text>
+      >
+        {{ label }}
+      </text>
     </svg>
 
     <div v-if="legend && series.length" class="ac-legend">
-      <span v-for="s in series" :key="s.name"><i :style="{ background: s.color }"></i>{{ s.name }}</span>
+      <span v-for="s in series" :key="s.name"
+        ><i :style="{ background: s.color }"></i>{{ s.name }}</span
+      >
     </div>
   </div>
 </template>
@@ -115,10 +143,21 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
   stroke-dashoffset: 1;
   animation: ac-draw 1.3s var(--ease) forwards;
 }
-@keyframes ac-draw { to { stroke-dashoffset: 0; } }
+@keyframes ac-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
 
-.ac-area { opacity: 0; animation: ac-fade 0.9s var(--ease) forwards; }
-@keyframes ac-fade { to { opacity: 1; } }
+.ac-area {
+  opacity: 0;
+  animation: ac-fade 0.9s var(--ease) forwards;
+}
+@keyframes ac-fade {
+  to {
+    opacity: 1;
+  }
+}
 
 .ac-dot {
   opacity: 0;
@@ -127,8 +166,14 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
   animation: ac-pop 0.45s var(--spring) forwards;
 }
 @keyframes ac-pop {
-  from { opacity: 0; transform: scale(0.3); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .ac-legend {

@@ -33,17 +33,24 @@ defineProps({
   border-radius: var(--r-lg);
   background:
     linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--accent) 24%, transparent),
-      transparent 38%,
-      color-mix(in srgb, var(--gold) 20%, transparent) 78%,
-      color-mix(in srgb, var(--teal) 18%, transparent)) border-box;
+    linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent) 24%, transparent),
+        transparent 38%,
+        color-mix(in srgb, var(--gold) 20%, transparent) 78%,
+        color-mix(in srgb, var(--teal) 18%, transparent)
+      )
+      border-box;
   box-shadow: var(--shadow-1);
   backdrop-filter: blur(10px) saturate(1.15);
-  transition: box-shadow 0.35s var(--ease), transform 0.35s var(--ease);
+  transition:
+    box-shadow 0.35s var(--ease),
+    transform 0.35s var(--ease);
 }
 
-.pad .gcard-body { padding: 24px 26px; }
+.pad .gcard-body {
+  padding: 24px 26px;
+}
 
 /* 流光：只在 body 内裁切，不伤骑缝元素 */
 .gcard-body::after {
@@ -53,7 +60,12 @@ defineProps({
   bottom: -60%;
   left: -30%;
   width: 34%;
-  background: linear-gradient(100deg, transparent, color-mix(in srgb, #fff 30%, transparent), transparent);
+  background: linear-gradient(
+    100deg,
+    transparent,
+    color-mix(in srgb, #fff 30%, transparent),
+    transparent
+  );
   transform: skewX(-18deg) translateX(-160%);
   pointer-events: none;
 }
@@ -66,6 +78,8 @@ defineProps({
   animation: gcard-shine 0.9s var(--ease) forwards;
 }
 @keyframes gcard-shine {
-  to { transform: skewX(-18deg) translateX(640%); }
+  to {
+    transform: skewX(-18deg) translateX(640%);
+  }
 }
 </style>

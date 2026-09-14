@@ -14,7 +14,13 @@ const ICON_MAP = {
 <template>
   <Teleport to="body">
     <TransitionGroup name="toast" tag="div" class="toast-host" aria-live="polite">
-      <div v-for="item in toasts" :key="item.id" class="toast" :class="`toast-${item.type}`" role="status">
+      <div
+        v-for="item in toasts"
+        :key="item.id"
+        class="toast"
+        :class="`toast-${item.type}`"
+        role="status"
+      >
         <Icon :name="ICON_MAP[item.type]" :size="16" />
         <span class="toast-msg">{{ item.message }}</span>
         <button class="toast-close" aria-label="关闭提示" @click="dismiss(item.id)">
@@ -59,10 +65,22 @@ const ICON_MAP = {
   flex: none;
 }
 
-.toast-success { border-left: 3px solid var(--green); color: var(--green); }
-.toast-error { border-left: 3px solid var(--red); color: var(--red); }
-.toast-warning { border-left: 3px solid var(--gold); color: var(--gold); }
-.toast-info { border-left: 3px solid var(--blue); color: var(--blue); }
+.toast-success {
+  border-left: 3px solid var(--green);
+  color: var(--green);
+}
+.toast-error {
+  border-left: 3px solid var(--red);
+  color: var(--red);
+}
+.toast-warning {
+  border-left: 3px solid var(--gold);
+  color: var(--gold);
+}
+.toast-info {
+  border-left: 3px solid var(--blue);
+  color: var(--blue);
+}
 
 .toast-msg {
   flex: 1;
@@ -79,9 +97,21 @@ const ICON_MAP = {
   padding: 3px;
   border-radius: 6px;
 }
-.toast-close:hover { color: var(--ink); background: var(--surface-2); }
+.toast-close:hover {
+  color: var(--ink);
+  background: var(--surface-2);
+}
 
-.toast-enter-active, .toast-leave-active { transition: all 0.28s cubic-bezier(0.22, 0.8, 0.36, 1); }
-.toast-enter-from { opacity: 0; transform: translateY(-12px) scale(0.97); }
-.toast-leave-to { opacity: 0; transform: translateY(-8px) scale(0.97); }
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.28s cubic-bezier(0.22, 0.8, 0.36, 1);
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(-12px) scale(0.97);
+}
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.97);
+}
 </style>

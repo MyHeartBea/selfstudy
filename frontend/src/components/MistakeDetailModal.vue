@@ -204,13 +204,29 @@ async function deleteCurrent() {
 
       <div class="review-info">
         <div class="review-chips">
-          <span class="chip">掌握度 <b>{{ detail.mastery_level || 0 }}</b> 级</span>
-          <span class="chip">复习 <b>{{ detail.review_count || 0 }}</b> 次</span>
-          <span class="chip">答错 <b>{{ detail.wrong_count || 0 }}</b> 次</span>
-          <span class="chip">下次复习：<b>{{ detail.next_review_at ? formatTime(detail.next_review_at) : '尽快' }}</b></span>
+          <span class="chip"
+            >掌握度 <b>{{ detail.mastery_level || 0 }}</b> 级</span
+          >
+          <span class="chip"
+            >复习 <b>{{ detail.review_count || 0 }}</b> 次</span
+          >
+          <span class="chip"
+            >答错 <b>{{ detail.wrong_count || 0 }}</b> 次</span
+          >
+          <span class="chip"
+            >下次复习：<b>{{
+              detail.next_review_at ? formatTime(detail.next_review_at) : '尽快'
+            }}</b></span
+          >
           <UiTag
             v-if="detail.last_grade"
-            :color="detail.last_grade.verdict === 'correct' ? 'var(--green)' : (detail.last_grade.verdict === 'partial' ? 'var(--gold)' : 'var(--red)')"
+            :color="
+              detail.last_grade.verdict === 'correct'
+                ? 'var(--green)'
+                : detail.last_grade.verdict === 'partial'
+                  ? 'var(--gold)'
+                  : 'var(--red)'
+            "
             size="sm"
           >
             最近 AI 批改 {{ detail.last_grade.score }} 分
@@ -221,10 +237,23 @@ async function deleteCurrent() {
             <Icon name="play" :size="13" />
             练这道题
           </UiButton>
-          <UiButton size="sm" variant="success" :loading="reviewing" @click="markReview(true)">标记掌握</UiButton>
-          <UiButton size="sm" variant="subtle" :loading="reviewing" @click="markReview(false)">标记生疏</UiButton>
-          <UiButton v-if="detail.review_paused" size="sm" variant="subtle" :loading="pausing" @click="resumeReview">恢复复习</UiButton>
-          <UiButton v-else size="sm" variant="ghost" :loading="pausing" @click="pauseReview">暂停复习</UiButton>
+          <UiButton size="sm" variant="success" :loading="reviewing" @click="markReview(true)"
+            >标记掌握</UiButton
+          >
+          <UiButton size="sm" variant="subtle" :loading="reviewing" @click="markReview(false)"
+            >标记生疏</UiButton
+          >
+          <UiButton
+            v-if="detail.review_paused"
+            size="sm"
+            variant="subtle"
+            :loading="pausing"
+            @click="resumeReview"
+            >恢复复习</UiButton
+          >
+          <UiButton v-else size="sm" variant="ghost" :loading="pausing" @click="pauseReview"
+            >暂停复习</UiButton
+          >
           <UiButton
             v-if="detail.source_type !== 'real_exam'"
             size="sm"
@@ -274,24 +303,83 @@ async function deleteCurrent() {
   background: var(--surface-2);
 }
 .ed-title {
-  display: flex; align-items: center; gap: 8px;
-  font-weight: 700; font-size: 14px; margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 8px;
 }
-.ed-title svg { color: var(--accent); }
-.ed-passage { font-size: 13.5px; line-height: 1.8; color: var(--ink); margin: 0 0 8px; }
-.ed-trans { display: flex; gap: 8px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; line-height: 1.7; }
-.ed-trans-label { flex: none; font-size: 11.5px; font-weight: 700; color: var(--teal); background: var(--teal-soft); border-radius: 6px; padding: 2px 7px; align-self: flex-start; }
-.ed-sentences { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-.ed-sentence { border-left: 3px solid var(--accent); padding: 4px 10px; }
-.ed-sentence-text { font-size: 13px; color: var(--ink); }
-.ed-sentence-meta { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
-.ed-vocab { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.ed-vocab-label { font-size: 11.5px; font-weight: 700; color: var(--ink-3); }
+.ed-title svg {
+  color: var(--accent);
+}
+.ed-passage {
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.ed-trans {
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+  line-height: 1.7;
+}
+.ed-trans-label {
+  flex: none;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--teal);
+  background: var(--teal-soft);
+  border-radius: 6px;
+  padding: 2px 7px;
+  align-self: flex-start;
+}
+.ed-sentences {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.ed-sentence {
+  border-left: 3px solid var(--accent);
+  padding: 4px 10px;
+}
+.ed-sentence-text {
+  font-size: 13px;
+  color: var(--ink);
+}
+.ed-sentence-meta {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 3px;
+}
+.ed-vocab {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.ed-vocab-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
 .ed-chip {
-  font-size: 12px; padding: 2px 9px; border-radius: 999px;
-  border: 1px solid var(--accent); color: var(--accent-ink); background: var(--accent-soft);
+  font-size: 12px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent-soft);
 }
-.ed-chip.phrase { border-color: var(--teal); color: var(--teal); background: var(--teal-soft); }
+.ed-chip.phrase {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: var(--teal-soft);
+}
 
 .review-info {
   margin-top: 22px;
@@ -300,7 +388,13 @@ async function deleteCurrent() {
   border-radius: var(--r-md);
   background:
     linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 50%, color-mix(in srgb, var(--teal) 12%, transparent)) border-box;
+    linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent) 14%, transparent),
+        transparent 50%,
+        color-mix(in srgb, var(--teal) 12%, transparent)
+      )
+      border-box;
   box-shadow: var(--shadow-1);
   display: flex;
   align-items: center;
@@ -323,7 +417,10 @@ async function deleteCurrent() {
   border-radius: 999px;
   padding: 4px 12px;
 }
-.chip b { color: var(--ink); font-family: var(--font-display); }
+.chip b {
+  color: var(--ink);
+  font-family: var(--font-display);
+}
 
 .review-actions {
   display: flex;
@@ -350,6 +447,10 @@ async function deleteCurrent() {
   font-weight: 400;
   color: var(--ink-3);
 }
-.history-details[open] summary::after { content: '−'; }
-.history-details[open] summary { border-radius: var(--r-md) var(--r-md) 0 0; }
+.history-details[open] summary::after {
+  content: '−';
+}
+.history-details[open] summary {
+  border-radius: var(--r-md) var(--r-md) 0 0;
+}
 </style>

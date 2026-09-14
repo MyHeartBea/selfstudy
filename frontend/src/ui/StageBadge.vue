@@ -26,7 +26,9 @@ defineProps({
   font-weight: 700;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(168, 51, 32, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 4px 12px rgba(168, 51, 32, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
   z-index: 5;
 }
 </style>

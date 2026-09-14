@@ -45,7 +45,9 @@ defineEmits(['update:modelValue'])
   transition: all 0.18s var(--ease);
   white-space: nowrap;
 }
-.seg-tab:hover { color: var(--ink); }
+.seg-tab:hover {
+  color: var(--ink);
+}
 .seg-tab.active {
   background: var(--surface);
   color: var(--ink);

@@ -60,6 +60,13 @@ function searchList() {
   loadList()
 }
 
+/** 切换「全部/单词/词语」分类并重新检索（模板里不要写多语句内联表达式，
+ *  Prettier 会把它们拆行导致 Vue 编译失败）。 */
+function selectKind(kind) {
+  filters.kind = kind
+  searchList()
+}
+
 let searchTimer = null
 function debouncedSearch() {
   if (searchTimer) clearTimeout(searchTimer)
@@ -142,11 +149,12 @@ const importSource = ref('')
 const importText = ref('')
 const importing = ref(false)
 
-const importPreview = computed(() =>
-  importText.value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean).length,
+const importPreview = computed(
+  () =>
+    importText.value
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean).length,
 )
 
 function openImport() {
@@ -156,7 +164,10 @@ function openImport() {
 }
 
 async function doImport() {
-  const lines = importText.value.split('\n').map((line) => line.trim()).filter(Boolean)
+  const lines = importText.value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
   if (!lines.length) {
     toast.warning('请先粘贴生词')
     return
@@ -308,15 +319,24 @@ async function exportAnki() {
     <div class="stats-strip">
       <div class="strip-item card" v-reveal>
         <span class="strip-icon"><Icon name="book" :size="17" /></span>
-        <div><div class="strip-num">{{ nTotal }}</div><div class="strip-label">生词总数</div></div>
+        <div>
+          <div class="strip-num">{{ nTotal }}</div>
+          <div class="strip-label">生词总数</div>
+        </div>
       </div>
       <div class="strip-item card" v-reveal="50">
         <span class="strip-icon" style="color: var(--gold)"><Icon name="clock" :size="17" /></span>
-        <div><div class="strip-num">{{ nDue }}</div><div class="strip-label">今日到期</div></div>
+        <div>
+          <div class="strip-num">{{ nDue }}</div>
+          <div class="strip-label">今日到期</div>
+        </div>
       </div>
       <div class="strip-item card" v-reveal="100">
         <span class="strip-icon" style="color: var(--green)"><Icon name="check" :size="17" /></span>
-        <div><div class="strip-num">{{ nMastered }}</div><div class="strip-label">已掌握</div></div>
+        <div>
+          <div class="strip-num">{{ nMastered }}</div>
+          <div class="strip-label">已掌握</div>
+        </div>
       </div>
       <div class="strip-item card dist" v-reveal="150">
         <div class="dist-bars">
@@ -326,8 +346,20 @@ async function exportAnki() {
             class="dist-col"
             :title="`${masteryLabel(d.mastery)}：${d.count} 词`"
           >
-            <div class="dist-bar" :style="{ height: Math.max(6, (d.count / Math.max(1, Math.max(...stats.distribution.map((x) => x.count)))) * 40) + 'px' }"></div>
-            <span class="dist-level">{{ d.mastery === 0 ? '新' : d.mastery >= 5 ? '✓' : d.mastery }}</span>
+            <div
+              class="dist-bar"
+              :style="{
+                height:
+                  Math.max(
+                    6,
+                    (d.count / Math.max(1, Math.max(...stats.distribution.map((x) => x.count)))) *
+                      40,
+                  ) + 'px',
+              }"
+            ></div>
+            <span class="dist-level">{{
+              d.mastery === 0 ? '新' : d.mastery >= 5 ? '✓' : d.mastery
+            }}</span>
           </div>
         </div>
         <span class="count-tip">掌握度分布</span>
@@ -363,7 +395,9 @@ async function exportAnki() {
           <div class="flash-card" :class="{ flipped }">
             <div class="flash-face flash-front">
               <div class="flash-word serif">{{ currentCard.word }}</div>
-              <div v-if="currentCard.phonetic" class="flash-phonetic">{{ currentCard.phonetic }}</div>
+              <div v-if="currentCard.phonetic" class="flash-phonetic">
+                {{ currentCard.phonetic }}
+              </div>
               <span class="flash-tip">点击卡片或按空格查看释义</span>
             </div>
             <div class="flash-face flash-back">
@@ -374,17 +408,32 @@ async function exportAnki() {
           </div>
         </div>
         <div class="grade-row" :class="{ disabled: !flipped }">
-          <button type="button" class="grade-btn unknown" :disabled="!flipped" @click="grade('unknown')">
+          <button
+            type="button"
+            class="grade-btn unknown"
+            :disabled="!flipped"
+            @click="grade('unknown')"
+          >
             <Icon name="x" :size="17" />
             不认识
             <kbd>1</kbd>
           </button>
-          <button type="button" class="grade-btn fuzzy" :disabled="!flipped" @click="grade('fuzzy')">
+          <button
+            type="button"
+            class="grade-btn fuzzy"
+            :disabled="!flipped"
+            @click="grade('fuzzy')"
+          >
             <Icon name="refresh" :size="17" />
             模糊
             <kbd>2</kbd>
           </button>
-          <button type="button" class="grade-btn known" :disabled="!flipped" @click="grade('known')">
+          <button
+            type="button"
+            class="grade-btn known"
+            :disabled="!flipped"
+            @click="grade('known')"
+          >
             <Icon name="check" :size="17" />
             认识
             <kbd>3</kbd>
@@ -397,7 +446,19 @@ async function exportAnki() {
     <template v-else>
       <div class="card card-pad filter-bar">
         <div class="kind-tabs">
-          <button v-for="k in [['', '全部'], ['word', '单词'], ['phrase', '词语']]" :key="k[0]" class="kind-tab" :class="{ active: filters.kind === k[0] }" @click="filters.kind = k[0]; searchList()">{{ k[1] }}</button>
+          <button
+            v-for="k in [
+              ['', '全部'],
+              ['word', '单词'],
+              ['phrase', '词语'],
+            ]"
+            :key="k[0]"
+            class="kind-tab"
+            :class="{ active: filters.kind === k[0] }"
+            @click="selectKind(k[0])"
+          >
+            {{ k[1] }}
+          </button>
         </div>
         <div class="filter-search">
           <Icon name="search" :size="15" class="search-icon" />
@@ -411,7 +472,9 @@ async function exportAnki() {
         </div>
         <UiSelect
           v-model="filters.mastery"
-          :options="['生词', 'L1', 'L2', 'L3', 'L4', '已掌握'].map((label, i) => ({ label, value: i }))"
+          :options="
+            ['生词', 'L1', 'L2', 'L3', 'L4', '已掌握'].map((label, i) => ({ label, value: i }))
+          "
           placeholder="全部掌握度"
           clearable
           compact
@@ -431,21 +494,39 @@ async function exportAnki() {
         <span class="count-tip">共 {{ total }} 词</span>
       </div>
 
-      <UiEmpty v-if="!items.length && !loading" text="生词本还是空的，粘贴词表批量导入或逐个添加" icon="book" />
+      <UiEmpty
+        v-if="!items.length && !loading"
+        text="生词本还是空的，粘贴词表批量导入或逐个添加"
+        icon="book"
+      />
       <div v-else class="vocab-grid">
-        <article v-for="(row, i) in items" :key="row.id" class="vocab-card card" :style="{ '--enter-delay': Math.min(i, 11) * 45 + 'ms' }">
-          <span class="v-mark serif" aria-hidden="true">{{ (row.word || 'A').slice(0, 1).toUpperCase() }}</span>
+        <article
+          v-for="(row, i) in items"
+          :key="row.id"
+          class="vocab-card card"
+          :style="{ '--enter-delay': Math.min(i, 11) * 45 + 'ms' }"
+        >
+          <span class="v-mark serif" aria-hidden="true">{{
+            (row.word || 'A').slice(0, 1).toUpperCase()
+          }}</span>
           <div class="vocab-head">
             <span class="vocab-word serif">{{ row.word }}</span>
             <span v-if="row.kind === 'phrase'" class="vocab-kind">词语</span>
-            <span class="m-dots" :title="masteryLabel(row.mastery_level)" :class="{ mastered: row.mastery_level >= 5 }">
+            <span
+              class="m-dots"
+              :title="masteryLabel(row.mastery_level)"
+              :class="{ mastered: row.mastery_level >= 5 }"
+            >
               <i v-for="d in 5" :key="d" :class="{ on: d <= row.mastery_level }"></i>
             </span>
           </div>
           <p class="vocab-meaning">{{ row.meaning || '—' }}</p>
           <p v-if="row.example" class="vocab-example">{{ row.example }}</p>
           <div class="vocab-foot">
-            <span class="count-tip" :title="'复习 ' + row.review_count + ' 次 · 认错 ' + row.wrong_count + ' 次'">
+            <span
+              class="count-tip"
+              :title="'复习 ' + row.review_count + ' 次 · 认错 ' + row.wrong_count + ' 次'"
+            >
               复 {{ row.review_count }} · 错 {{ row.wrong_count }}
             </span>
             <span class="vocab-ops">
@@ -481,11 +562,21 @@ async function exportAnki() {
         </div>
         <div class="field">
           <label class="field-label">释义</label>
-          <textarea v-model="form.meaning" class="field-input" rows="2" placeholder="v. 放弃；n. 放纵"></textarea>
+          <textarea
+            v-model="form.meaning"
+            class="field-input"
+            rows="2"
+            placeholder="v. 放弃；n. 放纵"
+          ></textarea>
         </div>
         <div class="field">
           <label class="field-label">例句</label>
-          <textarea v-model="form.example" class="field-input" rows="2" placeholder="摘自真题的例句更好"></textarea>
+          <textarea
+            v-model="form.example"
+            class="field-input"
+            rows="2"
+            placeholder="摘自真题的例句更好"
+          ></textarea>
         </div>
         <div class="field">
           <label class="field-label">笔记</label>
@@ -493,7 +584,11 @@ async function exportAnki() {
         </div>
         <div class="field">
           <label class="field-label">来源</label>
-          <input v-model="form.source" class="field-input" placeholder="如：2020 Text 2 / 恋练有词 Unit 3" />
+          <input
+            v-model="form.source"
+            class="field-input"
+            placeholder="如：2020 Text 2 / 恋练有词 Unit 3"
+          />
         </div>
       </div>
       <template #footer>
@@ -515,11 +610,21 @@ async function exportAnki() {
         rows="12"
         placeholder="abandon v. 放弃&#10;tidy adj. 整洁的&#10;mitigate v. 缓解，减轻"
       ></textarea>
-      <input v-model="importSource" class="field-input" style="margin-top: 10px" placeholder="来源（可选）：如 恋练有词 Unit 3" />
+      <input
+        v-model="importSource"
+        class="field-input"
+        style="margin-top: 10px"
+        placeholder="来源（可选）：如 恋练有词 Unit 3"
+      />
       <p class="count-tip" style="margin: 8px 0 0">共 {{ importPreview }} 行</p>
       <template #footer>
         <UiButton variant="ghost" @click="importVisible = false">取消</UiButton>
-        <UiButton variant="primary" :loading="importing" :disabled="!importPreview" @click="doImport">
+        <UiButton
+          variant="primary"
+          :loading="importing"
+          :disabled="!importPreview"
+          @click="doImport"
+        >
           导入 {{ importPreview || '' }} 条
         </UiButton>
       </template>
@@ -534,38 +639,77 @@ async function exportAnki() {
   gap: 12px;
   margin-bottom: 16px;
 }
-@media (max-width: 860px) { .stats-strip { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 860px) {
+  .stats-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 .strip-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
 }
-.strip-icon { color: var(--accent); display: inline-flex; }
+.strip-icon {
+  color: var(--accent);
+  display: inline-flex;
+}
 .strip-num {
   font-family: var(--font-display);
   font-size: 22px;
   font-weight: 800;
   line-height: 1.1;
 }
-.strip-label { font-size: 11.5px; color: var(--ink-3); }
+.strip-label {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
 
-.dist { flex-direction: column; align-items: flex-start; gap: 6px; }
-.dist-bars { display: flex; gap: 5px; align-items: flex-end; height: 46px; }
-.dist-col { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.dist-bar { width: 14px; border-radius: 3px 3px 0 0; background: var(--accent); opacity: 0.85; }
-.dist-level { font-size: 9px; color: var(--ink-3); }
+.dist {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+.dist-bars {
+  display: flex;
+  gap: 5px;
+  align-items: flex-end;
+  height: 46px;
+}
+.dist-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.dist-bar {
+  width: 14px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.dist-level {
+  font-size: 9px;
+  color: var(--ink-3);
+}
 
 /* 闪卡 */
-.flash-zone { max-width: 720px; margin: 0 auto 20px; }
+.flash-zone {
+  max-width: 720px;
+  margin: 0 auto 20px;
+}
 .flash-head {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
 }
-.flash-head .count-tip { flex: 1; }
-.flash-head .ui-button { margin-left: 0; }
+.flash-head .count-tip {
+  flex: 1;
+}
+.flash-head .ui-button {
+  margin-left: 0;
+}
 /* 真 3D 翻面：perspective 舞台 + 双面卡（backface 隐藏） */
 .flash-stage {
   perspective: 1400px;
@@ -578,7 +722,9 @@ async function exportAnki() {
   cursor: pointer;
   user-select: none;
 }
-.flash-card.flipped { transform: rotateY(180deg); }
+.flash-card.flipped {
+  transform: rotateY(180deg);
+}
 .flash-face {
   position: absolute;
   inset: 0;
@@ -593,21 +739,59 @@ async function exportAnki() {
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
-.flash-stage:hover .flash-face { border-color: var(--accent); box-shadow: var(--shadow-2); }
+.flash-stage:hover .flash-face {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-2);
+}
 .flash-face.flash-back {
   transform: rotateY(180deg);
   border-color: var(--teal);
 }
-.flash-stage:active .flash-card { transform: scale(0.995); }
-.flash-card.flipped:active { transform: rotateY(180deg) scale(0.995); }
-.flash-word { font-size: 42px; font-weight: 700; letter-spacing: 0.02em; }
-.flash-phonetic { color: var(--ink-3); font-size: 15px; }
-.flash-meaning { font-size: 19px; text-align: center; font-weight: 600; margin: 0; }
-.flash-example { font-size: 13px; color: var(--ink-2); text-align: center; font-style: italic; margin: 0; }
-.flash-note { font-size: 12.5px; color: var(--gold); text-align: center; margin: 0; }
-.flash-tip { position: absolute; bottom: 14px; font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.06em; }
+.flash-stage:active .flash-card {
+  transform: scale(0.995);
+}
+.flash-card.flipped:active {
+  transform: rotateY(180deg) scale(0.995);
+}
+.flash-word {
+  font-size: 42px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.flash-phonetic {
+  color: var(--ink-3);
+  font-size: 15px;
+}
+.flash-meaning {
+  font-size: 19px;
+  text-align: center;
+  font-weight: 600;
+  margin: 0;
+}
+.flash-example {
+  font-size: 13px;
+  color: var(--ink-2);
+  text-align: center;
+  font-style: italic;
+  margin: 0;
+}
+.flash-note {
+  font-size: 12.5px;
+  color: var(--gold);
+  text-align: center;
+  margin: 0;
+}
+.flash-tip {
+  position: absolute;
+  bottom: 14px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  letter-spacing: 0.06em;
+}
 
 .grade-row {
   display: grid;
@@ -629,7 +813,10 @@ async function exportAnki() {
   cursor: pointer;
   transition: all 0.14s;
 }
-.grade-row.disabled { opacity: 0.45; pointer-events: none; }
+.grade-row.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
 .grade-btn kbd {
   font-size: 10px;
   padding: 2px 6px;
@@ -638,9 +825,21 @@ async function exportAnki() {
   background: var(--surface-2);
   color: var(--ink-3);
 }
-.grade-btn.unknown:hover { border-color: var(--red); color: var(--red); background: var(--red-soft); }
-.grade-btn.fuzzy:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-soft); }
-.grade-btn.known:hover { border-color: var(--green); color: var(--green); background: var(--green-soft); }
+.grade-btn.unknown:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: var(--red-soft);
+}
+.grade-btn.fuzzy:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-soft);
+}
+.grade-btn.known:hover {
+  border-color: var(--green);
+  color: var(--green);
+  background: var(--green-soft);
+}
 
 .flash-done {
   display: flex;
@@ -660,11 +859,24 @@ async function exportAnki() {
   background: var(--green-soft);
   color: var(--green);
 }
-.flash-done h3 { font-family: var(--font-display); font-size: 21px; }
-.done-sub .ok { color: var(--green); }
-.done-sub .warn { color: var(--gold); }
-.done-sub .bad { color: var(--red); }
-.done-actions { display: flex; gap: 10px; margin-top: 6px; }
+.flash-done h3 {
+  font-family: var(--font-display);
+  font-size: 21px;
+}
+.done-sub .ok {
+  color: var(--green);
+}
+.done-sub .warn {
+  color: var(--gold);
+}
+.done-sub .bad {
+  color: var(--red);
+}
+.done-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
 
 /* 词表 */
 .filter-bar {
@@ -681,11 +893,23 @@ async function exportAnki() {
   border-radius: var(--r-lg);
   background:
     linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 45%, color-mix(in srgb, var(--teal) 14%, transparent)) border-box;
+    linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent) 16%, transparent),
+        transparent 45%,
+        color-mix(in srgb, var(--teal) 14%, transparent)
+      )
+      border-box;
   box-shadow: var(--shadow-1);
   backdrop-filter: blur(10px) saturate(1.15);
 }
-.kind-tabs { display: inline-flex; gap: 4px; padding: 3px; background: var(--surface-2); border-radius: 999px; }
+.kind-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: 999px;
+}
 .kind-tab {
   border: none;
   background: transparent;
@@ -697,15 +921,29 @@ async function exportAnki() {
   cursor: pointer;
   transition: all 0.18s var(--ease);
 }
-.kind-tab:hover { color: var(--ink); }
+.kind-tab:hover {
+  color: var(--ink);
+}
 .kind-tab.active {
   background: var(--accent-grad);
   color: #fff;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-hover) 40%, transparent);
 }
-.filter-search { position: relative; display: flex; align-items: center; }
-.search-icon { position: absolute; left: 11px; color: var(--ink-3); pointer-events: none; }
-.filter-search .field-input { width: 220px; padding-left: 33px; }
+.filter-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.filter-search .field-input {
+  width: 220px;
+  padding-left: 33px;
+}
 
 .vocab-grid {
   display: grid;
@@ -719,13 +957,22 @@ async function exportAnki() {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease), transform 0.25s var(--spring);
+  transition:
+    border-color 0.2s var(--ease),
+    box-shadow 0.3s var(--ease),
+    transform 0.25s var(--spring);
   animation: vcard-in 0.5s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes vcard-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .vocab-card:hover {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
@@ -752,7 +999,10 @@ async function exportAnki() {
   justify-content: space-between;
   gap: 8px;
 }
-.vocab-word { font-size: 18px; font-weight: 700; }
+.vocab-word {
+  font-size: 18px;
+  font-weight: 700;
+}
 .vocab-kind {
   font-size: 11px;
   font-weight: 700;
@@ -762,17 +1012,29 @@ async function exportAnki() {
   border-radius: 6px;
 }
 /* 掌握度墨点 */
-.m-dots { display: inline-flex; gap: 3.5px; flex: none; }
+.m-dots {
+  display: inline-flex;
+  gap: 3.5px;
+  flex: none;
+}
 .m-dots i {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: var(--line-strong);
-  transition: background 0.2s var(--ease), transform 0.2s var(--spring);
+  transition:
+    background 0.2s var(--ease),
+    transform 0.2s var(--spring);
 }
-.m-dots i.on { background: var(--gold); }
-.m-dots.mastered i.on { background: var(--green); }
-.vocab-card:hover .m-dots i.on { transform: scale(1.25); }
+.m-dots i.on {
+  background: var(--gold);
+}
+.m-dots.mastered i.on {
+  background: var(--green);
+}
+.vocab-card:hover .m-dots i.on {
+  transform: scale(1.25);
+}
 .vocab-meaning {
   font-size: 13px;
   color: var(--ink-2);
@@ -798,7 +1060,10 @@ async function exportAnki() {
   align-items: center;
   justify-content: space-between;
 }
-.vocab-ops { display: flex; gap: 2px; }
+.vocab-ops {
+  display: flex;
+  gap: 2px;
+}
 .op-link {
   border: none;
   background: transparent;
@@ -809,15 +1074,44 @@ async function exportAnki() {
   padding: 2px 6px;
   border-radius: 6px;
 }
-.op-link:hover { background: var(--accent-soft); }
-.op-link.danger { color: var(--red); }
-.op-link.danger:hover { background: var(--red-soft); }
+.op-link:hover {
+  background: var(--accent-soft);
+}
+.op-link.danger {
+  color: var(--red);
+}
+.op-link.danger:hover {
+  background: var(--red-soft);
+}
 
-.pagination-wrap { display: flex; justify-content: center; margin-top: 18px; }
+.pagination-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
 
-.edit-form { display: flex; flex-direction: column; gap: 13px; }
-.field { display: flex; flex-direction: column; gap: 5px; }
-.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.field-label { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
-.required::after { content: ' *'; color: var(--accent); }
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.field-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.required::after {
+  content: ' *';
+  color: var(--accent);
+}
 </style>

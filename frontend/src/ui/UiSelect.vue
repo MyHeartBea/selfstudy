@@ -23,8 +23,8 @@ const normalized = computed(() =>
   ),
 )
 
-const current = computed(() =>
-  normalized.value.find((item) => item.value === props.modelValue) || null,
+const current = computed(
+  () => normalized.value.find((item) => item.value === props.modelValue) || null,
 )
 
 function pick(option) {
@@ -49,10 +49,21 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
 
 <template>
   <div ref="root" class="select" :class="{ open, disabled, compact }">
-    <button type="button" class="select-trigger" :disabled="disabled" @click="!disabled && (open = !open)">
+    <button
+      type="button"
+      class="select-trigger"
+      :disabled="disabled"
+      @click="!disabled && (open = !open)"
+    >
       <span v-if="current" class="select-label">{{ current.label }}</span>
       <span v-else class="select-placeholder">{{ placeholder }}</span>
-      <span v-if="clearable && current" class="select-clear" role="button" aria-label="清空" @click.stop="clear">
+      <span
+        v-if="clearable && current"
+        class="select-clear"
+        role="button"
+        aria-label="清空"
+        @click.stop="clear"
+      >
         <Icon name="x" :size="13" />
       </span>
       <Icon v-else name="chevron-down" :size="14" class="select-arrow" />
@@ -99,14 +110,21 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
   font-size: 13.5px;
   color: var(--ink);
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
-.select-trigger:hover:not(:disabled) { border-color: var(--accent); }
+.select-trigger:hover:not(:disabled) {
+  border-color: var(--accent);
+}
 .select.open .select-trigger {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.select-trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+.select-trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .select.compact .select-trigger {
   height: 30px;
@@ -115,8 +133,14 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
   border-radius: 8px;
 }
 
-.select-placeholder { color: var(--ink-3); }
-.select-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-placeholder {
+  color: var(--ink-3);
+}
+.select-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .select-clear {
   display: inline-flex;
@@ -124,10 +148,18 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
   border-radius: 5px;
   color: var(--ink-3);
 }
-.select-clear:hover { color: var(--red); background: var(--red-soft); }
+.select-clear:hover {
+  color: var(--red);
+  background: var(--red-soft);
+}
 
-.select-arrow { color: var(--ink-3); transition: transform 0.15s; }
-.select.open .select-arrow { transform: rotate(180deg); }
+.select-arrow {
+  color: var(--ink-3);
+  transition: transform 0.15s;
+}
+.select.open .select-arrow {
+  transform: rotate(180deg);
+}
 
 .select-menu {
   position: absolute;
@@ -162,8 +194,14 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
   white-space: nowrap;
   transition: background 0.14s var(--ease);
 }
-.select-option:hover { background: var(--surface-2); }
-.select-option.active { color: var(--accent-ink); font-weight: 600; background: var(--accent-soft); }
+.select-option:hover {
+  background: var(--surface-2);
+}
+.select-option.active {
+  color: var(--accent-ink);
+  font-weight: 600;
+  background: var(--accent-soft);
+}
 
 .select-empty {
   padding: 12px;
@@ -172,6 +210,15 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
   font-size: 12.5px;
 }
 
-.drop-enter-active, .drop-leave-active { transition: opacity 0.18s var(--ease), transform 0.22s var(--spring); }
-.drop-enter-from, .drop-leave-to { opacity: 0; transform: translateY(-6px) scale(0.98); }
+.drop-enter-active,
+.drop-leave-active {
+  transition:
+    opacity 0.18s var(--ease),
+    transform 0.22s var(--spring);
+}
+.drop-enter-from,
+.drop-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
 </style>

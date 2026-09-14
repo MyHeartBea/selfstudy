@@ -9,7 +9,10 @@ import { onMounted, onUnmounted, ref } from 'vue'
 const ambientEl = ref(null)
 const glowEl = ref(null)
 let rafId = 0
-let mx = 0, my = 0, gx = 0, gy = 0
+let mx = 0,
+  my = 0,
+  gx = 0,
+  gy = 0
 
 function onMove(e) {
   mx = e.clientX
@@ -34,9 +37,7 @@ onMounted(() => {
     }
   }
   if (!reduce) {
-    const blobs = ambientEl.value
-      ? [...ambientEl.value.querySelectorAll('[data-depth]')]
-      : []
+    const blobs = ambientEl.value ? [...ambientEl.value.querySelectorAll('[data-depth]')] : []
     const loop = () => {
       gx += (mx - gx) * 0.06
       gy += (my - gy) * 0.06
@@ -92,7 +93,9 @@ onUnmounted(() => {
   opacity: 0;
   transition: opacity 0.9s var(--ease);
 }
-:global(body.app-ready .ambient) { opacity: 1; }
+:global(body.app-ready .ambient) {
+  opacity: 1;
+}
 
 /* 底纱：多色渐变铺底 */
 .bgwash {
@@ -111,14 +114,23 @@ onUnmounted(() => {
   inset: -45%;
   background: conic-gradient(
     from 0deg,
-    transparent 0deg, var(--blob1) 60deg, transparent 130deg,
-    var(--blob2) 200deg, transparent 260deg, var(--blob3) 310deg, transparent 360deg
+    transparent 0deg,
+    var(--blob1) 60deg,
+    transparent 130deg,
+    var(--blob2) 200deg,
+    transparent 260deg,
+    var(--blob3) 310deg,
+    transparent 360deg
   );
   filter: blur(110px);
   opacity: var(--aurora-o);
   animation: aurora-spin 70s linear infinite;
 }
-@keyframes aurora-spin { to { transform: rotate(360deg); } }
+@keyframes aurora-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 /* 视差光斑 */
 .amb-blob {
@@ -127,10 +139,38 @@ onUnmounted(() => {
   filter: blur(90px);
   will-change: transform;
 }
-.b1 { width: 560px; height: 560px; top: -160px; right: -80px; background: radial-gradient(circle at 40% 40%, var(--blob1), transparent 65%); animation: drift1 26s ease-in-out infinite alternate; }
-.b2 { width: 640px; height: 640px; bottom: -220px; left: -160px; background: radial-gradient(circle at 60% 40%, var(--blob2), transparent 65%); animation: drift2 34s ease-in-out infinite alternate; }
-@keyframes drift1 { from { transform: translate(0, 0) scale(1); } to { transform: translate(-70px, 60px) scale(1.15); } }
-@keyframes drift2 { from { transform: translate(0, 0) scale(1.08); } to { transform: translate(90px, -70px) scale(0.94); } }
+.b1 {
+  width: 560px;
+  height: 560px;
+  top: -160px;
+  right: -80px;
+  background: radial-gradient(circle at 40% 40%, var(--blob1), transparent 65%);
+  animation: drift1 26s ease-in-out infinite alternate;
+}
+.b2 {
+  width: 640px;
+  height: 640px;
+  bottom: -220px;
+  left: -160px;
+  background: radial-gradient(circle at 60% 40%, var(--blob2), transparent 65%);
+  animation: drift2 34s ease-in-out infinite alternate;
+}
+@keyframes drift1 {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-70px, 60px) scale(1.15);
+  }
+}
+@keyframes drift2 {
+  from {
+    transform: translate(0, 0) scale(1.08);
+  }
+  to {
+    transform: translate(90px, -70px) scale(0.94);
+  }
+}
 
 /* 呼吸墨渍 */
 .ink-blob {
@@ -147,19 +187,62 @@ onUnmounted(() => {
   border-radius: inherit;
   background: radial-gradient(circle at 40% 40%, var(--bcol), transparent 70%);
 }
-.ib1 { width: 300px; height: 280px; top: -70px; left: 6%; border-radius: 62% 38% 55% 45% / 55% 48% 52% 45%; --bcol: var(--blob2); }
-.ib2 { width: 340px; height: 300px; bottom: -90px; right: 4%; border-radius: 45% 55% 48% 52% / 52% 62% 38% 48%; --bcol: var(--blob1); animation-duration: 24s; }
-.ib3 { width: 190px; height: 170px; top: 36%; right: 11%; border-radius: 52% 48% 42% 58% / 45% 52% 48% 55%; --bcol: var(--blob3); animation-duration: 30s; }
+.ib1 {
+  width: 300px;
+  height: 280px;
+  top: -70px;
+  left: 6%;
+  border-radius: 62% 38% 55% 45% / 55% 48% 52% 45%;
+  --bcol: var(--blob2);
+}
+.ib2 {
+  width: 340px;
+  height: 300px;
+  bottom: -90px;
+  right: 4%;
+  border-radius: 45% 55% 48% 52% / 52% 62% 38% 48%;
+  --bcol: var(--blob1);
+  animation-duration: 24s;
+}
+.ib3 {
+  width: 190px;
+  height: 170px;
+  top: 36%;
+  right: 11%;
+  border-radius: 52% 48% 42% 58% / 45% 52% 48% 55%;
+  --bcol: var(--blob3);
+  animation-duration: 30s;
+}
 @keyframes ink-morph {
-  0% { transform: rotate(0deg) scale(1); border-radius: 62% 38% 55% 45% / 55% 48% 52% 45%; }
-  50% { transform: rotate(7deg) scale(1.08); border-radius: 45% 55% 48% 52% / 52% 62% 38% 48%; }
-  100% { transform: rotate(-6deg) scale(0.95); border-radius: 52% 48% 42% 58% / 45% 52% 48% 55%; }
+  0% {
+    transform: rotate(0deg) scale(1);
+    border-radius: 62% 38% 55% 45% / 55% 48% 52% 45%;
+  }
+  50% {
+    transform: rotate(7deg) scale(1.08);
+    border-radius: 45% 55% 48% 52% / 52% 62% 38% 48%;
+  }
+  100% {
+    transform: rotate(-6deg) scale(0.95);
+    border-radius: 52% 48% 42% 58% / 45% 52% 48% 55%;
+  }
 }
 
 /* 远山剪影 */
-.mountains { position: absolute; bottom: 0; left: 0; width: 100%; height: 220px; opacity: 0.05; }
-[data-theme='dark'] .mountains { opacity: 0.08; }
-.mountains path { fill: var(--ink); }
+.mountains {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 220px;
+  opacity: 0.05;
+}
+[data-theme='dark'] .mountains {
+  opacity: 0.08;
+}
+.mountains path {
+  fill: var(--ink);
+}
 
 /* 墨字水印 */
 .ink-char {
@@ -171,8 +254,19 @@ onUnmounted(() => {
   line-height: 1;
   user-select: none;
 }
-.c1 { font-size: 24vw; top: -7vw; right: 0; transform: rotate(4deg); }
-.c2 { font-size: 16vw; bottom: -4vw; left: 26vw; transform: rotate(-3deg); opacity: 0.028; }
+.c1 {
+  font-size: 24vw;
+  top: -7vw;
+  right: 0;
+  transform: rotate(4deg);
+}
+.c2 {
+  font-size: 16vw;
+  bottom: -4vw;
+  left: 26vw;
+  transform: rotate(-3deg);
+  opacity: 0.028;
+}
 
 /* 纸纹噪点 */
 .grain {
@@ -199,10 +293,20 @@ onUnmounted(() => {
   will-change: transform, opacity;
 }
 @keyframes dust-up {
-  0% { transform: translateY(105vh) translateX(0); opacity: 0; }
-  12% { opacity: var(--o); }
-  85% { opacity: var(--o); }
-  100% { transform: translateY(-8vh) translateX(var(--dx)); opacity: 0; }
+  0% {
+    transform: translateY(105vh) translateX(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: var(--o);
+  }
+  85% {
+    opacity: var(--o);
+  }
+  100% {
+    transform: translateY(-8vh) translateX(var(--dx));
+    opacity: 0;
+  }
 }
 
 /* 鼠标跟随柔光 */
@@ -213,13 +317,21 @@ onUnmounted(() => {
   border-radius: 50%;
   z-index: 1;
   pointer-events: none;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--accent) 8%, transparent),
+    transparent 60%
+  );
   transform: translate(-50%, -50%);
   left: -999px;
   top: -999px;
 }
 @media (max-width: 860px) {
-  .cursor-glow { display: none; }
-  .c2 { display: none; }
+  .cursor-glow {
+    display: none;
+  }
+  .c2 {
+    display: none;
+  }
 }
 </style>

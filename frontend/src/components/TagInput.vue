@@ -28,13 +28,21 @@ function flush() {
 }
 
 function remove(tag) {
-  emit('update:modelValue', props.modelValue.filter((item) => item !== tag))
+  emit(
+    'update:modelValue',
+    props.modelValue.filter((item) => item !== tag),
+  )
 }
 </script>
 
 <template>
   <div class="tag-editor">
-    <span v-for="tag in modelValue" :key="tag" class="tag-chip" :style="color ? { background: color + '1a', color, borderColor: color + '40' } : {}">
+    <span
+      v-for="tag in modelValue"
+      :key="tag"
+      class="tag-chip"
+      :style="color ? { background: color + '1a', color, borderColor: color + '40' } : {}"
+    >
       {{ tag }}
       <button type="button" class="chip-x" :aria-label="`移除 ${tag}`" @click="remove(tag)">
         <Icon name="x" :size="11" />
@@ -86,7 +94,10 @@ function remove(tag) {
   color: var(--ink-3);
   cursor: pointer;
 }
-.chip-x:hover { color: var(--red); background: var(--red-soft); }
+.chip-x:hover {
+  color: var(--red);
+  background: var(--red-soft);
+}
 
 .tag-input {
   flex: 1;
@@ -99,5 +110,7 @@ function remove(tag) {
   outline: none;
   color: var(--ink);
 }
-.tag-input::placeholder { color: var(--ink-3); }
+.tag-input::placeholder {
+  color: var(--ink-3);
+}
 </style>

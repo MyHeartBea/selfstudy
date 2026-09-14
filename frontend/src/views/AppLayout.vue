@@ -217,7 +217,9 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onGlobalKeydown)
   mq?.removeEventListener?.('change', mediaHandler)
   if (systemThemeHandler) {
-    window.matchMedia('(prefers-color-scheme: dark)').removeEventListener?.('change', systemThemeHandler)
+    window
+      .matchMedia('(prefers-color-scheme: dark)')
+      .removeEventListener?.('change', systemThemeHandler)
   }
 })
 </script>
@@ -247,12 +249,23 @@ onUnmounted(() => {
         <span class="mb-seal">研</span>
         <b>研错本</b>
       </router-link>
-      <span class="mb-ring num" :title="`今日复习 ${ringDone}/${ringTotal}`">{{ ringDone }}<i>/{{ ringTotal }}</i></span>
-      <button type="button" class="mb-btn" aria-label="搜索" @click="openPalette"><Icon name="search" :size="17" /></button>
-      <button type="button" class="mb-btn" :aria-label="isDark ? '浅色模式' : '深色模式'" @click="toggleTheme">
+      <span class="mb-ring num" :title="`今日复习 ${ringDone}/${ringTotal}`"
+        >{{ ringDone }}<i>/{{ ringTotal }}</i></span
+      >
+      <button type="button" class="mb-btn" aria-label="搜索" @click="openPalette">
+        <Icon name="search" :size="17" />
+      </button>
+      <button
+        type="button"
+        class="mb-btn"
+        :aria-label="isDark ? '浅色模式' : '深色模式'"
+        @click="toggleTheme"
+      >
         <Icon :name="isDark ? 'sun' : 'moon'" :size="17" />
       </button>
-      <button type="button" class="mb-btn" aria-label="打开菜单" @click="menuOpen = !menuOpen"><Icon name="menu" :size="18" /></button>
+      <button type="button" class="mb-btn" aria-label="打开菜单" @click="menuOpen = !menuOpen">
+        <Icon name="menu" :size="18" />
+      </button>
     </header>
 
     <Transition name="drawer">
@@ -263,14 +276,28 @@ onUnmounted(() => {
         <div class="drawer-head">
           <span class="mb-seal">研</span>
           <b class="serif">研错本</b>
-          <button type="button" class="mb-btn" @click="menuOpen = false"><Icon name="x" :size="16" /></button>
+          <button type="button" class="mb-btn" @click="menuOpen = false">
+            <Icon name="x" :size="16" />
+          </button>
         </div>
         <p class="drawer-label">工作台</p>
-        <router-link v-for="item in PRIMARY_NAV" :key="item.path" :to="item.path" class="drawer-link" :class="{ active: activeMenu === item.path }">
+        <router-link
+          v-for="item in PRIMARY_NAV"
+          :key="item.path"
+          :to="item.path"
+          class="drawer-link"
+          :class="{ active: activeMenu === item.path }"
+        >
           <Icon :name="item.icon" :size="17" />{{ item.full }}
         </router-link>
         <p class="drawer-label">资料库</p>
-        <router-link v-for="item in LIBRARY_NAV" :key="item.path" :to="item.path" class="drawer-link" :class="{ active: activeMenu === item.path }">
+        <router-link
+          v-for="item in LIBRARY_NAV"
+          :key="item.path"
+          :to="item.path"
+          class="drawer-link"
+          :class="{ active: activeMenu === item.path }"
+        >
           <Icon :name="item.icon" :size="17" />{{ item.full }}
         </router-link>
       </nav>
@@ -292,7 +319,9 @@ onUnmounted(() => {
       <div class="shortcut-list">
         <div v-for="[label, keys] in SHORTCUT_ROWS" :key="label" class="sc-row">
           <span class="sc-label">{{ label }}</span>
-          <span class="sc-keys"><kbd>{{ keys }}</kbd></span>
+          <span class="sc-keys"
+            ><kbd>{{ keys }}</kbd></span
+          >
         </div>
       </div>
       <template #footer>
@@ -345,8 +374,19 @@ onUnmounted(() => {
   backdrop-filter: blur(20px) saturate(1.3);
   box-shadow: var(--shadow-2);
 }
-.mb-brand { display: flex; align-items: center; gap: 9px; text-decoration: none; color: var(--ink); margin-right: auto; }
-.mb-brand b { font-family: var(--font-display); font-size: 16px; font-weight: 800; }
+.mb-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  color: var(--ink);
+  margin-right: auto;
+}
+.mb-brand b {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+}
 .mb-seal {
   width: 32px;
   height: 32px;
@@ -361,8 +401,16 @@ onUnmounted(() => {
   transform: rotate(-3deg);
   box-shadow: 0 2px 6px rgba(168, 51, 32, 0.35);
 }
-.mb-ring { font-size: 13px; color: var(--ink-2); font-weight: 700; }
-.mb-ring i { font-style: normal; font-size: 11px; color: var(--ink-3); }
+.mb-ring {
+  font-size: 13px;
+  color: var(--ink-2);
+  font-weight: 700;
+}
+.mb-ring i {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ink-3);
+}
 .mb-btn {
   display: inline-flex;
   align-items: center;
@@ -376,7 +424,10 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.15s var(--ease);
 }
-.mb-btn:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.mb-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
 
 /* ---------- 抽屉（窄屏） ---------- */
 .drawer-mask {
@@ -402,9 +453,26 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 4px;
 }
-.drawer-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
-.drawer-head b { font-size: 17px; margin-right: auto; font-family: var(--font-display); }
-.drawer-label { font-size: 10px; font-weight: 800; letter-spacing: 0.18em; color: var(--ink-3); padding: 10px 8px 4px; }
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+.drawer-head b {
+  font-size: 17px;
+  margin-right: auto;
+  font-family: var(--font-display);
+}
+.drawer-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--ink-3);
+  padding: 10px 8px 4px;
+}
 .drawer-link {
   display: flex;
   align-items: center;
@@ -417,25 +485,62 @@ onUnmounted(() => {
   text-decoration: none;
   transition: all 0.15s var(--ease);
 }
-.drawer-link:hover { background: var(--surface-2); color: var(--ink); transform: translateX(3px); }
-.drawer-link.active { background: var(--accent-soft); color: var(--accent-ink); }
+.drawer-link:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+  transform: translateX(3px);
+}
+.drawer-link.active {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
 
-.drawer-enter-active, .drawer-leave-active { transition: opacity 0.2s, transform 0.22s var(--ease); }
-.drawer-enter-from, .drawer-leave-to { opacity: 0; }
-.drawer-enter-from.drawer, .drawer-leave-to.drawer { transform: translateX(30px); }
+.drawer-enter-active,
+.drawer-leave-active {
+  transition:
+    opacity 0.2s,
+    transform 0.22s var(--ease);
+}
+.drawer-enter-from,
+.drawer-leave-to {
+  opacity: 0;
+}
+.drawer-enter-from.drawer,
+.drawer-leave-to.drawer {
+  transform: translateX(30px);
+}
 
 /* ---------- 路由过渡 ---------- */
-.route-enter-active { transition: opacity 0.3s var(--ease), transform 0.3s var(--ease); }
-.route-leave-active { transition: opacity 0.16s ease, transform 0.16s ease; }
-.route-enter-from { opacity: 0; transform: translateY(14px) scale(0.996); }
-.route-leave-to { opacity: 0; transform: translateY(-8px); }
+.route-enter-active {
+  transition:
+    opacity 0.3s var(--ease),
+    transform 0.3s var(--ease);
+}
+.route-leave-active {
+  transition:
+    opacity 0.16s ease,
+    transform 0.16s ease;
+}
+.route-enter-from {
+  opacity: 0;
+  transform: translateY(14px) scale(0.996);
+}
+.route-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
 
 @media (max-width: 1100px) {
-  .deck { padding: 24px 16px 40px; }
+  .deck {
+    padding: 24px 16px 40px;
+  }
 }
 
 /* 快捷键速查 */
-.shortcut-list { display: flex; flex-direction: column; }
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+}
 .sc-row {
   display: flex;
   align-items: center;
@@ -446,8 +551,12 @@ onUnmounted(() => {
   font-size: 13px;
   color: var(--ink-2);
 }
-.sc-row:last-child { border-bottom: none; }
-.sc-label { min-width: 0; }
+.sc-row:last-child {
+  border-bottom: none;
+}
+.sc-label {
+  min-width: 0;
+}
 .sc-keys kbd {
   font-family: var(--font-body);
   font-size: 11.5px;

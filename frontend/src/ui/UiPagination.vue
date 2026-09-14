@@ -54,9 +54,16 @@ function onSizeChange() {
       </button>
       <template v-for="(p, i) in pages" :key="`${p}-${i}`">
         <span v-if="p === '…'" class="page-ellipsis">…</span>
-        <button v-else class="page-btn" :class="{ active: p === page }" @click="go(p)">{{ p }}</button>
+        <button v-else class="page-btn" :class="{ active: p === page }" @click="go(p)">
+          {{ p }}
+        </button>
       </template>
-      <button class="page-btn nav" :disabled="page >= totalPages" aria-label="下一页" @click="go(page + 1)">
+      <button
+        class="page-btn nav"
+        :disabled="page >= totalPages"
+        aria-label="下一页"
+        @click="go(page + 1)"
+      >
         <Icon name="chevron-right" :size="14" />
       </button>
     </div>
@@ -103,14 +110,26 @@ function onSizeChange() {
   cursor: pointer;
   transition: all 0.15s var(--ease);
 }
-.page-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.page-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--ink);
+}
 .page-btn.active {
   background: var(--accent-grad);
   color: #fff;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-hover) 40%, transparent);
 }
-.page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
-.page-ellipsis { color: var(--ink-3); padding: 0 2px; }
-.count-tip { font-size: 12.5px; color: var(--ink-3); }
+.page-ellipsis {
+  color: var(--ink-3);
+  padding: 0 2px;
+}
+.count-tip {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
 </style>

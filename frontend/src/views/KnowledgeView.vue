@@ -268,7 +268,10 @@ onMounted(() => {
           role="button"
           tabindex="0"
           :aria-label="`查看知识点 ${row.tag_name}`"
-          :style="{ '--enter-delay': Math.min(i, 11) * 50 + 'ms', '--kcol': subjectColor(row.subject_id) }"
+          :style="{
+            '--enter-delay': Math.min(i, 11) * 50 + 'ms',
+            '--kcol': subjectColor(row.subject_id),
+          }"
           @click="openDetail(row)"
           @keydown.enter.prevent="openDetail(row)"
           @keydown.space.prevent="openDetail(row)"
@@ -280,7 +283,9 @@ onMounted(() => {
           </div>
           <div class="k-chips">
             <UiTag size="sm" color="var(--teal)" soft>{{ subjectName(row.subject_id) }}</UiTag>
-            <UiTag v-if="subSubjectName(row.sub_subject_id)" size="sm" soft>{{ subSubjectName(row.sub_subject_id) }}</UiTag>
+            <UiTag v-if="subSubjectName(row.sub_subject_id)" size="sm" soft>{{
+              subSubjectName(row.sub_subject_id)
+            }}</UiTag>
           </div>
           <p v-if="row.summary" class="k-summary">{{ plainSummary(row.summary) }}</p>
           <div v-if="row.related_tags && row.related_tags.length" class="k-rel">
@@ -292,18 +297,31 @@ onMounted(() => {
               color="var(--gold)"
               size="sm"
               clickable
-              @click.stop="() => { filters.tag = t; searchKnowledge() }"
+              @click.stop="
+                () => {
+                  filters.tag = t
+                  searchKnowledge()
+                }
+              "
             >
               {{ t }}
             </UiTag>
           </div>
           <div class="k-ops">
-            <button class="op-link primary" @click.stop="practiceTag(row.tag_name)"><Icon name="play" :size="12" /> 练习</button>
+            <button class="op-link primary" @click.stop="practiceTag(row.tag_name)">
+              <Icon name="play" :size="12" /> 练习
+            </button>
             <button class="op-link primary" @click.stop="openEdit(row)">编辑</button>
-            <button class="op-link warning" :disabled="summarizingId === row.id" @click.stop="autoSummarize(row)">
+            <button
+              class="op-link warning"
+              :disabled="summarizingId === row.id"
+              @click.stop="autoSummarize(row)"
+            >
               {{ summarizingId === row.id ? '总结中…' : 'AI 总结' }}
             </button>
-            <button class="op-link danger" @click.stop="remove(row)"><Icon name="trash" :size="12" /></button>
+            <button class="op-link danger" @click.stop="remove(row)">
+              <Icon name="trash" :size="12" />
+            </button>
             <span class="k-open-hint" aria-hidden="true">点击查看全文</span>
           </div>
         </article>
@@ -340,7 +358,13 @@ onMounted(() => {
             color="var(--gold)"
             size="sm"
             clickable
-            @click="() => { filters.tag = t; detailVisible = false; searchKnowledge() }"
+            @click="
+              () => {
+                filters.tag = t
+                detailVisible = false
+                searchKnowledge()
+              }
+            "
           >
             {{ t }}
           </UiTag>
@@ -361,9 +385,15 @@ onMounted(() => {
           <div v-if="linkedLoading" class="muted">正在统计…</div>
           <template v-else-if="linked && linked.total">
             <div class="k-linked-stats">
-              <span class="ls-item"><b>{{ linked.total }}</b> 题</span>
-              <span class="ls-item">平均掌握 <b>{{ linked.stats.avg_mastery }}</b></span>
-              <span class="ls-item">累计答错 <b>{{ linked.stats.wrong_total }}</b> 次</span>
+              <span class="ls-item"
+                ><b>{{ linked.total }}</b> 题</span
+              >
+              <span class="ls-item"
+                >平均掌握 <b>{{ linked.stats.avg_mastery }}</b></span
+              >
+              <span class="ls-item"
+                >累计答错 <b>{{ linked.stats.wrong_total }}</b> 次</span
+              >
               <span class="ls-item" :class="{ warn: linked.stats.due_now > 0 }">
                 今天到期 <b>{{ linked.stats.due_now }}</b>
               </span>
@@ -380,7 +410,8 @@ onMounted(() => {
                 <button class="kl-main" :title="m.question" @click="practiceOne(m.id)">
                   <span class="kl-q">{{ plainSummary(m.question).slice(0, 60) }}</span>
                   <span class="kl-meta">
-                    答错 {{ m.wrong_count }} 次 · 复习 {{ m.review_count }} 次 · 掌握 {{ m.mastery_level }}
+                    答错 {{ m.wrong_count }} 次 · 复习 {{ m.review_count }} 次 · 掌握
+                    {{ m.mastery_level }}
                   </span>
                 </button>
                 <button class="op-link primary" @click="practiceOne(m.id)">练这题</button>
@@ -398,11 +429,7 @@ onMounted(() => {
       </div>
       <template #footer>
         <UiButton variant="ghost" @click="detailVisible = false">关闭</UiButton>
-        <UiButton
-          v-if="linked && linked.total"
-          variant="outline"
-          @click="practiceLinked"
-        >
+        <UiButton v-if="linked && linked.total" variant="outline" @click="practiceLinked">
           <Icon name="play" :size="12" /> 练这些题（{{ linked.total }}）
         </UiButton>
         <UiButton
@@ -437,11 +464,19 @@ onMounted(() => {
   border-radius: var(--r-lg);
   background:
     linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
-    linear-gradient(135deg, color-mix(in srgb, var(--teal) 16%, transparent), transparent 45%, color-mix(in srgb, var(--gold) 14%, transparent)) border-box;
+    linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--teal) 16%, transparent),
+        transparent 45%,
+        color-mix(in srgb, var(--gold) 14%, transparent)
+      )
+      border-box;
   box-shadow: var(--shadow-1);
   backdrop-filter: blur(10px) saturate(1.15);
 }
-.tag-input { width: 220px; }
+.tag-input {
+  width: 220px;
+}
 
 /* 知识笺卡片墙 */
 .k-grid {
@@ -458,13 +493,21 @@ onMounted(() => {
   gap: 9px;
   padding: 15px 16px 13px 21px;
   cursor: pointer;
-  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease);
+  transition:
+    border-color 0.2s var(--ease),
+    box-shadow 0.3s var(--ease);
   animation: kcard-in 0.5s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes kcard-in {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .k-card:hover {
   border-color: color-mix(in srgb, var(--kcol) 45%, var(--line));
@@ -487,7 +530,9 @@ onMounted(() => {
   white-space: nowrap;
 }
 .k-card:hover .k-open-hint,
-.k-card:focus-within .k-open-hint { opacity: 1; }
+.k-card:focus-within .k-open-hint {
+  opacity: 1;
+}
 .k-spine {
   position: absolute;
   left: 0;
@@ -495,14 +540,23 @@ onMounted(() => {
   bottom: 13px;
   width: 4px;
   border-radius: 0 4px 4px 0;
-  background: linear-gradient(180deg, var(--kcol), color-mix(in srgb, var(--kcol) 35%, transparent));
+  background: linear-gradient(
+    180deg,
+    var(--kcol),
+    color-mix(in srgb, var(--kcol) 35%, transparent)
+  );
   opacity: 0.85;
   transition: width 0.25s var(--spring);
   /* 色脊是纯装饰：不参与命中测试 */
   pointer-events: none;
 }
-.k-card:hover .k-spine { width: 6px; opacity: 1; }
-.sk-card { animation: none; }
+.k-card:hover .k-spine {
+  width: 6px;
+  opacity: 1;
+}
+.sk-card {
+  animation: none;
+}
 
 .k-head {
   display: flex;
@@ -520,9 +574,19 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.k-card:hover .k-name { color: var(--kcol); }
-.k-time { font-size: 11.5px; color: var(--ink-3); flex: none; }
-.k-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.k-card:hover .k-name {
+  color: var(--kcol);
+}
+.k-time {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  flex: none;
+}
+.k-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
 .k-summary {
   margin: 0;
   font-size: 12.8px;
@@ -533,8 +597,18 @@ onMounted(() => {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.k-rel { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.k-rel-label { font-size: 11px; font-weight: 700; color: var(--ink-3); letter-spacing: 0.08em; }
+.k-rel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+.k-rel-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+}
 
 .k-ops {
   margin-top: auto;
@@ -557,33 +631,84 @@ onMounted(() => {
   border-radius: 7px;
   transition: background 0.14s var(--ease);
 }
-.op-link:disabled { opacity: 0.5; cursor: not-allowed; }
-.op-link.primary { color: var(--accent-ink); }
-.op-link.primary:hover { background: var(--accent-soft); }
-.op-link.warning { color: var(--gold); }
-.op-link.warning:hover { background: var(--gold-soft); }
-.op-link.danger { color: var(--red); }
-.op-link.danger:hover { background: var(--red-soft); }
+.op-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.op-link.primary {
+  color: var(--accent-ink);
+}
+.op-link.primary:hover {
+  background: var(--accent-soft);
+}
+.op-link.warning {
+  color: var(--gold);
+}
+.op-link.warning:hover {
+  background: var(--gold-soft);
+}
+.op-link.danger {
+  color: var(--red);
+}
+.op-link.danger:hover {
+  background: var(--red-soft);
+}
 
 /* 知识点详情弹窗 */
-.k-detail { display: flex; flex-direction: column; gap: 14px; }
-.k-detail-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.k-detail-time { font-size: 12px; color: var(--ink-3); margin-left: auto; }
-.k-detail-rel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.k-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.k-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.k-detail-time {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-left: auto;
+}
+.k-detail-rel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
 .k-detail-body {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   padding: 14px 16px;
   background: var(--surface-2);
 }
-.muted { color: var(--ink-3); font-size: 13px; }
+.muted {
+  color: var(--ink-3);
+  font-size: 13px;
+}
 
 /* 知识点 ↔ 错题链接 */
-.k-linked { display: flex; flex-direction: column; gap: 10px; }
+.k-linked {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 /* 弹窗正文可能很长（知识点摘要+关联错题），用一条分隔线把两者分开，滚动时更清楚 */
-.k-linked { border-top: 1px dashed var(--line); padding-top: 12px; }
-.kl-count { margin-left: 6px; font-weight: 700; color: var(--accent-ink); font-size: 12px; }
-.kl-count.muted { color: var(--ink-3); font-weight: 600; }
+.k-linked {
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+.kl-count {
+  margin-left: 6px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  font-size: 12px;
+}
+.kl-count.muted {
+  color: var(--ink-3);
+  font-weight: 600;
+}
 .k-linked-stats {
   display: flex;
   flex-wrap: wrap;
@@ -595,9 +720,18 @@ onMounted(() => {
   font-size: 12.5px;
   color: var(--ink-2);
 }
-.ls-item b { color: var(--ink); font-size: 14px; }
-.ls-item.warn b { color: var(--accent-ink); }
-.field-hint { font-size: 12px; color: var(--ink-3); margin: 0; }
+.ls-item b {
+  color: var(--ink);
+  font-size: 14px;
+}
+.ls-item.warn b {
+  color: var(--accent-ink);
+}
+.field-hint {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin: 0;
+}
 .k-linked-list {
   list-style: none;
   margin: 0;
@@ -616,7 +750,9 @@ onMounted(() => {
   border-radius: 8px;
   transition: background 0.14s var(--ease);
 }
-.kl-row:hover { background: var(--surface-2); }
+.kl-row:hover {
+  background: var(--surface-2);
+}
 .kl-main {
   flex: 1;
   min-width: 0;
@@ -637,7 +773,10 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.kl-meta { font-size: 11px; color: var(--ink-3); }
+.kl-meta {
+  font-size: 11px;
+  color: var(--ink-3);
+}
 
 .pagination-wrap {
   display: flex;

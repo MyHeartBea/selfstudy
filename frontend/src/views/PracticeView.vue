@@ -3,7 +3,12 @@
 import { onMounted, reactive, ref, computed, watch, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 
-import { baseData, loadBaseData, questionTypeFilterOptions, sourceTypes } from '../composables/useBaseData'
+import {
+  baseData,
+  loadBaseData,
+  questionTypeFilterOptions,
+  sourceTypes,
+} from '../composables/useBaseData'
 import { useSubSubject } from '../composables/useSubSubject'
 import request from '../api/request'
 import { toast } from '../ui/toast'
@@ -67,7 +72,9 @@ const papers = ref([])
 const mockPaperId = ref(null)
 const papersLoading = ref(false)
 
-const donePapers = computed(() => papers.value.filter((p) => p.status === 'done' && p.question_count > 0))
+const donePapers = computed(() =>
+  papers.value.filter((p) => p.status === 'done' && p.question_count > 0),
+)
 
 async function loadPapers() {
   papersLoading.value = true
@@ -194,10 +201,18 @@ onMounted(loadBaseData)
           <template v-if="mode === 'mock'">
             <div class="section-label" style="margin-top: 4px">卷面来源</div>
             <div class="src-toggle">
-              <button type="button" :class="{ active: mockSource === 'mistakes' }" @click="mockSource = 'mistakes'">
+              <button
+                type="button"
+                :class="{ active: mockSource === 'mistakes' }"
+                @click="mockSource = 'mistakes'"
+              >
                 错题库 · 按年份
               </button>
-              <button type="button" :class="{ active: mockSource === 'paper' }" @click="mockSource = 'paper'">
+              <button
+                type="button"
+                :class="{ active: mockSource === 'paper' }"
+                @click="mockSource = 'paper'"
+              >
                 真题库 · 整卷
               </button>
             </div>
@@ -218,7 +233,12 @@ onMounted(loadBaseData)
               <div class="mock-config">
                 <UiSelect
                   v-model="mockPaperId"
-                  :options="donePapers.map((p) => ({ label: `${p.title}（${p.question_count} 题）`, value: p.id }))"
+                  :options="
+                    donePapers.map((p) => ({
+                      label: `${p.title}（${p.question_count} 题）`,
+                      value: p.id,
+                    }))
+                  "
                   placeholder="选择已入库真题"
                   :disabled="papersLoading"
                 />
@@ -247,7 +267,9 @@ onMounted(loadBaseData)
           <div class="deploy-brief">
             <span class="brief-line"><Icon name="zap" :size="14" />今日出征</span>
             <b class="serif">
-              {{ activeMode.title }} · {{ count }} 题<template v-if="mode === 'mock'"> · {{ mockBriefTail }}</template>
+              {{ activeMode.title }} · {{ count }} 题<template v-if="mode === 'mock'">
+                · {{ mockBriefTail }}</template
+              >
             </b>
           </div>
           <UiButton variant="primary" size="lg" block @click="start">
@@ -331,7 +353,9 @@ onMounted(loadBaseData)
 
 <style scoped>
 /* ---------- 排兵布阵 ---------- */
-.deploy { margin-bottom: 14px; }
+.deploy {
+  margin-bottom: 14px;
+}
 .deploy-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(250px, 1fr);
@@ -364,10 +388,19 @@ onMounted(loadBaseData)
   letter-spacing: 0.14em;
   color: var(--accent-ink);
 }
-.deploy-brief b { font-family: var(--font-display); font-size: 19px; font-weight: 900; color: var(--ink); }
+.deploy-brief b {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 900;
+  color: var(--ink);
+}
 
 /* 高级筛选折叠 */
-.adv-filter { margin-top: 24px; border-top: 1px dashed var(--line); padding-top: 14px; }
+.adv-filter {
+  margin-top: 24px;
+  border-top: 1px dashed var(--line);
+  padding-top: 14px;
+}
 .adv-filter summary {
   list-style: none;
   cursor: pointer;
@@ -382,18 +415,33 @@ onMounted(loadBaseData)
   transition: all 0.15s var(--ease);
   user-select: none;
 }
-.adv-filter summary::-webkit-details-marker { display: none; }
-.adv-filter summary:hover { color: var(--accent-ink); background: var(--accent-soft); }
-.adv-arrow { transition: transform 0.2s var(--ease); }
-.adv-filter[open] .adv-arrow { transform: rotate(180deg); }
-.adv-filter .filter-grid { margin-top: 16px; }
+.adv-filter summary::-webkit-details-marker {
+  display: none;
+}
+.adv-filter summary:hover {
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
+.adv-arrow {
+  transition: transform 0.2s var(--ease);
+}
+.adv-filter[open] .adv-arrow {
+  transform: rotate(180deg);
+}
+.adv-filter .filter-grid {
+  margin-top: 16px;
+}
 
 .practice-modes {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
-@media (max-width: 640px) { .practice-modes { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .practice-modes {
+    grid-template-columns: 1fr;
+  }
+}
 
 .practice-mode {
   position: relative;
@@ -407,13 +455,23 @@ onMounted(loadBaseData)
   background: var(--surface);
   cursor: pointer;
   text-align: left;
-  transition: transform 0.25s var(--spring), border-color 0.18s var(--ease), background 0.18s var(--ease), box-shadow 0.25s var(--ease);
+  transition:
+    transform 0.25s var(--spring),
+    border-color 0.18s var(--ease),
+    background 0.18s var(--ease),
+    box-shadow 0.25s var(--ease);
   animation: mode-in 0.5s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes mode-in {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .practice-mode:hover {
   transform: translateY(-3px);
@@ -437,7 +495,9 @@ onMounted(loadBaseData)
   margin-bottom: 4px;
   transition: all 0.2s var(--ease);
 }
-.practice-mode:hover .mode-icon { transform: rotate(-6deg) scale(1.08); }
+.practice-mode:hover .mode-icon {
+  transform: rotate(-6deg) scale(1.08);
+}
 .practice-mode.active .mode-icon {
   background: var(--accent-grad);
   color: #fff;
@@ -459,7 +519,9 @@ onMounted(loadBaseData)
   transition: transform 0.3s var(--spring);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-hover) 40%, transparent);
 }
-.practice-mode.active .mode-check { transform: rotate(6deg) scale(1); }
+.practice-mode.active .mode-check {
+  transform: rotate(6deg) scale(1);
+}
 .practice-mode-title {
   font-size: 14px;
   font-weight: 700;
@@ -490,7 +552,9 @@ onMounted(loadBaseData)
   cursor: pointer;
   transition: all 0.2s var(--ease);
 }
-.count-btn:hover { color: var(--ink); }
+.count-btn:hover {
+  color: var(--ink);
+}
 .count-btn.active {
   background: var(--accent-grad);
   color: #fff;
@@ -504,9 +568,17 @@ onMounted(loadBaseData)
   gap: 10px;
   align-items: flex-start;
 }
-.mock-config .year-input { width: 130px; }
-.mock-config .count-seg { flex-wrap: wrap; }
-.mock-config .mock-link { color: var(--accent-ink); font-weight: 700; text-decoration: underline; }
+.mock-config .year-input {
+  width: 130px;
+}
+.mock-config .count-seg {
+  flex-wrap: wrap;
+}
+.mock-config .mock-link {
+  color: var(--accent-ink);
+  font-weight: 700;
+  text-decoration: underline;
+}
 .src-toggle {
   display: inline-flex;
   gap: 3px;
@@ -525,7 +597,9 @@ onMounted(loadBaseData)
   cursor: pointer;
   transition: all 0.18s var(--ease);
 }
-.src-toggle button:hover { color: var(--ink); }
+.src-toggle button:hover {
+  color: var(--ink);
+}
 .src-toggle button.active {
   background: var(--accent-grad);
   color: #fff;
@@ -537,19 +611,40 @@ onMounted(loadBaseData)
   grid-template-columns: repeat(4, 1fr);
   gap: 12px 14px;
 }
-@media (max-width: 860px) { .filter-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 480px) { .filter-grid { grid-template-columns: 1fr; } }
-.f-item { display: flex; flex-direction: column; gap: 5px; }
-.f-label { font-size: 12px; font-weight: 700; color: var(--ink-3); }
+@media (max-width: 860px) {
+  .filter-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.f-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.f-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-3);
+}
 
 @media (max-width: 900px) {
-  .deploy-grid { grid-template-columns: 1fr; gap: 20px; }
+  .deploy-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
   .deploy-right {
     border-left: none;
     padding-left: 0;
     border-top: 1px dashed var(--line-strong);
     padding-top: 20px;
   }
-  .deploy-brief { margin-top: 4px; }
+  .deploy-brief {
+    margin-top: 4px;
+  }
 }
 </style>

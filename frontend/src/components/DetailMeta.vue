@@ -56,17 +56,16 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
       >
         <span class="option-key">{{ opt.key }}</span>
         <MathText :text="opt.text || '（未填写）'" />
-        <UiTag v-if="opt.key === detail.correct_answer" color="var(--green)" size="sm">正确答案</UiTag>
+        <UiTag v-if="opt.key === detail.correct_answer" color="var(--green)" size="sm"
+          >正确答案</UiTag
+        >
       </div>
     </section>
     <section v-else class="dossier-sec">
       <div class="sec-head"><span class="sec-num serif">贰</span>参考答案</div>
       <div class="verdict-panel">
         <MathText :text="detail.correct_answer || '暂无参考答案'" />
-        <p
-          v-if="detail.answer_aliases && detail.answer_aliases.length"
-          class="muted aliases"
-        >
+        <p v-if="detail.answer_aliases && detail.answer_aliases.length" class="muted aliases">
           可接受答案：{{ detail.answer_aliases.join('；') }}
         </p>
       </div>
@@ -90,12 +89,34 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
     <section class="dossier-sec">
       <div class="sec-head"><span class="sec-num serif">伍</span>档案</div>
       <dl class="dossier-facts">
-        <div class="fact"><dt>解题思路</dt><dd><MathText v-if="detail.approach" :text="detail.approach" /><span v-else class="muted">未填写</span></dd></div>
-        <div class="fact"><dt>难度</dt><dd>{{ detail.difficulty }} 星</dd></div>
-        <div class="fact"><dt>来源</dt><dd>{{ detail.source || '未填写' }}</dd></div>
-        <div v-if="detail.source_year" class="fact"><dt>年份</dt><dd class="num">{{ detail.source_year }}</dd></div>
-        <div v-if="detail.source_name" class="fact"><dt>篇目 / 卷名</dt><dd>{{ detail.source_name }}</dd></div>
-        <div class="fact"><dt>创建时间</dt><dd class="num">{{ formatTime(detail.created_at) }}</dd></div>
+        <div class="fact">
+          <dt>解题思路</dt>
+          <dd>
+            <MathText v-if="detail.approach" :text="detail.approach" /><span v-else class="muted"
+              >未填写</span
+            >
+          </dd>
+        </div>
+        <div class="fact">
+          <dt>难度</dt>
+          <dd>{{ detail.difficulty }} 星</dd>
+        </div>
+        <div class="fact">
+          <dt>来源</dt>
+          <dd>{{ detail.source || '未填写' }}</dd>
+        </div>
+        <div v-if="detail.source_year" class="fact">
+          <dt>年份</dt>
+          <dd class="num">{{ detail.source_year }}</dd>
+        </div>
+        <div v-if="detail.source_name" class="fact">
+          <dt>篇目 / 卷名</dt>
+          <dd>{{ detail.source_name }}</dd>
+        </div>
+        <div class="fact">
+          <dt>创建时间</dt>
+          <dd class="num">{{ formatTime(detail.created_at) }}</dd>
+        </div>
       </dl>
     </section>
   </div>
@@ -130,7 +151,10 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
   gap: 10px;
   flex-wrap: wrap;
 }
-.meta-difficulty { display: inline-flex; margin-left: auto; }
+.meta-difficulty {
+  display: inline-flex;
+  margin-left: auto;
+}
 
 /* 通栏图版 */
 .dossier-plates :deep(.question-images) {
@@ -144,10 +168,14 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
   border: 1px solid var(--line);
   box-shadow: var(--shadow-1);
 }
-.dossier-plates :deep(img) { border-radius: 4px; }
+.dossier-plates :deep(img) {
+  border-radius: 4px;
+}
 
 /* 小节编辑部标题：汉字编号印章 */
-.dossier-sec { margin-top: 22px; }
+.dossier-sec {
+  margin-top: 22px;
+}
 .sec-head {
   display: flex;
   align-items: center;
@@ -174,7 +202,9 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
   transform: rotate(-3deg);
   transition: transform 0.25s var(--spring);
 }
-.dossier-sec:hover .sec-num { transform: rotate(0deg) scale(1.08); }
+.dossier-sec:hover .sec-num {
+  transform: rotate(0deg) scale(1.08);
+}
 
 /* 题干：宋体大字 */
 .dossier-question {
@@ -195,7 +225,9 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
   background: var(--gold-soft);
   border-left-color: color-mix(in srgb, var(--gold) 65%, transparent);
 }
-.aliases { margin: 6px 0 0; }
+.aliases {
+  margin: 6px 0 0;
+}
 
 /* 解析：平铺阅读区 */
 .dossier-analysis {
@@ -214,7 +246,9 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-md);
 }
-.fact { min-width: 0; }
+.fact {
+  min-width: 0;
+}
 .fact dt {
   font-size: 11px;
   font-weight: 800;
@@ -229,6 +263,8 @@ const hasOptions = computed(() => optionList.value.some((o) => o.text))
   line-height: 1.75;
 }
 @media (max-width: 720px) {
-  .dossier-facts { grid-template-columns: 1fr; }
+  .dossier-facts {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

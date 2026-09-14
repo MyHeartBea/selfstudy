@@ -160,7 +160,8 @@ function validate() {
   if (!form.difficulty) return '请选择难度'
   if (form.question_type === 'choice' && !form.correct_answer) return '选择题请填写正确答案'
   if (form.question_type === 'multi' && !form.correct_answer) return '多选题请勾选正确答案'
-  if (form.question_type === 'translation' && !form.correct_answer.trim()) return '翻译请粘贴参考译文，复习时用于对照自评'
+  if (form.question_type === 'translation' && !form.correct_answer.trim())
+    return '翻译请粘贴参考译文，复习时用于对照自评'
   if (form.source_type === 'real_exam' && !form.source_year.trim()) return '真题请填写年份'
   if (form.source_type === 'mock' && (!form.source_year.trim() || !form.source_name.trim())) {
     return '模拟题请填写年份和试卷名称'
@@ -280,7 +281,12 @@ onMounted(loadApproachOptions)
 
     <div class="field">
       <label class="field-label required">题干</label>
-      <textarea v-model="form.question" class="field-input" rows="4" placeholder="请输入错题题干"></textarea>
+      <textarea
+        v-model="form.question"
+        class="field-input"
+        rows="4"
+        placeholder="请输入错题题干"
+      ></textarea>
     </div>
 
     <div class="field">
@@ -288,7 +294,12 @@ onMounted(loadApproachOptions)
       <div class="question-images">
         <div v-for="(img, index) in form.images" :key="index" class="question-image-item">
           <img :src="imageSrc(img)" alt="题干图片" />
-          <button type="button" class="question-image-remove" aria-label="移除图片" @click="handleImageRemove(index)">
+          <button
+            type="button"
+            class="question-image-remove"
+            aria-label="移除图片"
+            @click="handleImageRemove(index)"
+          >
             <Icon name="x" :size="12" />
           </button>
         </div>
@@ -322,7 +333,9 @@ onMounted(loadApproachOptions)
       </div>
 
       <div class="field">
-        <label class="field-label required">{{ isMulti ? '正确答案（可多选）' : '正确答案' }}</label>
+        <label class="field-label required">{{
+          isMulti ? '正确答案（可多选）' : '正确答案'
+        }}</label>
         <div v-if="!isMulti" class="seg-row">
           <button
             v-for="k in ['A', 'B', 'C', 'D']"
@@ -342,7 +355,13 @@ onMounted(loadApproachOptions)
             type="button"
             class="seg-btn"
             :class="{ active: multiAnswer.includes(k) }"
-            @click="() => { const set = new Set(multiAnswer); set.has(k) ? set.delete(k) : set.add(k); multiAnswer = [...set] }"
+            @click="
+              () => {
+                const set = new Set(multiAnswer)
+                set.has(k) ? set.delete(k) : set.add(k)
+                multiAnswer = [...set]
+              }
+            "
           >
             {{ k }}
           </button>
@@ -363,23 +382,38 @@ onMounted(loadApproachOptions)
       </div>
       <div class="field">
         <label class="field-label">主要难点</label>
-        <input v-model="form.difficulty_points" class="field-input" placeholder="这道题最卡人的地方简析" />
+        <input
+          v-model="form.difficulty_points"
+          class="field-input"
+          placeholder="这道题最卡人的地方简析"
+        />
       </div>
     </div>
 
     <div v-if="form.question_type !== 'choice' && !isMulti" class="field">
-      <label class="field-label">{{ form.question_type === 'translation' ? '参考译文' : '参考答案' }}</label>
+      <label class="field-label">{{
+        form.question_type === 'translation' ? '参考译文' : '参考答案'
+      }}</label>
       <textarea
         v-model="form.correct_answer"
         class="field-input"
         rows="3"
-        :placeholder="form.question_type === 'translation' ? '粘贴参考译文，复习时对照自评' : '填空题填写结果，解答题填写答案要点或最终结论'"
+        :placeholder="
+          form.question_type === 'translation'
+            ? '粘贴参考译文，复习时对照自评'
+            : '填空题填写结果，解答题填写答案要点或最终结论'
+        "
       ></textarea>
     </div>
 
     <div class="field">
       <label class="field-label">解题思路{{ approachPresets.length ? ' / 错因' : '' }}</label>
-      <input v-model="form.approach" class="field-input" list="approach-list-v2" placeholder="如：递归、双指针" />
+      <input
+        v-model="form.approach"
+        class="field-input"
+        list="approach-list-v2"
+        placeholder="如：递归、双指针"
+      />
       <datalist id="approach-list-v2">
         <option v-for="a in approachOptions" :key="a" :value="a"></option>
       </datalist>
@@ -407,12 +441,21 @@ onMounted(loadApproachOptions)
 
     <div class="field">
       <label class="field-label">解析</label>
-      <textarea v-model="form.analysis" class="field-input" rows="3" placeholder="错因分析、考点讲解"></textarea>
+      <textarea
+        v-model="form.analysis"
+        class="field-input"
+        rows="3"
+        placeholder="错因分析、考点讲解"
+      ></textarea>
     </div>
 
     <div class="field">
       <label class="field-label">知识点标签</label>
-      <TagInput v-model="form.knowledge_tags" :suggestions="tagSuggestions" placeholder="输入标签后按回车添加" />
+      <TagInput
+        v-model="form.knowledge_tags"
+        :suggestions="tagSuggestions"
+        placeholder="输入标签后按回车添加"
+      />
     </div>
 
     <div class="field-grid">
@@ -437,7 +480,11 @@ onMounted(loadApproachOptions)
       </div>
       <div class="field">
         <label class="field-label">篇目/卷名</label>
-        <input v-model="form.source_name" placeholder="如 Text 3 / 李林六套卷(一)" class="field-input" />
+        <input
+          v-model="form.source_name"
+          placeholder="如 Text 3 / 李林六套卷(一)"
+          class="field-input"
+        />
       </div>
     </div>
 
@@ -457,19 +504,33 @@ onMounted(loadApproachOptions)
   gap: 16px;
 }
 
-.field { display: flex; flex-direction: column; gap: 6px; }
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .field-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px 14px;
 }
-.field-grid.three { grid-template-columns: repeat(3, 1fr); }
-.field-grid.four { grid-template-columns: repeat(4, 1fr); }
+.field-grid.three {
+  grid-template-columns: repeat(3, 1fr);
+}
+.field-grid.four {
+  grid-template-columns: repeat(4, 1fr);
+}
 @media (max-width: 680px) {
-  .field-grid, .field-grid.three, .field-grid.four { grid-template-columns: 1fr; }
+  .field-grid,
+  .field-grid.three,
+  .field-grid.four {
+    grid-template-columns: 1fr;
+  }
 }
 
-.field-row { display: flex; }
+.field-row {
+  display: flex;
+}
 
 .field-label {
   font-size: 12.5px;
@@ -481,9 +542,16 @@ onMounted(loadApproachOptions)
   color: var(--accent);
 }
 
-.field-hint { font-size: 12px; color: var(--ink-3); }
+.field-hint {
+  font-size: 12px;
+  color: var(--ink-3);
+}
 
-.seg-row { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.seg-row {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
 .seg-btn {
   padding: 7px 16px;
   border: 1px solid var(--line-strong);
@@ -495,7 +563,10 @@ onMounted(loadApproachOptions)
   cursor: pointer;
   transition: all 0.14s;
 }
-.seg-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
+.seg-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
 .seg-btn.active {
   background: var(--ink);
   border-color: var(--ink);
@@ -507,7 +578,12 @@ onMounted(loadApproachOptions)
   color: #fff;
 }
 
-.stars-row { display: flex; align-items: center; gap: 10px; height: 36px; }
+.stars-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+}
 
 .preset-row {
   display: flex;
@@ -578,7 +654,11 @@ onMounted(loadApproachOptions)
   transition: all 0.14s;
   align-self: center;
 }
-.question-image-add:hover { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); }
+.question-image-add:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+}
 
 .form-actions {
   display: flex;

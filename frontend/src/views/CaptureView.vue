@@ -92,10 +92,9 @@ async function analyze() {
     if (requestId !== analysisRequestId) return
     const apiMessage = err?.response?.data?.message
     const isBadGateway = err?.status === 502 || err?.response?.status === 502
-    aiWarning.value =
-      isBadGateway
-        ? `AI 服务暂不可用：${apiMessage || '上游请求失败'}，已切换到手动整理模式，可稍后重试。`
-        : `AI 解析失败：${apiMessage || err?.message || '未知错误'}，已切换到手动整理模式。`
+    aiWarning.value = isBadGateway
+      ? `AI 服务暂不可用：${apiMessage || '上游请求失败'}，已切换到手动整理模式，可稍后重试。`
+      : `AI 解析失败：${apiMessage || err?.message || '未知错误'}，已切换到手动整理模式。`
     parsed.value = createMistakeDraft(text.value)
     ocrRawText.value = ''
     formKey.value += 1
@@ -291,20 +290,13 @@ async function analyzeImage() {
     parsed.value = res.data.data
     // 识别成功后保留全部原图（长题多张截图都保留，列表/详情才能看到完整题目）
     if (previewImage.value && !(parsed.value.images && parsed.value.images.length)) {
-      parsed.value.images = [
-        previewImage.value,
-        ...moreImages.value.map((m) => m.preview),
-      ]
+      parsed.value.images = [previewImage.value, ...moreImages.value.map((m) => m.preview)]
     }
-    ocrRawText.value =
-      parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
+    ocrRawText.value = parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
     // 后端降级消息（如"本地 OCR 识别完成（视觉模型失败：…）"）：
     // 走到本地 OCR 时展示后端返回的具体原因，方便定位是哪个视觉通道失败。
     const ocrMessage = String(res.data?.message || '')
-    aiWarning.value =
-      parsed.value.method === 'local' && ocrMessage
-        ? ocrMessage
-        : ''
+    aiWarning.value = parsed.value.method === 'local' && ocrMessage ? ocrMessage : ''
     formKey.value += 1
     toast.success(
       parsed.value.is_english
@@ -316,10 +308,9 @@ async function analyzeImage() {
     if (requestId !== analysisRequestId) return
     const apiMessage = err?.response?.data?.message
     const isBadGateway = err?.status === 502 || err?.response?.status === 502
-    aiWarning.value =
-      isBadGateway
-        ? `AI 服务暂不可用：${apiMessage || '上游请求失败'}，已切换到手动整理模式，可稍后重试。`
-        : `图片识别失败：${apiMessage || err?.message || '未知错误'}，已切换到手动整理模式。`
+    aiWarning.value = isBadGateway
+      ? `AI 服务暂不可用：${apiMessage || '上游请求失败'}，已切换到手动整理模式，可稍后重试。`
+      : `图片识别失败：${apiMessage || err?.message || '未知错误'}，已切换到手动整理模式。`
     parsed.value = createMistakeDraft('')
     ocrRawText.value = ''
     formKey.value += 1
@@ -385,7 +376,9 @@ onUnmounted(() => {
       <div class="view-hero-copy">
         <div class="view-kicker">Smart Capture</div>
         <h2>智能录入</h2>
-        <p class="view-desc">粘贴题干或上传图片，可附加解题要求与参考图，AI 按你的思路整理成完整错题。</p>
+        <p class="view-desc">
+          粘贴题干或上传图片，可附加解题要求与参考图，AI 按你的思路整理成完整错题。
+        </p>
       </div>
     </div>
 
@@ -408,7 +401,8 @@ onUnmounted(() => {
       <Icon name="sparkles" :size="17" class="notice-icon" />
       <p>
         支持粘贴题干或上传题目图片；粘贴主图后可补充文字解题要求（如「按配方法求解、某步写详细」），
-        再 Ctrl+V 粘贴第二张图作为参考（按图中思路解题），最后点击「开始识别并解析」，保存前可再核对修改。
+        再 Ctrl+V
+        粘贴第二张图作为参考（按图中思路解题），最后点击「开始识别并解析」，保存前可再核对修改。
       </p>
     </div>
 
@@ -436,7 +430,9 @@ onUnmounted(() => {
         ></textarea>
         <div class="capture-actions">
           <UiButton variant="primary" :loading="analyzing" @click="analyze">AI 解析</UiButton>
-          <UiButton variant="outline" :disabled="!text.trim()" @click="useManual">手动整理</UiButton>
+          <UiButton variant="outline" :disabled="!text.trim()" @click="useManual"
+            >手动整理</UiButton
+          >
         </div>
       </div>
 
@@ -448,15 +444,34 @@ onUnmounted(() => {
             选择/粘贴题目图片
             <input type="file" accept="image/*" class="visually-hidden" @change="onFileChange" />
           </label>
-          <UiButton v-if="previewImage" variant="outline" @click="removeMainImage">移除图片</UiButton>
+          <UiButton v-if="previewImage" variant="outline" @click="removeMainImage"
+            >移除图片</UiButton
+          >
           <UiButton variant="outline" @click="useManualImage">手动整理</UiButton>
         </div>
-        <p class="paste-hint">先 Ctrl+V 粘贴/选择第一张图；主图就绪后，用下面「粘贴目标」决定下一张是继续加主图，还是作为参考图</p>
+        <p class="paste-hint">
+          先 Ctrl+V
+          粘贴/选择第一张图；主图就绪后，用下面「粘贴目标」决定下一张是继续加主图，还是作为参考图
+        </p>
 
         <div v-if="previewImage" class="paste-target-row">
           <span class="pt-label">下一张粘贴为：</span>
-          <button type="button" class="pt-btn" :class="{ active: pasteTarget === 'main' }" @click="setPasteTarget('main')">主图（英语整篇多图）</button>
-          <button type="button" class="pt-btn" :class="{ active: pasteTarget === 'reference' }" @click="setPasteTarget('reference')">参考图（按图中思路解）</button>
+          <button
+            type="button"
+            class="pt-btn"
+            :class="{ active: pasteTarget === 'main' }"
+            @click="setPasteTarget('main')"
+          >
+            主图（英语整篇多图）
+          </button>
+          <button
+            type="button"
+            class="pt-btn"
+            :class="{ active: pasteTarget === 'reference' }"
+            @click="setPasteTarget('reference')"
+          >
+            参考图（按图中思路解）
+          </button>
         </div>
 
         <div v-if="previewImage" class="image-preview">
@@ -466,7 +481,12 @@ onUnmounted(() => {
         <div v-if="moreImages.length" class="more-images">
           <div v-for="(m, i) in moreImages" :key="i" class="more-image-item">
             <img :src="m.preview" alt="附加图片" />
-            <button type="button" class="more-image-remove" aria-label="移除图片" @click="removeMoreImage(i)">
+            <button
+              type="button"
+              class="more-image-remove"
+              aria-label="移除图片"
+              @click="removeMoreImage(i)"
+            >
               <Icon name="x" :size="12" />
             </button>
           </div>
@@ -489,7 +509,12 @@ onUnmounted(() => {
           <label class="pick-label btn btn-outline btn-md">
             <Icon name="copy" :size="14" />
             选择参考图片（按图中思路解题）
-            <input type="file" accept="image/*" class="visually-hidden" @change="onReferenceFileChange" />
+            <input
+              type="file"
+              accept="image/*"
+              class="visually-hidden"
+              @change="onReferenceFileChange"
+            />
           </label>
           <span v-if="referenceImage" class="reference-preview">
             <img :src="referenceImage" alt="参考图片" />
@@ -498,7 +523,12 @@ onUnmounted(() => {
         </div>
 
         <div v-if="previewImage" class="capture-actions">
-          <UiButton variant="primary" :loading="analyzing" :disabled="!imageBase64" @click="analyzeImage">
+          <UiButton
+            variant="primary"
+            :loading="analyzing"
+            :disabled="!imageBase64"
+            @click="analyzeImage"
+          >
             开始识别并解析
           </UiButton>
         </div>
@@ -511,7 +541,7 @@ onUnmounted(() => {
         <p class="analyzing-title">{{ analyzingText }}</p>
         <div class="step-chain">
           <div
-            v-for="(step, i) in (activeTab === 'image' ? IMAGE_STEPS : TEXT_STEPS)"
+            v-for="(step, i) in activeTab === 'image' ? IMAGE_STEPS : TEXT_STEPS"
             :key="step.label"
             class="step-item"
             :class="{ done: i < analyzeStep, active: i === analyzeStep }"
@@ -521,7 +551,10 @@ onUnmounted(() => {
               <Icon v-else :name="step.icon" :size="12" />
             </span>
             <span class="step-label">{{ step.label }}</span>
-            <span v-if="i < (activeTab === 'image' ? IMAGE_STEPS : TEXT_STEPS).length - 1" class="step-link"></span>
+            <span
+              v-if="i < (activeTab === 'image' ? IMAGE_STEPS : TEXT_STEPS).length - 1"
+              class="step-link"
+            ></span>
           </div>
         </div>
         <div class="analyze-skeleton">
@@ -535,7 +568,11 @@ onUnmounted(() => {
     <div v-if="ocrRawText" class="notice card warn">
       <Icon name="alert" :size="17" class="notice-icon" />
       <div>
-        <p>本地 OCR 识别完成，复杂公式可能识别不准；请对照下面的识别原文核对。若已配置视觉模型仍走本地 OCR，请重启后端后重试。</p>
+        <p>
+          本地 OCR
+          识别完成，复杂公式可能识别不准；请对照下面的识别原文核对。若已配置视觉模型仍走本地
+          OCR，请重启后端后重试。
+        </p>
         <pre class="ocr-raw">{{ ocrRawText }}</pre>
       </div>
     </div>
@@ -551,7 +588,11 @@ onUnmounted(() => {
     <div v-if="parsed" class="card card-pad form-card">
       <div v-if="parsed.is_english" class="card card-pad english-learn">
         <h3 class="panel-title">英语整篇精读</h3>
-        <EnglishAnalysisPanel :parsed="parsed" @save-question="onSaveQuestion" @saved="onEnglishSaved" />
+        <EnglishAnalysisPanel
+          :parsed="parsed"
+          @save-question="onSaveQuestion"
+          @saved="onEnglishSaved"
+        />
       </div>
 
       <h3 class="panel-title">确认并完善题目信息</h3>
@@ -604,8 +645,12 @@ onUnmounted(() => {
   border-color: transparent;
   color: var(--green);
 }
-.ink-step.active { color: var(--accent-ink); }
-.ink-step.done { color: var(--ink-2); }
+.ink-step.active {
+  color: var(--accent-ink);
+}
+.ink-step.done {
+  color: var(--ink-2);
+}
 .ink-join {
   width: 34px;
   height: 0;
@@ -621,11 +666,24 @@ onUnmounted(() => {
   color: var(--ink-2);
   align-items: flex-start;
 }
-.notice p { margin: 0; line-height: 1.7; }
-.notice-icon { color: var(--blue); margin-top: 2px; }
-.notice.warn .notice-icon { color: var(--gold); }
-.notice.warn { border-color: color-mix(in srgb, var(--gold) 35%, var(--line)); background: var(--gold-soft); }
-.dismissible { position: relative; }
+.notice p {
+  margin: 0;
+  line-height: 1.7;
+}
+.notice-icon {
+  color: var(--blue);
+  margin-top: 2px;
+}
+.notice.warn .notice-icon {
+  color: var(--gold);
+}
+.notice.warn {
+  border-color: color-mix(in srgb, var(--gold) 35%, var(--line));
+  background: var(--gold-soft);
+}
+.dismissible {
+  position: relative;
+}
 .notice-close {
   margin-left: auto;
   border: none;
@@ -647,14 +705,25 @@ onUnmounted(() => {
   color: var(--ink-2);
 }
 
-.capture-panel { display: flex; flex-direction: column; gap: 16px; }
-.tab-body { display: flex; flex-direction: column; gap: 12px; }
+.capture-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 /* 宣纸笺输入区：虚线笺边，落笔（聚焦）变实 */
 .tab-body textarea.field-input {
   border: 1.5px dashed var(--line-strong);
   background: color-mix(in srgb, var(--surface-2) 40%, transparent);
   line-height: 1.8;
-  transition: border-color 0.2s var(--ease), background 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  transition:
+    border-color 0.2s var(--ease),
+    background 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
 }
 .tab-body textarea.field-input:focus {
   border-style: solid;
@@ -663,13 +732,33 @@ onUnmounted(() => {
   box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
-.capture-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.pick-label { cursor: pointer; }
+.capture-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.pick-label {
+  cursor: pointer;
+}
 
-.paste-hint { font-size: 12.5px; color: var(--ink-3); margin: 0; }
+.paste-hint {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin: 0;
+}
 
-.paste-target-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.pt-label { font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
+.paste-target-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pt-label {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  font-weight: 600;
+}
 .pt-btn {
   border: 1px solid var(--line-strong);
   background: var(--surface);
@@ -681,9 +770,18 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.13s;
 }
-.pt-btn:hover { border-color: var(--accent); color: var(--accent-ink); }
-.pt-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.pt-btn.active[data] { color: #fff; }
+.pt-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.pt-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.pt-btn.active[data] {
+  color: #fff;
+}
 
 .image-preview {
   border: 1px solid var(--line);
@@ -693,25 +791,49 @@ onUnmounted(() => {
   display: flex;
   justify-content: center;
 }
-.image-preview img { max-width: 100%; max-height: 360px; object-fit: contain; }
+.image-preview img {
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+}
 
-.more-images { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.more-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
 .more-image-item {
   position: relative;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
 }
-.more-image-item img { display: block; max-width: 150px; max-height: 100px; object-fit: contain; }
+.more-image-item img {
+  display: block;
+  max-width: 150px;
+  max-height: 100px;
+  object-fit: contain;
+}
 .more-image-remove {
   position: absolute;
-  top: 3px; right: 3px;
-  width: 20px; height: 20px;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: none; border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55); color: #fff; cursor: pointer; padding: 0;
+  top: 3px;
+  right: 3px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+  padding: 0;
 }
-.english-learn { margin-bottom: 4px; }
+.english-learn {
+  margin-bottom: 4px;
+}
 
 .reference-section {
   display: flex;
@@ -719,7 +841,11 @@ onUnmounted(() => {
   gap: 12px;
   flex-wrap: wrap;
 }
-.reference-preview { display: inline-flex; align-items: center; gap: 10px; }
+.reference-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
 .reference-preview img {
   max-width: 180px;
   max-height: 110px;
@@ -728,12 +854,30 @@ onUnmounted(() => {
   object-fit: contain;
 }
 
-.analyzing { align-items: flex-start; }
-.analyzing-title { margin: 0 0 12px; font-weight: 600; color: var(--ink); }
-.analyze-narrative { flex: 1; min-width: 0; }
+.analyzing {
+  align-items: flex-start;
+}
+.analyzing-title {
+  margin: 0 0 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.analyze-narrative {
+  flex: 1;
+  min-width: 0;
+}
 
-.step-chain { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.step-item { display: inline-flex; align-items: center; gap: 6px; }
+.step-chain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.step-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .step-icon {
   width: 24px;
   height: 24px;
@@ -752,15 +896,37 @@ onUnmounted(() => {
   color: #fff;
   animation: step-pulse 1.6s var(--ease) infinite;
 }
-.step-item.done .step-icon { background: var(--green-soft); border-color: transparent; color: var(--green); }
-@keyframes step-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-ring); }
-  50% { box-shadow: 0 0 0 5px transparent; }
+.step-item.done .step-icon {
+  background: var(--green-soft);
+  border-color: transparent;
+  color: var(--green);
 }
-.step-label { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
-.step-item.active .step-label { color: var(--accent-ink); }
-.step-item.done .step-label { color: var(--ink-2); }
-.step-link { width: 18px; height: 1.5px; background: var(--line-strong); margin: 0 2px; }
+@keyframes step-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--accent-ring);
+  }
+  50% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+.step-label {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.step-item.active .step-label {
+  color: var(--accent-ink);
+}
+.step-item.done .step-label {
+  color: var(--ink-2);
+}
+.step-link {
+  width: 18px;
+  height: 1.5px;
+  background: var(--line-strong);
+  margin: 0 2px;
+}
 
 .analyze-skeleton {
   margin-top: 14px;
@@ -779,10 +945,18 @@ onUnmounted(() => {
   border-top-color: var(--accent);
   animation: spin 0.7s linear infinite;
 }
-.spin { animation: spin 0.9s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
-.form-card { margin-top: 4px; }
+.form-card {
+  margin-top: 4px;
+}
 .panel-title {
   font-family: var(--font-display);
   font-size: 16px;

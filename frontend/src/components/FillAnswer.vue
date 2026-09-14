@@ -12,7 +12,7 @@ defineProps({
   reviewSaved: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:userInput', 'submit', 'next', 'mark'])
+defineEmits(['update:userInput', 'submit', 'next', 'mark'])
 </script>
 
 <template>
@@ -29,10 +29,22 @@ const emit = defineEmits(['update:userInput', 'submit', 'next', 'mark'])
         <UiButton variant="primary" size="lg" :loading="judging" @click="$emit('submit')">
           提交答案，自动判断
         </UiButton>
-        <UiButton variant="success" size="lg" :loading="submitting" :disabled="judging" @click="$emit('mark', true)">
+        <UiButton
+          variant="success"
+          size="lg"
+          :loading="submitting"
+          :disabled="judging"
+          @click="$emit('mark', true)"
+        >
           手动标记：记住了
         </UiButton>
-        <UiButton variant="outline" size="lg" :loading="submitting" :disabled="judging" @click="$emit('mark', false)">
+        <UiButton
+          variant="outline"
+          size="lg"
+          :loading="submitting"
+          :disabled="judging"
+          @click="$emit('mark', false)"
+        >
           手动标记：没记住
         </UiButton>
       </div>
@@ -40,9 +52,7 @@ const emit = defineEmits(['update:userInput', 'submit', 'next', 'mark'])
     <template v-else>
       <div class="answer-block" :class="{ wrong: !judgeResult.correct }">
         <div class="block-label">{{ judgeResult.correct ? '回答正确' : '回答错误' }}</div>
-        <p style="margin: 0">
-          参考答案：<MathText :text="judgeResult.expected || '暂无'" />
-        </p>
+        <p style="margin: 0">参考答案：<MathText :text="judgeResult.expected || '暂无'" /></p>
         <p v-if="judgeResult.aliases?.length" class="muted" style="margin: 6px 0 0">
           可接受答案：{{ judgeResult.aliases.join('；') }}
         </p>

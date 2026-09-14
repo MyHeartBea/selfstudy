@@ -45,8 +45,21 @@ defineProps({
   justify-content: center;
   border-radius: 50%;
 }
-.history-dot.ok { background: var(--green-soft); color: var(--green); }
-.history-dot.bad { background: var(--red-soft); color: var(--red); }
-.history-time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.history-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-dot.ok {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.history-dot.bad {
+  background: var(--red-soft);
+  color: var(--red);
+}
+.history-time {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.history-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>

@@ -11,8 +11,6 @@ const props = defineProps({
   maxWeeks: { type: Number, default: 18 },
 })
 
-const TIPS = ['未复习', '1-2 题', '3-5 题', '6-9 题', '10+ 题']
-
 function levelOf(count) {
   const c = Number(count) || 0
   if (c <= 0) return 0
@@ -74,16 +72,25 @@ const dayIndex = (ci, ri) => ci * 7 + ri
       </template>
     </div>
     <div class="hm-months">
-      <span v-for="m in months" :key="m.index" class="hm-month" :style="{ left: ((m.index + 0.5) / weeks.length) * 100 + '%' }">{{ m.label }}</span>
+      <span
+        v-for="m in months"
+        :key="m.index"
+        class="hm-month"
+        :style="{ left: ((m.index + 0.5) / weeks.length) * 100 + '%' }"
+        >{{ m.label }}</span
+      >
     </div>
     <div class="hm-scale">
-      少 <i class="hm-cell hm-0"></i><i class="hm-cell hm-1"></i><i class="hm-cell hm-2"></i><i class="hm-cell hm-3"></i><i class="hm-cell hm-4"></i> 多
+      少 <i class="hm-cell hm-0"></i><i class="hm-cell hm-1"></i><i class="hm-cell hm-2"></i
+      ><i class="hm-cell hm-3"></i><i class="hm-cell hm-4"></i> 多
     </div>
   </div>
 </template>
 
 <style scoped>
-.heatmap-wrap { min-width: 0; }
+.heatmap-wrap {
+  min-width: 0;
+}
 .heatmap {
   display: grid;
   grid-template-rows: repeat(7, 10px);
@@ -102,13 +109,31 @@ const dayIndex = (ci, ri) => ci * 7 + ri
   animation-delay: calc(var(--i) * 4.5ms);
   transition: transform 0.15s var(--spring);
 }
-@keyframes hm-in { to { opacity: 1; transform: scale(1); } }
-.hm-cell:hover { transform: scale(1.5) !important; }
-.hm-0 { background: var(--surface-2); }
-.hm-1 { background: color-mix(in srgb, var(--ink) 10%, var(--surface-2)); }
-.hm-2 { background: color-mix(in srgb, var(--ink) 24%, var(--surface-2)); }
-.hm-3 { background: color-mix(in srgb, var(--ink) 45%, var(--surface-2)); }
-.hm-4 { background: var(--accent); box-shadow: 0 0 0 1px var(--accent-ring); }
+@keyframes hm-in {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.hm-cell:hover {
+  transform: scale(1.5) !important;
+}
+.hm-0 {
+  background: var(--surface-2);
+}
+.hm-1 {
+  background: color-mix(in srgb, var(--ink) 10%, var(--surface-2));
+}
+.hm-2 {
+  background: color-mix(in srgb, var(--ink) 24%, var(--surface-2));
+}
+.hm-3 {
+  background: color-mix(in srgb, var(--ink) 45%, var(--surface-2));
+}
+.hm-4 {
+  background: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-ring);
+}
 
 .hm-months {
   position: relative;
@@ -117,7 +142,11 @@ const dayIndex = (ci, ri) => ci * 7 + ri
   font-size: 11px;
   color: var(--ink-3);
 }
-.hm-month { position: absolute; top: 2px; transform: translateX(-50%); }
+.hm-month {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+}
 
 .hm-scale {
   display: flex;

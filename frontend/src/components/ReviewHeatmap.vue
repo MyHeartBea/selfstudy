@@ -117,7 +117,8 @@ function title(cell) {
             :key="mark.index + mark.label"
             class="hm-month"
             :style="{ gridColumnStart: mark.index + 1 }"
-          >{{ mark.label }}</span>
+            >{{ mark.label }}</span
+          >
         </div>
         <div class="hm-grid" :style="{ gridTemplateColumns: `repeat(${weekCount}, 1fr)` }">
           <template v-for="(week, wi) in heat.weeks" :key="wi">
@@ -133,7 +134,9 @@ function title(cell) {
       </div>
     </div>
     <div class="hm-foot">
-      <span class="count-tip">近 {{ days }} 天复习 {{ heat.totalCount }} 次 · {{ heat.totalActive }} 个活跃日</span>
+      <span class="count-tip"
+        >近 {{ days }} 天复习 {{ heat.totalCount }} 次 · {{ heat.totalActive }} 个活跃日</span
+      >
       <span class="hm-legend">
         少
         <i class="hm-cell lv-0"></i>
@@ -148,7 +151,11 @@ function title(cell) {
 </template>
 
 <style scoped>
-.heatmap { display: flex; flex-direction: column; gap: 12px; }
+.heatmap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
 .hm-canvas {
   display: flex;
@@ -169,7 +176,11 @@ function title(cell) {
   height: 13px;
 }
 
-.hm-grid-wrap { flex: 1; min-width: 0; overflow-x: auto; }
+.hm-grid-wrap {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
 
 .hm-months {
   display: grid;
@@ -199,14 +210,31 @@ function title(cell) {
   background: var(--bg-soft);
   transition: transform 0.12s;
 }
-.hm-cell:hover { transform: scale(1.35); }
-.hm-cell.future { background: transparent; }
-.hm-cell.today { outline: 1.5px solid var(--accent); outline-offset: 1px; }
-.hm-cell.lv-0 { background: var(--bg-soft); }
-.hm-cell.lv-1 { background: color-mix(in srgb, var(--accent) 28%, var(--bg-soft)); }
-.hm-cell.lv-2 { background: color-mix(in srgb, var(--accent) 52%, transparent); }
-.hm-cell.lv-3 { background: color-mix(in srgb, var(--accent) 76%, transparent); }
-.hm-cell.lv-4 { background: var(--accent); }
+.hm-cell:hover {
+  transform: scale(1.35);
+}
+.hm-cell.future {
+  background: transparent;
+}
+.hm-cell.today {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 1px;
+}
+.hm-cell.lv-0 {
+  background: var(--bg-soft);
+}
+.hm-cell.lv-1 {
+  background: color-mix(in srgb, var(--accent) 28%, var(--bg-soft));
+}
+.hm-cell.lv-2 {
+  background: color-mix(in srgb, var(--accent) 52%, transparent);
+}
+.hm-cell.lv-3 {
+  background: color-mix(in srgb, var(--accent) 76%, transparent);
+}
+.hm-cell.lv-4 {
+  background: var(--accent);
+}
 
 .hm-foot {
   display: flex;
@@ -222,5 +250,8 @@ function title(cell) {
   font-size: 10.5px;
   color: var(--ink-3);
 }
-.hm-legend .hm-cell { width: 11px; height: 11px; }
+.hm-legend .hm-cell {
+  width: 11px;
+  height: 11px;
+}
 </style>

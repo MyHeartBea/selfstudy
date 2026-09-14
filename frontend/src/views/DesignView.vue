@@ -27,17 +27,25 @@ import { confirmDialog } from '../ui/confirm'
 
 const modalOpen = ref(false)
 const tab = ref('week')
- const subject = ref('math')
+const subject = ref('math')
 const checked = ref(true)
 const stars = ref(3)
 const page = ref(2)
 const pageSize = ref(10)
 
 const palette = [
-  ['--bg', '纸面'], ['--surface', '卡面'], ['--surface-2', '卡面次级'],
-  ['--ink', '浓墨'], ['--ink-2', '淡墨'], ['--ink-3', '灰墨'],
-  ['--accent', '朱砂'], ['--accent-soft', '朱砂晕'], ['--teal', '黛青'],
-  ['--gold', '洒金'], ['--green', '石绿'], ['--red', '赭红'],
+  ['--bg', '纸面'],
+  ['--surface', '卡面'],
+  ['--surface-2', '卡面次级'],
+  ['--ink', '浓墨'],
+  ['--ink-2', '淡墨'],
+  ['--ink-3', '灰墨'],
+  ['--accent', '朱砂'],
+  ['--accent-soft', '朱砂晕'],
+  ['--teal', '黛青'],
+  ['--gold', '洒金'],
+  ['--green', '石绿'],
+  ['--red', '赭红'],
 ]
 const fontSpec = [
   ['--fs-display', '42px', '900', '今日待复习'],
@@ -70,7 +78,12 @@ const heatData = (() => {
 })()
 
 async function askConfirm() {
-  const ok = await confirmDialog({ title: '删除确认', message: '将删除这条错题及其全部图片，无法恢复。', danger: true, confirmText: '删除' })
+  const ok = await confirmDialog({
+    title: '删除确认',
+    message: '将删除这条错题及其全部图片，无法恢复。',
+    danger: true,
+    confirmText: '删除',
+  })
   if (ok) toast.success('已删除（演示）')
 }
 </script>
@@ -80,7 +93,9 @@ async function askConfirm() {
     <header class="page-head">
       <div class="kicker">Design System</div>
       <h1>墨韵 2.0 · 设计画廊</h1>
-      <p class="sub">宣纸 · 松烟墨 · 朱砂印 · 洒金 —— 令牌与基件的一站式打磨场（双主题切换见右上角）</p>
+      <p class="sub">
+        宣纸 · 松烟墨 · 朱砂印 · 洒金 —— 令牌与基件的一站式打磨场（双主题切换见右上角）
+      </p>
     </header>
 
     <!-- 色板 -->
@@ -89,7 +104,8 @@ async function askConfirm() {
       <div class="swatches">
         <div v-for="[v, name] in palette" :key="v" class="swatch">
           <div class="chip" :style="{ background: `var(${v})` }"></div>
-          <b>{{ name }}</b><code>{{ v }}</code>
+          <b>{{ name }}</b
+          ><code>{{ v }}</code>
         </div>
       </div>
     </section>
@@ -100,9 +116,14 @@ async function askConfirm() {
       <div class="type-spec">
         <div v-for="[token, size, weight, text] in fontSpec" :key="token" class="type-row">
           <code>{{ token }} {{ size }}/{{ weight }}</code>
-          <p :style="{ fontSize: `var(${token})`, fontWeight: weight }" class="spec-display">{{ text }}</p>
+          <p :style="{ fontSize: `var(${token})`, fontWeight: weight }" class="spec-display">
+            {{ text }}
+          </p>
         </div>
-        <p class="body-spec">正文 15px/1.7：间隔重复 1/3/7/15/30 天；选择题填 A/B/C/D，数字答案带容差判分。数字使用等宽排版 <span class="num">0123456789</span>。</p>
+        <p class="body-spec">
+          正文 15px/1.7：间隔重复 1/3/7/15/30 天；选择题填
+          A/B/C/D，数字答案带容差判分。数字使用等宽排版 <span class="num">0123456789</span>。
+        </p>
       </div>
     </section>
 
@@ -143,9 +164,30 @@ async function askConfirm() {
     <section class="sec">
       <h2>表单控件</h2>
       <div class="row">
-        <UiTabs v-model="tab" :tabs="[{ name: 'week', label: '周' }, { name: 'month', label: '月' }, { name: 'all', label: '全部' }]" />
-        <UiSelect v-model="subject" :options="[{ label: '高等数学', value: 'math' }, { label: '英语阅读', value: 'en' }, { label: '计算机网络', value: 'net' }]" />
-        <UiDropdown label="批量操作" :items="[{ label: '标记已掌握', command: 'mark', icon: 'check' }, { label: '导出 JSON', command: 'export', icon: 'download' }]" @command="(c) => toast.info('命令：' + c)" />
+        <UiTabs
+          v-model="tab"
+          :tabs="[
+            { name: 'week', label: '周' },
+            { name: 'month', label: '月' },
+            { name: 'all', label: '全部' },
+          ]"
+        />
+        <UiSelect
+          v-model="subject"
+          :options="[
+            { label: '高等数学', value: 'math' },
+            { label: '英语阅读', value: 'en' },
+            { label: '计算机网络', value: 'net' },
+          ]"
+        />
+        <UiDropdown
+          label="批量操作"
+          :items="[
+            { label: '标记已掌握', command: 'mark', icon: 'check' },
+            { label: '导出 JSON', command: 'export', icon: 'download' },
+          ]"
+          @command="(c) => toast.info('命令：' + c)"
+        />
         <UiCheckbox v-model="checked" label="仅看未掌握" />
         <UiStars v-model="stars" />
         <span class="ro-stars"><UiStars :model-value="4.5" readonly /> 只读半星</span>
@@ -156,8 +198,12 @@ async function askConfirm() {
     <section class="sec">
       <h2>反馈 · Toast / 弹窗 / 骨架 / 空态</h2>
       <div class="row">
-        <UiButton variant="outline" size="sm" @click="toast.success('保存成功')">成功 Toast</UiButton>
-        <UiButton variant="outline" size="sm" @click="toast.error('网络开小差了')">错误 Toast</UiButton>
+        <UiButton variant="outline" size="sm" @click="toast.success('保存成功')"
+          >成功 Toast</UiButton
+        >
+        <UiButton variant="outline" size="sm" @click="toast.error('网络开小差了')"
+          >错误 Toast</UiButton
+        >
         <UiButton variant="outline" size="sm" @click="modalOpen = true">玻璃弹窗</UiButton>
       </div>
       <div class="skeleton-row">
@@ -178,7 +224,10 @@ async function askConfirm() {
       <div class="data-grid">
         <GlassCard class="span2">
           <div class="chart-head">
-            <div><h3>复习趋势</h3><p class="cap">近 7 天完成与正确（SVG 描边生长）</p></div>
+            <div>
+              <h3>复习趋势</h3>
+              <p class="cap">近 7 天完成与正确（SVG 描边生长）</p>
+            </div>
           </div>
           <AreaChart :labels="trendLabels" :series="trendSeries" :height="200" />
         </GlassCard>
@@ -194,10 +243,25 @@ async function askConfirm() {
           <h3>瓷砖指标 MetricTile</h3>
           <div class="tiles">
             <MetricTile icon="layers" :value="83" label="累计错题 · 本周 +6" tone="accent" />
-            <MetricTile icon="check" value="75.2" unit="%" label="总正确率 · 105 次复习" tone="green" />
+            <MetricTile
+              icon="check"
+              value="75.2"
+              unit="%"
+              label="总正确率 · 105 次复习"
+              tone="green"
+            />
             <MetricTile icon="flame" :value="5" unit="天" label="连续复习 · 最长 11 天" tone="gold">
               <template #spark>
-                <svg width="70" height="30" viewBox="0 0 70 30"><polyline points="2,24 13,18 24,21 35,10 46,14 57,7 68,4" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                <svg width="70" height="30" viewBox="0 0 70 30">
+                  <polyline
+                    points="2,24 13,18 24,21 35,10 46,14 57,7 68,4"
+                    fill="none"
+                    stroke="var(--gold)"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
               </template>
             </MetricTile>
             <MetricTile icon="trending" :value="12" label="今日待复习" tone="teal" />
@@ -230,7 +294,12 @@ async function askConfirm() {
               <UiTag color="var(--gold)" soft>洒金</UiTag>
               <UiTag size="sm">小号</UiTag>
             </div>
-            <UiPagination v-model:page="page" v-model:page-size="pageSize" :total="83" @change="() => {}" />
+            <UiPagination
+              v-model:page="page"
+              v-model:page-size="pageSize"
+              :total="83"
+              @change="() => {}"
+            />
             <span class="cap">当前第 {{ page }} 页 · 每页 {{ pageSize }} 条</span>
           </div>
         </GlassCard>
@@ -241,71 +310,266 @@ async function askConfirm() {
     <section class="sec">
       <h2>动效曲线</h2>
       <div class="motion-row">
-        <div class="m-demo"><div class="m-ball spring"></div><code>--spring</code></div>
-        <div class="m-demo"><div class="m-ball ease"></div><code>--ease</code></div>
-        <span class="cap">图标速览：<Icon name="sparkles" :size="15" /> <Icon name="flame" :size="15" /> <Icon name="trending" :size="15" /> <Icon name="zap" :size="15" /></span>
+        <div class="m-demo">
+          <div class="m-ball spring"></div>
+          <code>--spring</code>
+        </div>
+        <div class="m-demo">
+          <div class="m-ball ease"></div>
+          <code>--ease</code>
+        </div>
+        <span class="cap"
+          >图标速览：<Icon name="sparkles" :size="15" /> <Icon name="flame" :size="15" />
+          <Icon name="trending" :size="15" /> <Icon name="zap" :size="15"
+        /></span>
       </div>
     </section>
 
     <UiModal v-model="modalOpen" title="弹窗 · 玻璃质感" size="sm">
-      <p style="line-height:1.8">宽弹窗、玻璃拟态、弹性入场、Esc 关闭。</p>
-      <template #footer><UiButton variant="ghost" size="sm" @click="modalOpen = false">关闭</UiButton></template>
+      <p style="line-height: 1.8">宽弹窗、玻璃拟态、弹性入场、Esc 关闭。</p>
+      <template #footer
+        ><UiButton variant="ghost" size="sm" @click="modalOpen = false">关闭</UiButton></template
+      >
     </UiModal>
   </div>
 </template>
 
 <style scoped>
-.design-page { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 26px; }
-.page-head .kicker { font-size: 11px; font-weight: 700; letter-spacing: 0.24em; color: var(--accent); text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; }
-.page-head .kicker::before { content: ''; width: 22px; height: 2px; background: var(--accent); border-radius: 2px; opacity: 0.6; }
-h1 { font-family: var(--font-display); font-weight: 900; font-size: var(--fs-h1); }
-.sub { color: var(--ink-2); margin-top: 6px; font-size: 14px; }
-.sec h2 { font-family: var(--font-display); font-size: var(--fs-h3); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.sec h3 { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin-bottom: 4px; }
-.cap { font-size: 12.5px; color: var(--ink-3); }
+.design-page {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.page-head .kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.page-head .kicker::before {
+  content: '';
+  width: 22px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+h1 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--fs-h1);
+}
+.sub {
+  color: var(--ink-2);
+  margin-top: 6px;
+  font-size: 14px;
+}
+.sec h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.sec h3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.cap {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
 
-.swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
-.swatch { background: var(--surface); border-radius: var(--r-md); padding: 10px; box-shadow: var(--shadow-1); }
-.swatch .chip { height: 44px; border-radius: 9px; margin-bottom: 8px; box-shadow: inset 0 0 0 1px var(--line); }
-.swatch b { font-size: 12.5px; display: block; }
-.swatch code { font-size: 11px; color: var(--ink-3); }
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+}
+.swatch {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  padding: 10px;
+  box-shadow: var(--shadow-1);
+}
+.swatch .chip {
+  height: 44px;
+  border-radius: 9px;
+  margin-bottom: 8px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.swatch b {
+  font-size: 12.5px;
+  display: block;
+}
+.swatch code {
+  font-size: 11px;
+  color: var(--ink-3);
+}
 
-.type-spec { display: flex; flex-direction: column; gap: 14px; }
-.type-row code { font-size: 11.5px; color: var(--ink-3); }
-.spec-display { font-family: var(--font-display); line-height: 1.4; margin-top: 2px; }
-.body-spec { color: var(--ink-2); line-height: 1.8; }
-.num { font-variant-numeric: tabular-nums; }
+.type-spec {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.type-row code {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.spec-display {
+  font-family: var(--font-display);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+.body-spec {
+  color: var(--ink-2);
+  line-height: 1.8;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
 
-.gcard-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.demo-card h3 { font-family: var(--font-display); font-size: 16px; margin-bottom: 4px; }
+.gcard-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.demo-card h3 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  margin-bottom: 4px;
+}
 
-.row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.row.wrap { flex-wrap: wrap; }
-.ro-stars { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-3); }
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.row.wrap {
+  flex-wrap: wrap;
+}
+.ro-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
 
-.skeleton-row { display: flex; align-items: center; gap: 32px; margin-top: 18px; flex-wrap: wrap; }
-.empty-box { margin-top: 12px; border: 1px dashed var(--line-strong); border-radius: var(--r-lg); }
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.empty-box {
+  margin-top: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+}
 
-.data-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.span2 { grid-column: span 2; }
-.chart-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
-.ring-center-demo { display: grid; place-items: center; padding: 8px 0; }
-.ring-center-demo b { font-family: var(--font-display); font-size: 26px; font-weight: 900; display: block; line-height: 1.1; }
-.ring-center-demo span { font-size: 11.5px; color: var(--ink-3); }
-.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 24px; margin-top: 10px; }
-.bars { display: flex; flex-direction: column; gap: 13px; margin-top: 8px; }
-.progress-demo { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
-.stack { display: flex; flex-direction: column; gap: 12px; }
+.data-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.span2 {
+  grid-column: span 2;
+}
+.chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.ring-center-demo {
+  display: grid;
+  place-items: center;
+  padding: 8px 0;
+}
+.ring-center-demo b {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 900;
+  display: block;
+  line-height: 1.1;
+}
+.ring-center-demo span {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 24px;
+  margin-top: 10px;
+}
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin-top: 8px;
+}
+.progress-demo {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-.motion-row { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
-.m-demo { display: flex; align-items: center; gap: 10px; }
-.m-ball { width: 26px; height: 26px; border-radius: 9px; background: var(--accent-grad); cursor: pointer; transition: transform 0.55s var(--spring); }
-.m-ball.ease { transition-timing-function: var(--ease); background: var(--teal); }
-.m-ball:hover { transform: translateX(90px) rotate(140deg); }
-.m-demo code { font-size: 11.5px; color: var(--ink-3); }
+.motion-row {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  flex-wrap: wrap;
+}
+.m-demo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.m-ball {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  background: var(--accent-grad);
+  cursor: pointer;
+  transition: transform 0.55s var(--spring);
+}
+.m-ball.ease {
+  transition-timing-function: var(--ease);
+  background: var(--teal);
+}
+.m-ball:hover {
+  transform: translateX(90px) rotate(140deg);
+}
+.m-demo code {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
 
 @media (max-width: 860px) {
-  .gcard-row, .data-grid { grid-template-columns: 1fr; }
-  .span2 { grid-column: span 1; }
+  .gcard-row,
+  .data-grid {
+    grid-template-columns: 1fr;
+  }
+  .span2 {
+    grid-column: span 1;
+  }
 }
 </style>

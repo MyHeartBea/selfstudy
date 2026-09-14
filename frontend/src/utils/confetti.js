@@ -110,8 +110,18 @@ export const confetti = {
     kick()
     const h = window.innerHeight
     const w = window.innerWidth
-    spawn(w * 0.12, h + 10, { angle: -Math.PI / 3, power: 15, count: opts.count ?? 40, spread: Math.PI / 5 })
-    spawn(w * 0.88, h + 10, { angle: (-Math.PI * 2) / 3, power: 15, count: opts.count ?? 40, spread: Math.PI / 5 })
+    spawn(w * 0.12, h + 10, {
+      angle: -Math.PI / 3,
+      power: 15,
+      count: opts.count ?? 40,
+      spread: Math.PI / 5,
+    })
+    spawn(w * 0.88, h + 10, {
+      angle: (-Math.PI * 2) / 3,
+      power: 15,
+      count: opts.count ?? 40,
+      spread: Math.PI / 5,
+    })
     if (opts.center !== false) {
       setTimeout(() => spawn(w * 0.5, h * 0.35, { angle: -Math.PI / 2, power: 8, count: 24 }), 180)
     }

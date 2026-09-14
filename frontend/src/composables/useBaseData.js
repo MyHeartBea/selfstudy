@@ -57,12 +57,14 @@ export function subjectKind(id) {
 }
 
 export function subjectColor(id) {
-  return {
-    1: '#b0392e',
-    2: '#b45309',
-    3: '#1a7f42',
-    4: '#2f6db3',
-  }[id] || '#8f887c'
+  return (
+    {
+      1: '#b0392e',
+      2: '#b45309',
+      3: '#1a7f42',
+      4: '#2f6db3',
+    }[id] || '#8f887c'
+  )
 }
 
 export const sourceTypes = [
@@ -82,23 +84,27 @@ export function sourceTypeColor(type) {
 }
 
 export function questionTypeName(type) {
-  return {
-    choice: '选择题',
-    multi: '多选题',
-    fill: '填空题',
-    translation: '翻译',
-    solution: '解答题',
-  }[type] || '选择题'
+  return (
+    {
+      choice: '选择题',
+      multi: '多选题',
+      fill: '填空题',
+      translation: '翻译',
+      solution: '解答题',
+    }[type] || '选择题'
+  )
 }
 
 export function questionTypeColor(type) {
-  return {
-    choice: '#2f6db3',
-    multi: '#6d5bd0',
-    fill: '#1a7f42',
-    translation: '#0e7568',
-    solution: '#b45309',
-  }[type] || '#8f887c'
+  return (
+    {
+      choice: '#2f6db3',
+      multi: '#6d5bd0',
+      fill: '#1a7f42',
+      translation: '#0e7568',
+      solution: '#b45309',
+    }[type] || '#8f887c'
+  )
 }
 
 /**

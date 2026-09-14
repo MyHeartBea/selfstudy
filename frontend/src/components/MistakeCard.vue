@@ -63,17 +63,22 @@ const spineColor = computed(() => subjectColor(props.mistake.subject_id))
 const englishQuestionCount = computed(() => {
   const m = props.mistake
   if (!m || m.passage_text === undefined) return 0
-  return 1 + ((m.english_questions || []).length)
+  return 1 + (m.english_questions || []).length
 })
 const cardText = computed(() => {
   const m = props.mistake
   if (m.passage_text) {
-    const sents = String(m.passage_text).split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
+    const sents = String(m.passage_text)
+      .split(/(?<=[.!?])\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
     return sents.slice(0, 2).join(' ') || m.passage_text
   }
   return m.question || ''
 })
-const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mistake.images.length > 0)
+const hasImage = computed(
+  () => Array.isArray(props.mistake.images) && props.mistake.images.length > 0,
+)
 </script>
 
 <template>
@@ -103,18 +108,16 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
         <MistakeMeta :mistake="mistake" compact />
         <span class="top-end" @click.stop>
           <UiStars :model-value="mistake.difficulty || 0" readonly :size="13" />
-          <UiCheckbox
-            :model-value="selected"
-            @click.stop
-            @update:model-value="onCheckboxChange"
-          />
+          <UiCheckbox :model-value="selected" @click.stop @update:model-value="onCheckboxChange" />
         </span>
       </div>
 
       <div class="question-text">
         <template v-if="mistake.passage_text">
           <p class="passage-preview">{{ cardText }}</p>
-          <span v-if="englishQuestionCount > 1" class="passage-count">英语整篇 · 共 {{ englishQuestionCount }} 题</span>
+          <span v-if="englishQuestionCount > 1" class="passage-count"
+            >英语整篇 · 共 {{ englishQuestionCount }} 题</span
+          >
         </template>
         <RichText v-else :text="mistake.question" />
       </div>
@@ -131,11 +134,28 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
 
       <div class="card-foot">
         <UiTag v-if="mistake.review_paused" size="sm">已暂停</UiTag>
-        <span v-else-if="mistake.next_review_at" class="foot-item" :title="'下次复习 ' + formatTime(mistake.next_review_at)">
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+        <span
+          v-else-if="mistake.next_review_at"
+          class="foot-item"
+          :title="'下次复习 ' + formatTime(mistake.next_review_at)"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="12"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3.5 2" />
+          </svg>
           {{ formatTime(mistake.next_review_at).slice(5) }}
         </span>
-        <span v-if="mistake.source_name" class="foot-item grow" :title="mistake.source_name">{{ mistake.source_name }}</span>
+        <span v-if="mistake.source_name" class="foot-item grow" :title="mistake.source_name">{{
+          mistake.source_name
+        }}</span>
         <span class="foot-item">{{ formatTime(mistake.created_at).slice(0, 10) }}</span>
       </div>
     </div>
@@ -155,8 +175,14 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes card-in {
-  from { opacity: 0; transform: translateY(18px) scale(0.97); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .mistake-card:hover {
   border-color: color-mix(in srgb, var(--spine) 45%, var(--line));
@@ -164,7 +190,9 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
 }
 .mistake-card.picked {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), var(--shadow-1);
+  box-shadow:
+    0 0 0 1px var(--accent),
+    var(--shadow-1);
 }
 .mistake-card:focus-visible {
   outline: 2px solid var(--accent);
@@ -179,12 +207,18 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   bottom: 0;
   width: 4px;
   border-radius: 4px 0 0 4px;
-  background: linear-gradient(180deg, var(--spine), color-mix(in srgb, var(--spine) 35%, transparent));
+  background: linear-gradient(
+    180deg,
+    var(--spine),
+    color-mix(in srgb, var(--spine) 35%, transparent)
+  );
   opacity: 0.9;
   transition: width 0.25s var(--spring);
   z-index: 2;
 }
-.mistake-card:hover .spine { width: 6px; }
+.mistake-card:hover .spine {
+  width: 6px;
+}
 
 /* 通栏图版 */
 .shot-banner {
@@ -198,8 +232,14 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   overflow: hidden;
   padding: 6px;
 }
-.shot-banner :deep(.question-images) { margin: 0; }
-.shot-banner :deep(.question-image) { border: none; background: transparent; padding: 0; }
+.shot-banner :deep(.question-images) {
+  margin: 0;
+}
+.shot-banner :deep(.question-image) {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
 .shot-banner :deep(.question-image img) {
   max-width: 100% !important;
   max-height: 130px !important;
@@ -235,10 +275,14 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   font-style: italic;
   letter-spacing: 0.06em;
   transform: rotate(-2deg);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent-hover) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow:
+    0 2px 6px color-mix(in srgb, var(--accent-hover) 40%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
   transition: transform 0.25s var(--spring);
 }
-.mistake-card:hover .seal-no { transform: rotate(0deg) scale(1.05); }
+.mistake-card:hover .seal-no {
+  transform: rotate(0deg) scale(1.05);
+}
 
 /* 星级 + 勾选框作为整体靠右，永远不与标签重叠 */
 .top-end {
@@ -265,7 +309,10 @@ const hasImage = computed(() => Array.isArray(props.mistake.images) && props.mis
   );
   border-radius: 2px;
 }
-.passage-preview { margin: 0; line-height: 1.8; }
+.passage-preview {
+  margin: 0;
+  line-height: 1.8;
+}
 .passage-count {
   display: inline-block;
   margin-top: 6px;

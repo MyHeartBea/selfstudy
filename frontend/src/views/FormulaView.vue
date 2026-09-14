@@ -14,15 +14,7 @@ import UiTag from '../ui/UiTag.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiModal from '../ui/UiModal.vue'
 
-const categories = [
-  '高等数学',
-  '线性代数',
-  '概率统计',
-  '英语背诵',
-  '政治背诵',
-  '408背诵',
-  '其他',
-]
+const categories = ['高等数学', '线性代数', '概率统计', '英语背诵', '政治背诵', '408背诵', '其他']
 
 const loading = ref(false)
 const items = ref([])
@@ -90,10 +82,7 @@ function plainPreview(item) {
     String(item.content || '')
       .split('\n')
       .find(
-        (value) =>
-          value.trim() &&
-          !value.trim().startsWith('#') &&
-          !value.trim().startsWith('|'),
+        (value) => value.trim() && !value.trim().startsWith('#') && !value.trim().startsWith('|'),
       ) || ''
   // 同样剥掉行内标记（** / ` / 表格竖线），只留可读正文
   return markdownToPlain(line).slice(0, 80)
@@ -120,10 +109,12 @@ function openMemorize() {
 const reciteQueue = ref([])
 const reciteKnown = ref(0)
 const reciteTotal = ref(0)
+// 背诵模式当前卡是否已翻面（显示内容）。此前的实现漏了这个声明，
+// 却在 openMemorize/markRecite/模板里以 .value 读写 → 点「显示内容」直接抛错。
+const reciteRevealed = ref(false)
 
 function markRecite(known) {
   if (!reciteQueue.value.length) return
-  const current = reciteQueue.value[0]
   if (known) {
     reciteQueue.value.shift()
     reciteKnown.value += 1
@@ -274,7 +265,10 @@ onMounted(loadFormulas)
           </span>
         </div>
         <div class="recite-progress">
-          <div class="recite-progress-inner" :style="{ width: (reciteKnown / Math.max(1, reciteTotal)) * 100 + '%' }"></div>
+          <div
+            class="recite-progress-inner"
+            :style="{ width: (reciteKnown / Math.max(1, reciteTotal)) * 100 + '%' }"
+          ></div>
         </div>
         <h3 class="memorize-title serif">{{ reciteQueue[0].title }}</h3>
         <div v-if="reciteRevealed" class="knowledge-preview flip-reveal">
@@ -299,7 +293,9 @@ onMounted(loadFormulas)
         <UiButton variant="ghost" @click="memorizeVisible = false">退出</UiButton>
         <template v-if="reciteQueue.length">
           <UiButton variant="outline" @click="markRecite(false)">没记住，待会再来</UiButton>
-          <UiButton v-if="reciteRevealed" variant="primary" @click="markRecite(true)">记住了</UiButton>
+          <UiButton v-if="reciteRevealed" variant="primary" @click="markRecite(true)"
+            >记住了</UiButton
+          >
         </template>
       </template>
     </UiModal>
@@ -356,7 +352,9 @@ onMounted(loadFormulas)
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
-.search-input { width: 240px; }
+.search-input {
+  width: 240px;
+}
 
 .formula-grid {
   display: grid;
@@ -372,13 +370,21 @@ onMounted(loadFormulas)
   gap: 10px;
   padding: 16px 16px 14px 20px;
   cursor: pointer;
-  transition: border-color 0.2s var(--ease), box-shadow 0.3s var(--ease);
+  transition:
+    border-color 0.2s var(--ease),
+    box-shadow 0.3s var(--ease);
   animation: fcard-in 0.5s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes fcard-in {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .formula-card::before {
   content: '';
@@ -388,16 +394,28 @@ onMounted(loadFormulas)
   bottom: 14px;
   width: 4px;
   border-radius: 0 4px 4px 0;
-  background: linear-gradient(180deg, var(--fcol), color-mix(in srgb, var(--fcol) 30%, transparent));
+  background: linear-gradient(
+    180deg,
+    var(--fcol),
+    color-mix(in srgb, var(--fcol) 30%, transparent)
+  );
   opacity: 0.8;
   transition: width 0.25s var(--spring);
   /* 左侧色条是纯装饰：不参与命中测试，避免盖住整卡点击层 */
   pointer-events: none;
 }
-.formula-card:hover { border-color: color-mix(in srgb, var(--fcol) 45%, var(--line)); box-shadow: var(--shadow-2); }
-.formula-card:hover::before { width: 6px; }
+.formula-card:hover {
+  border-color: color-mix(in srgb, var(--fcol) 45%, var(--line));
+  box-shadow: var(--shadow-2);
+}
+.formula-card:hover::before {
+  width: 6px;
+}
 /* 同知识点卡片：hover 不做位移，避免鼠标停在边缘时抖动 */
-.formula-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.formula-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 /* 水墨 ∑ 水印是纯装饰（已有 pointer-events:none），不参与命中测试 */
 /* 水墨 ∑ 水印 */
 .f-mark {
@@ -445,7 +463,9 @@ onMounted(loadFormulas)
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.formula-card:hover .formula-title { color: var(--accent-ink); }
+.formula-card:hover .formula-title {
+  color: var(--accent-ink);
+}
 
 .formula-preview {
   font-size: 12.5px;
@@ -467,7 +487,10 @@ onMounted(loadFormulas)
   justify-content: space-between;
   font-size: 12px;
 }
-.formula-actions { display: flex; gap: 2px; }
+.formula-actions {
+  display: flex;
+  gap: 2px;
+}
 .op-link {
   border: none;
   background: transparent;
@@ -478,9 +501,15 @@ onMounted(loadFormulas)
   padding: 3px 7px;
   border-radius: 6px;
 }
-.op-link:hover { background: var(--accent-soft); }
-.op-link.danger { color: var(--red); }
-.op-link.danger:hover { background: var(--red-soft); }
+.op-link:hover {
+  background: var(--accent-soft);
+}
+.op-link.danger {
+  color: var(--red);
+}
+.op-link.danger:hover {
+  background: var(--red-soft);
+}
 
 .memorize-head {
   display: flex;
@@ -532,11 +561,29 @@ onMounted(loadFormulas)
   animation: flip-in 0.5s var(--spring) both;
 }
 @keyframes flip-in {
-  from { opacity: 0; transform: rotateX(-55deg) translateY(10px); }
-  to { opacity: 1; transform: rotateX(0) translateY(0); }
+  from {
+    opacity: 0;
+    transform: rotateX(-55deg) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: rotateX(0) translateY(0);
+  }
 }
 
-.f-form { display: flex; flex-direction: column; gap: 14px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field-label { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.f-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
 </style>

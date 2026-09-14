@@ -48,12 +48,32 @@ onUnmounted(() => {
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="modelValue" class="modal-backdrop" :style="{ zIndex: props.zIndex }" @mousedown.self="close()">
-        <div class="modal-panel" :style="{ maxWidth: WIDTH[size] || WIDTH.md }" role="dialog" aria-modal="true">
+      <div
+        v-if="modelValue"
+        class="modal-backdrop"
+        :style="{ zIndex: props.zIndex }"
+        @mousedown.self="close()"
+      >
+        <div
+          class="modal-panel"
+          :style="{ maxWidth: WIDTH[size] || WIDTH.md }"
+          role="dialog"
+          aria-modal="true"
+        >
           <header class="modal-head">
             <h3 class="modal-title">{{ title }}</h3>
             <button class="modal-close" aria-label="关闭" @click="close">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
             </button>
           </header>
           <div class="modal-body">
@@ -84,8 +104,15 @@ onUnmounted(() => {
 
 .modal-panel {
   width: 100%;
-  background: linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
-    linear-gradient(160deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 42%, color-mix(in srgb, var(--gold) 16%, transparent)) border-box;
+  background:
+    linear-gradient(var(--surface-glass), var(--surface-glass)) padding-box,
+    linear-gradient(
+        160deg,
+        color-mix(in srgb, var(--accent) 22%, transparent),
+        transparent 42%,
+        color-mix(in srgb, var(--gold) 16%, transparent)
+      )
+      border-box;
   border: 1px solid transparent;
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-3);
@@ -121,7 +148,11 @@ onUnmounted(() => {
   cursor: pointer;
   transition: all 0.15s var(--ease);
 }
-.modal-close:hover { background: var(--surface-2); color: var(--ink); transform: rotate(90deg); }
+.modal-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+  transform: rotate(90deg);
+}
 
 .modal-body {
   padding: 18px 22px;
@@ -137,8 +168,20 @@ onUnmounted(() => {
   flex: none;
 }
 
-.modal-enter-active, .modal-leave-active { transition: opacity 0.2s ease; }
-.modal-enter-active .modal-panel, .modal-leave-active .modal-panel { transition: transform 0.3s var(--spring); }
-.modal-enter-from, .modal-leave-to { opacity: 0; }
-.modal-enter-from .modal-panel, .modal-leave-to .modal-panel { transform: translateY(18px) scale(0.96); }
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 0.2s ease;
+}
+.modal-enter-active .modal-panel,
+.modal-leave-active .modal-panel {
+  transition: transform 0.3s var(--spring);
+}
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+.modal-enter-from .modal-panel,
+.modal-leave-to .modal-panel {
+  transform: translateY(18px) scale(0.96);
+}
 </style>

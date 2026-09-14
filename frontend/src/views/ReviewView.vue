@@ -55,14 +55,12 @@ const practiceTitle = computed(
       random: '随机抽题',
       real_exam: '真题专项',
       mock: '真题模考',
-    }[practiceMode.value] || ''),
+    })[practiceMode.value] || '',
 )
 const emptyText = computed(() =>
   isPractice.value ? '没有符合条件的错题，换个条件试试' : '暂无待复习错题',
 )
-const questionType = computed(
-  () => current.value?.question_type || 'choice',
-)
+const questionType = computed(() => current.value?.question_type || 'choice')
 const isChoice = computed(() => ['choice', 'multi'].includes(questionType.value))
 const isMulti = computed(() => questionType.value === 'multi')
 const isFill = computed(() => questionType.value === 'fill')
@@ -255,7 +253,8 @@ async function submitMock(auto = false) {
               option_c: q.option_c || '',
               option_d: q.option_d || '',
               correct_answer: q.correct_answer || '',
-              analysis: q.analysis || `模考答错（正确答案 ${q.correct_answer || '见解析'}），解析待整理。`,
+              analysis:
+                q.analysis || `模考答错（正确答案 ${q.correct_answer || '见解析'}），解析待整理。`,
               difficulty_points: q.difficulty_points || `模考错题 · ${q.section || '客观题'}`,
               difficulty: 3,
               knowledge_tags: [],
@@ -486,7 +485,7 @@ async function submitReview(result, advance = true) {
 onMounted(loadQueue)
 
 // —— 键盘快捷键：1-4/A-D 选选项、Enter 确认/下一题、空格看答案 ——
-const KEY_TO_OPTION = { '1': 'A', '2': 'B', '3': 'C', '4': 'D', a: 'A', b: 'B', c: 'C', d: 'D' }
+const KEY_TO_OPTION = { 1: 'A', 2: 'B', 3: 'C', 4: 'D', a: 'A', b: 'B', c: 'C', d: 'D' }
 
 function onKeydown(event) {
   if (done.value || !current.value || loading.value) return
@@ -627,11 +626,16 @@ onUnmounted(() => {
             </div>
           </RingProgress>
           <div class="mr-stats">
-            <div class="mr-line"><span>用时</span><b class="num">{{ fmtDuration(mockReport.usedSec) }}</b>
+            <div class="mr-line">
+              <span>用时</span><b class="num">{{ fmtDuration(mockReport.usedSec) }}</b>
               <i v-if="mockReport.overtime" class="mr-overtime">超时自动交卷</i>
             </div>
-            <div class="mr-line"><span>答对</span><b class="num mr-ok">{{ mockReport.correct }}</b></div>
-            <div class="mr-line"><span>答错</span><b class="num mr-bad">{{ mockReport.total - mockReport.correct }}</b></div>
+            <div class="mr-line">
+              <span>答对</span><b class="num mr-ok">{{ mockReport.correct }}</b>
+            </div>
+            <div class="mr-line">
+              <span>答错</span><b class="num mr-bad">{{ mockReport.total - mockReport.correct }}</b>
+            </div>
             <div v-if="mockReport.savedToMistakes" class="mr-line">
               <span>错题入本</span>
               <b class="num">{{ mockReport.savedToMistakes }}</b>
@@ -667,11 +671,14 @@ onUnmounted(() => {
           <b class="bad pop-num">{{ resultCount.wrong }}</b> 题 · 朱砂印为证
         </p>
         <p v-if="!isPractice && queueInfo && queueInfo.remaining > 0" class="done-backlog">
-          还有 <b>{{ queueInfo.remaining }}</b> 题积压没做完（每日上限 {{ queueInfo.dailyLimit }} 题）。
-          不用一次做完 —— 它们会按"最久没碰过"的顺序往后排，明天继续轮。
+          还有 <b>{{ queueInfo.remaining }}</b> 题积压没做完（每日上限
+          {{ queueInfo.dailyLimit }} 题）。 不用一次做完 ——
+          它们会按"最久没碰过"的顺序往后排，明天继续轮。
         </p>
         <div class="done-actions">
-          <UiButton v-if="isPractice" variant="outline" @click="router.push('/practice')">再练一组</UiButton>
+          <UiButton v-if="isPractice" variant="outline" @click="router.push('/practice')"
+            >再练一组</UiButton
+          >
           <UiButton variant="primary" @click="router.push('/mistakes')">返回错题列表</UiButton>
           <UiButton variant="ghost" @click="router.push('/stats')">查看统计</UiButton>
         </div>
@@ -683,209 +690,276 @@ onUnmounted(() => {
       <div class="stage-wrap">
         <div :key="index" class="stage-numeral serif" aria-hidden="true">{{ stageNumeral }}</div>
         <!-- 顶部流光进度线 -->
-        <div class="top-progress" role="progressbar" :aria-valuenow="progress" aria-valuemin="0" aria-valuemax="100">
+        <div
+          class="top-progress"
+          role="progressbar"
+          :aria-valuenow="progress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
           <div class="tp-fill" :style="{ width: Math.max(3, progress) + '%' }"></div>
         </div>
 
-      <GlassCard class="stage-card" :hover="false">
-        <template #badge>
-          <StageBadge :text="`第 ${index + 1} / ${queue.length} 题`" />
-        </template>
-        <div class="detail-meta">
-          <template v-if="current.paperQuestion">
-            <span class="count-tip">{{ paperTitle }}{{ current.section ? ' · ' + current.section : '' }}<i v-if="current.no"> · 第 {{ current.no }} 题</i></span>
+        <GlassCard class="stage-card" :hover="false">
+          <template #badge>
+            <StageBadge :text="`第 ${index + 1} / ${queue.length} 题`" />
           </template>
-          <MistakeMeta v-else :mistake="current" />
-          <span v-if="current.days_since_wrong != null" class="count-tip">
-            错于 {{ current.days_since_wrong === 0 ? '今天' : current.days_since_wrong + ' 天前' }}
-          </span>
-          <span v-if="current.days_since_review != null" class="count-tip">
-            {{ current.days_since_review === 0 ? '今天复习过' : current.days_since_review + ' 天未复习' }}
-          </span>
-        </div>
-
-        <!-- 英语整篇：先给原文与参考译文，再做题 -->
-        <div v-if="current.passage_text" class="review-passage">
-          <div class="block-label">原文</div>
-          <div class="rp-text"><MathText :text="current.passage_text" /></div>
-          <details v-if="current.passage_translation" class="rp-trans">
-            <summary>查看全文翻译</summary>
-            <div class="rp-trans-text"><MathText :text="current.passage_translation" /></div>
-          </details>
-        </div>
-
-        <div class="question-block">
-          <QuestionImages :images="current.images" />
-          <MathText :text="current.question" />
-        </div>
-
-        <div v-if="current.difficulty_points" class="difficulty-block">
-          <span class="block-label">主要难点</span>
-          <MathText :text="current.difficulty_points" />
-        </div>
-
-        <!-- 模考：暂存作答，不即时判分 -->
-        <template v-if="isMock">
-          <p v-if="displayPassage" class="mock-passage"><MathText :text="displayPassage" /></p>
-          <p class="mock-note">模考模式：作答不立即判分，交卷后统一判分并计入复习记录。卷面仅含客观题（单选/多选/填空）。</p>
-          <div v-if="current.diagram_image" class="mock-diagram" @click="openDiagram(current.diagram_image)">
-            <img :src="current.diagram_image" alt="原卷图示（点击放大）" />
-            <span class="mock-diagram-hint">原卷图示 · 点击放大</span>
+          <div class="detail-meta">
+            <template v-if="current.paperQuestion">
+              <span class="count-tip"
+                >{{ paperTitle }}{{ current.section ? ' · ' + current.section : ''
+                }}<i v-if="current.no"> · 第 {{ current.no }} 题</i></span
+              >
+            </template>
+            <MistakeMeta v-else :mistake="current" />
+            <span v-if="current.days_since_wrong != null" class="count-tip">
+              错于
+              {{ current.days_since_wrong === 0 ? '今天' : current.days_since_wrong + ' 天前' }}
+            </span>
+            <span v-if="current.days_since_review != null" class="count-tip">
+              {{
+                current.days_since_review === 0
+                  ? '今天复习过'
+                  : current.days_since_review + ' 天未复习'
+              }}
+            </span>
           </div>
-          <template v-if="isChoice">
+
+          <!-- 英语整篇：先给原文与参考译文，再做题 -->
+          <div v-if="current.passage_text" class="review-passage">
+            <div class="block-label">原文</div>
+            <div class="rp-text"><MathText :text="current.passage_text" /></div>
+            <details v-if="current.passage_translation" class="rp-trans">
+              <summary>查看全文翻译</summary>
+              <div class="rp-trans-text"><MathText :text="current.passage_translation" /></div>
+            </details>
+          </div>
+
+          <div class="question-block">
+            <QuestionImages :images="current.images" />
+            <MathText :text="current.question" />
+          </div>
+
+          <div v-if="current.difficulty_points" class="difficulty-block">
+            <span class="block-label">主要难点</span>
+            <MathText :text="current.difficulty_points" />
+          </div>
+
+          <!-- 模考：暂存作答，不即时判分 -->
+          <template v-if="isMock">
+            <p v-if="displayPassage" class="mock-passage"><MathText :text="displayPassage" /></p>
+            <p class="mock-note">
+              模考模式：作答不立即判分，交卷后统一判分并计入复习记录。卷面仅含客观题（单选/多选/填空）。
+            </p>
             <div
-              v-for="opt in mockOptionList"
-              :key="opt.key"
-              class="option-row clickable"
-              :class="{ selected: mockPicked(opt.key) }"
-              @click="mockPick(opt.key)"
+              v-if="current.diagram_image"
+              class="mock-diagram"
+              @click="openDiagram(current.diagram_image)"
             >
-              <span class="option-key">{{ opt.key }}</span>
-              <MathText :text="opt.text || '（未填写）'" />
+              <img :src="current.diagram_image" alt="原卷图示（点击放大）" />
+              <span class="mock-diagram-hint">原卷图示 · 点击放大</span>
             </div>
-            <p v-if="current.question_type === 'multi'" class="multi-hint">多选题：少选、错选均不得分</p>
-          </template>
-          <textarea
-            v-else
-            v-model="mockAnswers[current.id]"
-            class="field-input"
-            rows="3"
-            placeholder="输入你的答案（交卷后按别名/数值容差统一判分）"
-          ></textarea>
-          <div class="review-footer">
-            <UiButton variant="outline" :disabled="index === 0" @click="index -= 1">上一题</UiButton>
-            <UiButton v-if="index < queue.length - 1" variant="primary" @click="index += 1">下一题</UiButton>
-            <UiButton variant="success" :loading="mockSubmitting" @click="submitMock(false)">
-              交卷（{{ Object.keys(mockAnswers).filter((k) => String(mockAnswers[k]).trim()).length }}/{{ queue.length }} 已答）
-            </UiButton>
-          </div>
-        </template>
-
-        <template v-else-if="isChoice">
-          <ChoiceAnswer
-            :current="current"
-            :selected="selected"
-            :answered="answered"
-            :submitting="submitting"
-            :review-saved="reviewSaved"
-            @select="selected = $event"
-            @confirm="confirmAnswer"
-            @next="next"
-          />
-        </template>
-
-        <template v-else-if="isTranslation">
-          <template v-if="!judgeResult">
+            <template v-if="isChoice">
+              <div
+                v-for="opt in mockOptionList"
+                :key="opt.key"
+                class="option-row clickable"
+                :class="{ selected: mockPicked(opt.key) }"
+                @click="mockPick(opt.key)"
+              >
+                <span class="option-key">{{ opt.key }}</span>
+                <MathText :text="opt.text || '（未填写）'" />
+              </div>
+              <p v-if="current.question_type === 'multi'" class="multi-hint">
+                多选题：少选、错选均不得分
+              </p>
+            </template>
             <textarea
-              v-model="userInput"
+              v-else
+              v-model="mockAnswers[current.id]"
               class="field-input"
-              rows="6"
-              placeholder="把整段译文写在这里，提交后对照参考译文自评"
+              rows="3"
+              placeholder="输入你的答案（交卷后按别名/数值容差统一判分）"
             ></textarea>
             <div class="review-footer">
-              <UiButton variant="primary" size="lg" @click="submitTranslation">
-                提交译文，对照参考
-              </UiButton>
-              <UiButton variant="outline" size="lg" @click="submitReview(true, true)">
-                这段我熟，直接过
+              <UiButton variant="outline" :disabled="index === 0" @click="index -= 1"
+                >上一题</UiButton
+              >
+              <UiButton v-if="index < queue.length - 1" variant="primary" @click="index += 1"
+                >下一题</UiButton
+              >
+              <UiButton variant="success" :loading="mockSubmitting" @click="submitMock(false)">
+                交卷（{{
+                  Object.keys(mockAnswers).filter((k) => String(mockAnswers[k]).trim()).length
+                }}/{{ queue.length }} 已答）
               </UiButton>
             </div>
           </template>
+
+          <template v-else-if="isChoice">
+            <ChoiceAnswer
+              :current="current"
+              :selected="selected"
+              :answered="answered"
+              :submitting="submitting"
+              :review-saved="reviewSaved"
+              @select="selected = $event"
+              @confirm="confirmAnswer"
+              @next="next"
+            />
+          </template>
+
+          <template v-else-if="isTranslation">
+            <template v-if="!judgeResult">
+              <textarea
+                v-model="userInput"
+                class="field-input"
+                rows="6"
+                placeholder="把整段译文写在这里，提交后对照参考译文自评"
+              ></textarea>
+              <div class="review-footer">
+                <UiButton variant="primary" size="lg" @click="submitTranslation">
+                  提交译文，对照参考
+                </UiButton>
+                <UiButton variant="outline" size="lg" @click="submitReview(true, true)">
+                  这段我熟，直接过
+                </UiButton>
+              </div>
+            </template>
+            <template v-else>
+              <div class="answer-block">
+                <div class="block-label">你的译文</div>
+                <p style="margin: 0; white-space: pre-wrap">{{ userInput }}</p>
+              </div>
+              <div class="analysis-block">
+                <div class="block-label">参考译文</div>
+                <MathText :text="current.correct_answer || '暂无参考译文'" />
+              </div>
+              <div v-if="current.analysis" class="difficulty-block">
+                <div class="block-label">笔记 / 讲解</div>
+                <MathText :text="current.analysis" />
+              </div>
+              <div class="review-footer">
+                <UiButton
+                  variant="success"
+                  size="lg"
+                  :loading="submitting"
+                  @click="submitReview(true, true)"
+                >
+                  译对了
+                </UiButton>
+                <UiButton
+                  variant="outline"
+                  size="lg"
+                  :loading="submitting"
+                  @click="submitReview(false, true)"
+                >
+                  没译好
+                </UiButton>
+              </div>
+            </template>
+          </template>
+
+          <template v-else-if="isFill">
+            <FillAnswer
+              v-model:user-input="userInput"
+              :current="current"
+              :judge-result="judgeResult"
+              :judging="judging"
+              :submitting="submitting"
+              :review-saved="reviewSaved"
+              @submit="submitFill"
+              @next="nextFill"
+              @mark="(result) => submitReview(result, true)"
+            />
+          </template>
+
+          <template v-else-if="isSolution">
+            <SolutionAnswer
+              v-model:user-input="userInput"
+              :current="current"
+              :grade-result="gradeResult"
+              :grading="grading"
+              :submitting="submitting"
+              :review-saved="reviewSaved"
+              @grade="submitSolution"
+              @mark="(result) => submitReview(result, true)"
+              @save-result="(result) => submitReview(result, true)"
+            />
+          </template>
+
           <template v-else>
-            <div class="answer-block">
-              <div class="block-label">你的译文</div>
-              <p style="margin: 0; white-space: pre-wrap">{{ userInput }}</p>
+            <p class="muted hint">先在心里作答，再点击按钮查看参考答案。</p>
+            <div v-if="revealed" class="answer-block">
+              <div class="block-label">参考答案</div>
+              <MathText :text="current.correct_answer || '暂无参考答案'" />
             </div>
-            <div class="analysis-block">
-              <div class="block-label">参考译文</div>
-              <MathText :text="current.correct_answer || '暂无参考译文'" />
-            </div>
-            <div v-if="current.analysis" class="difficulty-block">
-              <div class="block-label">笔记 / 讲解</div>
+            <div v-if="revealed && current.analysis" class="analysis-block">
+              <div class="block-label">解析</div>
               <MathText :text="current.analysis" />
             </div>
             <div class="review-footer">
-              <UiButton variant="success" size="lg" :loading="submitting" @click="submitReview(true, true)">
-                译对了
+              <UiButton v-if="!revealed" variant="primary" size="lg" @click="revealed = true">
+                显示参考答案
               </UiButton>
-              <UiButton variant="outline" size="lg" :loading="submitting" @click="submitReview(false, true)">
-                没译好
-              </UiButton>
+              <template v-else>
+                <UiButton
+                  variant="success"
+                  size="lg"
+                  :loading="submitting"
+                  @click="submitReview(true)"
+                >
+                  记住了
+                </UiButton>
+                <UiButton
+                  variant="outline"
+                  size="lg"
+                  :loading="submitting"
+                  @click="submitReview(false)"
+                >
+                  没记住
+                </UiButton>
+              </template>
             </div>
           </template>
-        </template>
 
-        <template v-else-if="isFill">
-          <FillAnswer
-            v-model:user-input="userInput"
-            :current="current"
-            :judge-result="judgeResult"
-            :judging="judging"
-            :submitting="submitting"
-            :review-saved="reviewSaved"
-            @submit="submitFill"
-            @next="nextFill"
-            @mark="(result) => submitReview(result, true)"
-          />
-        </template>
-
-        <template v-else-if="isSolution">
-          <SolutionAnswer
-            v-model:user-input="userInput"
-            :current="current"
-            :grade-result="gradeResult"
-            :grading="grading"
-            :submitting="submitting"
-            :review-saved="reviewSaved"
-            @grade="submitSolution"
-            @mark="(result) => submitReview(result, true)"
-            @save-result="(result) => submitReview(result, true)"
-          />
-        </template>
-
-        <template v-else>
-          <p class="muted hint">先在心里作答，再点击按钮查看参考答案。</p>
-          <div v-if="revealed" class="answer-block">
-            <div class="block-label">参考答案</div>
-            <MathText :text="current.correct_answer || '暂无参考答案'" />
-          </div>
-          <div v-if="revealed && current.analysis" class="analysis-block">
-            <div class="block-label">解析</div>
-            <MathText :text="current.analysis" />
-          </div>
-          <div class="review-footer">
-            <UiButton
-              v-if="!revealed"
-              variant="primary"
-              size="lg"
-              @click="revealed = true"
+          <div class="kbd-hints">
+            <template v-if="isMock"
+              ><span><kbd>1-4</kbd> 作答</span><span><kbd>↵</kbd> 下一题 / 末题交卷</span></template
             >
-              显示参考答案
-            </UiButton>
-            <template v-else>
-              <UiButton variant="success" size="lg" :loading="submitting" @click="submitReview(true)">
-                记住了
-              </UiButton>
-              <UiButton variant="outline" size="lg" :loading="submitting" @click="submitReview(false)">
-                没记住
-              </UiButton>
-            </template>
+            <template v-else-if="isMulti && !answered"
+              ><span><kbd>1-4</kbd> 勾选/取消</span><span><kbd>↵</kbd> 提交</span></template
+            >
+            <template v-else-if="isChoice && !answered"
+              ><span><kbd>1-4</kbd>/<kbd>A-D</kbd> 选选项</span
+              ><span><kbd>↵</kbd> 确认</span></template
+            >
+            <template v-else-if="isChoice && reviewSaved"
+              ><span><kbd>↵</kbd> 下一题</span></template
+            >
+            <template v-else-if="isTranslation && judgeResult"
+              ><span><kbd>↵</kbd>/<kbd>Q</kbd> 译对了</span
+              ><span><kbd>W</kbd> 没译好</span></template
+            >
+            <template v-else-if="isTranslation"
+              ><span><kbd>Ctrl+↵</kbd> 提交译文</span></template
+            >
+            <template v-else-if="isFill && judgeResult"
+              ><span><kbd>↵</kbd> 下一题</span
+              ><span><kbd>Q</kbd>/<kbd>W</kbd> 记住/没记住</span></template
+            >
+            <template v-else-if="isSolution && gradeResult"
+              ><span><kbd>↵</kbd> 按分数保存</span></template
+            >
+            <template v-else-if="!isChoice && !isFill && !isSolution && !isTranslation"
+              ><span><kbd>空格</kbd> 显示答案</span
+              ><span><kbd>Q</kbd>/<kbd>W</kbd> 记住/没记住</span></template
+            >
+            <template v-else-if="isFill || isSolution"
+              ><span><kbd>Ctrl+↵</kbd> 提交作答</span></template
+            >
           </div>
-        </template>
-
-        <div class="kbd-hints">
-          <template v-if="isMock"><span><kbd>1-4</kbd> 作答</span><span><kbd>↵</kbd> 下一题 / 末题交卷</span></template>
-          <template v-else-if="isMulti && !answered"><span><kbd>1-4</kbd> 勾选/取消</span><span><kbd>↵</kbd> 提交</span></template>
-          <template v-else-if="isChoice && !answered"><span><kbd>1-4</kbd>/<kbd>A-D</kbd> 选选项</span><span><kbd>↵</kbd> 确认</span></template>
-          <template v-else-if="isChoice && reviewSaved"><span><kbd>↵</kbd> 下一题</span></template>
-          <template v-else-if="isTranslation && judgeResult"><span><kbd>↵</kbd>/<kbd>Q</kbd> 译对了</span><span><kbd>W</kbd> 没译好</span></template>
-          <template v-else-if="isTranslation"><span><kbd>Ctrl+↵</kbd> 提交译文</span></template>
-          <template v-else-if="isFill && judgeResult"><span><kbd>↵</kbd> 下一题</span><span><kbd>Q</kbd>/<kbd>W</kbd> 记住/没记住</span></template>
-          <template v-else-if="isSolution && gradeResult"><span><kbd>↵</kbd> 按分数保存</span></template>
-          <template v-else-if="!isChoice && !isFill && !isSolution && !isTranslation"><span><kbd>空格</kbd> 显示答案</span><span><kbd>Q</kbd>/<kbd>W</kbd> 记住/没记住</span></template>
-          <template v-else-if="isFill || isSolution"><span><kbd>Ctrl+↵</kbd> 提交作答</span></template>
-        </div>
-      </GlassCard>
+        </GlassCard>
       </div>
     </template>
 
@@ -901,7 +975,9 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.remaining { align-self: center; }
+.remaining {
+  align-self: center;
+}
 
 /* ---------- 沉浸舞台 ---------- */
 .stage-wrap {
@@ -925,8 +1001,14 @@ onUnmounted(() => {
   animation: numeral-in 0.65s var(--ease) both;
 }
 @keyframes numeral-in {
-  from { opacity: 0; transform: translateY(26px) rotate(5deg) scale(0.9); }
-  to { opacity: 0.055; transform: translateY(0) rotate(0deg) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(26px) rotate(5deg) scale(0.9);
+  }
+  to {
+    opacity: 0.055;
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
 }
 
 .top-progress {
@@ -947,11 +1029,22 @@ onUnmounted(() => {
   animation: tp-flow 3s linear infinite;
   transition: width 0.7s var(--spring);
 }
-@keyframes tp-flow { to { background-position: 200% 0; } }
+@keyframes tp-flow {
+  to {
+    background-position: 200% 0;
+  }
+}
 
-.stage-card { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; }
+.stage-card {
+  position: relative;
+  z-index: 1;
+  max-width: 860px;
+  margin: 0 auto;
+}
 
-.hint { margin: 10px 0; }
+.hint {
+  margin: 10px 0;
+}
 
 .review-passage {
   margin-bottom: 16px;
@@ -960,11 +1053,31 @@ onUnmounted(() => {
   border-radius: var(--r-md);
   background: var(--surface-2);
 }
-.review-passage .block-label { margin-bottom: 6px; }
-.rp-text { white-space: pre-wrap; line-height: 1.9; font-size: 14px; color: var(--ink); }
-.rp-trans { margin-top: 10px; }
-.rp-trans summary { cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--teal); }
-.rp-trans-text { margin-top: 6px; white-space: pre-wrap; line-height: 1.8; font-size: 12.5px; color: var(--ink-2); }
+.review-passage .block-label {
+  margin-bottom: 6px;
+}
+.rp-text {
+  white-space: pre-wrap;
+  line-height: 1.9;
+  font-size: 14px;
+  color: var(--ink);
+}
+.rp-trans {
+  margin-top: 10px;
+}
+.rp-trans summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--teal);
+}
+.rp-trans-text {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  line-height: 1.8;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
 
 .kbd-hints {
   display: flex;
@@ -1004,8 +1117,14 @@ onUnmounted(() => {
   animation: done-in 0.5s var(--spring) both;
 }
 @keyframes done-in {
-  from { opacity: 0; transform: translateY(22px) scale(0.94); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 /* 落章：从空中盖章 + 回弹 */
 .stamp {
@@ -1020,24 +1139,54 @@ onUnmounted(() => {
   font-weight: 900;
   font-size: 32px;
   line-height: 1.25;
-  box-shadow: 0 10px 28px rgba(168, 51, 32, 0.4), inset 0 2px 0 rgba(255, 255, 255, 0.25);
-  animation: stamp-in 0.6s var(--spring) both, stamp-thud 0.3s var(--ease) 0.38s;
+  box-shadow:
+    0 10px 28px rgba(168, 51, 32, 0.4),
+    inset 0 2px 0 rgba(255, 255, 255, 0.25);
+  animation:
+    stamp-in 0.6s var(--spring) both,
+    stamp-thud 0.3s var(--ease) 0.38s;
   margin-bottom: 8px;
 }
 @keyframes stamp-in {
-  0% { transform: rotate(-6deg) scale(2.4); opacity: 0; }
-  60% { transform: rotate(-6deg) scale(0.94); opacity: 1; }
-  100% { transform: rotate(-6deg) scale(1); }
+  0% {
+    transform: rotate(-6deg) scale(2.4);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(-6deg) scale(0.94);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(-6deg) scale(1);
+  }
 }
 @keyframes stamp-thud {
-  0% { transform: rotate(-6deg) scale(1); }
-  40% { transform: rotate(-7deg) scale(1.05); }
-  100% { transform: rotate(-6deg) scale(1); }
+  0% {
+    transform: rotate(-6deg) scale(1);
+  }
+  40% {
+    transform: rotate(-7deg) scale(1.05);
+  }
+  100% {
+    transform: rotate(-6deg) scale(1);
+  }
 }
-.done-title { font-family: var(--font-display); font-size: 26px; font-weight: 900; margin: 0; }
-.done-sub { color: var(--ink-2); margin: 0; }
-.done-sub .ok { color: var(--green); }
-.done-sub .bad { color: var(--red); }
+.done-title {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 900;
+  margin: 0;
+}
+.done-sub {
+  color: var(--ink-2);
+  margin: 0;
+}
+.done-sub .ok {
+  color: var(--green);
+}
+.done-sub .bad {
+  color: var(--red);
+}
 .done-backlog {
   max-width: 480px;
   margin: 2px auto 0;
@@ -1045,9 +1194,19 @@ onUnmounted(() => {
   line-height: 1.7;
   color: var(--ink-3);
 }
-.done-backlog b { color: var(--accent-ink); }
-.count-tip.backlog { color: var(--gold); }
-.done-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+.done-backlog b {
+  color: var(--accent-ink);
+}
+.count-tip.backlog {
+  color: var(--gold);
+}
+.done-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 10px;
+}
 
 /* ---------- 真题模考 ---------- */
 .mock-timer {
@@ -1068,7 +1227,9 @@ onUnmounted(() => {
   animation: timer-blink 1s var(--ease) infinite;
 }
 @keyframes timer-blink {
-  50% { opacity: 0.55; }
+  50% {
+    opacity: 0.55;
+  }
 }
 .mock-note {
   margin: 0 0 12px;
@@ -1108,7 +1269,9 @@ onUnmounted(() => {
   max-height: 300px;
   overflow-y: auto;
 }
-.mock-report { padding-bottom: 26px; }
+.mock-report {
+  padding-bottom: 26px;
+}
 .mr-body {
   display: flex;
   align-items: center;
@@ -1117,12 +1280,37 @@ onUnmounted(() => {
   flex-wrap: wrap;
   padding: 8px 0 6px;
 }
-.mr-stats { display: flex; flex-direction: column; gap: 10px; min-width: 220px; }
-.mr-line { display: flex; align-items: baseline; gap: 10px; font-size: 13.5px; color: var(--ink-2); }
-.mr-line b { font-family: var(--font-display); font-size: 17px; font-weight: 900; color: var(--ink); }
-.mr-line span { width: 42px; flex: none; font-size: 12px; color: var(--ink-3); }
-.mr-ok { color: var(--green); }
-.mr-bad { color: var(--red); }
+.mr-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+.mr-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.mr-line b {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--ink);
+}
+.mr-line span {
+  width: 42px;
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.mr-ok {
+  color: var(--green);
+}
+.mr-bad {
+  color: var(--red);
+}
 .mr-overtime {
   font-style: normal;
   font-size: 11.5px;
@@ -1131,17 +1319,43 @@ onUnmounted(() => {
   padding: 2px 9px;
   border-radius: 999px;
 }
-.mr-overtime.saved { color: var(--green); background: var(--green-soft); }
+.mr-overtime.saved {
+  color: var(--green);
+  background: var(--green-soft);
+}
 .mr-note {
   margin: 4px 0 0;
   font-size: 12px;
   line-height: 1.8;
   color: var(--ink-3);
 }
-.mr-wrong { margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--line); }
-.mr-item { padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); margin-bottom: 8px; }
-.mr-q { margin: 0 0 5px; font-size: 13px; line-height: 1.7; color: var(--ink); }
-.mr-ans { margin: 0; font-size: 12.5px; color: var(--ink-2); }
-.mr-ans b { font-weight: 800; }
-.mr-sep { margin: 0 6px; color: var(--ink-3); }
+.mr-wrong {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+.mr-item {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  margin-bottom: 8px;
+}
+.mr-q {
+  margin: 0 0 5px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+.mr-ans {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.mr-ans b {
+  font-weight: 800;
+}
+.mr-sep {
+  margin: 0 6px;
+  color: var(--ink-3);
+}
 </style>

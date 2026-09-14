@@ -64,7 +64,11 @@ function spawnRipple(event) {
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s,
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s,
     transform 0.09s cubic-bezier(0.22, 0.8, 0.36, 1);
   user-select: none;
 }
@@ -81,7 +85,11 @@ function spawnRipple(event) {
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
-  background: radial-gradient(circle, color-mix(in srgb, currentColor 32%, transparent) 0%, transparent 62%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, currentColor 32%, transparent) 0%,
+    transparent 62%
+  );
   transform: scale(0);
   animation: ripple-run 0.62s cubic-bezier(0.22, 0.8, 0.36, 1) forwards;
 }
@@ -99,26 +107,50 @@ function spawnRipple(event) {
   gap: 7px;
 }
 
-.btn-md { height: 36px; padding: 0 14px; }
-.btn-sm { height: 30px; padding: 0 10px; font-size: 12.5px; border-radius: 8px; }
-.btn-lg { height: 44px; padding: 0 20px; font-size: 14.5px; border-radius: 12px; }
-.btn-block { width: 100%; }
+.btn-md {
+  height: 36px;
+  padding: 0 14px;
+}
+.btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  border-radius: 8px;
+}
+.btn-lg {
+  height: 44px;
+  padding: 0 20px;
+  font-size: 14.5px;
+  border-radius: 12px;
+}
+.btn-block {
+  width: 100%;
+}
 
 .btn-primary {
   background: linear-gradient(145deg, var(--accent), var(--accent-hover));
   color: #fff;
   font-weight: 700;
   letter-spacing: 0.04em;
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--accent-hover) 36%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  transition: transform 0.25s var(--spring), box-shadow 0.25s var(--ease), filter 0.2s var(--ease);
+  box-shadow:
+    0 2px 6px color-mix(in srgb, var(--accent-hover) 36%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition:
+    transform 0.25s var(--spring),
+    box-shadow 0.25s var(--ease),
+    filter 0.2s var(--ease);
   will-change: transform;
 }
 .btn-primary:hover:not(:disabled) {
   background: linear-gradient(145deg, var(--accent), var(--accent-hover));
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-hover) 46%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 8px 20px color-mix(in srgb, var(--accent-hover) 46%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
-.btn-primary:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
 
 .btn-outline {
   background: var(--surface);
@@ -146,7 +178,9 @@ function spawnRipple(event) {
   color: var(--ink);
   border-color: var(--line);
 }
-.btn-subtle:hover:not(:disabled) { border-color: var(--line-strong); }
+.btn-subtle:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
 
 .btn-danger {
   background: transparent;
@@ -162,7 +196,9 @@ function spawnRipple(event) {
   background: var(--green);
   color: #fff;
 }
-.btn-success:hover:not(:disabled) { filter: brightness(1.06); }
+.btn-success:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
 
 .btn-spinner {
   position: relative;
@@ -175,6 +211,8 @@ function spawnRipple(event) {
   animation: spin 0.7s linear infinite;
 }
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

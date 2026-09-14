@@ -22,9 +22,7 @@ const showList = computed(() => {
   return list
 })
 
-const previewList = computed(() =>
-  (props.images || []).map((item) => imageSrc(item)),
-)
+const previewList = computed(() => (props.images || []).map((item) => imageSrc(item)))
 
 function openPreview(index) {
   viewerIndex.value = index
@@ -92,17 +90,40 @@ function onThumbError(item, event) {
       :title="'点击放大（' + (index + 1) + '/' + previewList.length + '）'"
       @click="openPreview(images.indexOf(img))"
     >
-      <img :src="displaySrc(img)" alt="题干配图" loading="lazy" @error="onThumbError(img, $event)" />
+      <img
+        :src="displaySrc(img)"
+        alt="题干配图"
+        loading="lazy"
+        @error="onThumbError(img, $event)"
+      />
     </figure>
 
     <Teleport to="body">
       <Transition name="lightbox">
         <div v-if="viewerVisible" class="lightbox" @click.self="closePreview">
-          <button class="lb-close" aria-label="关闭" @click="closePreview"><Icon name="x" :size="18" /></button>
-          <button v-if="previewList.length > 1" class="lb-nav lb-prev" aria-label="上一张" @click.stop="step(-1)"><Icon name="chevron-left" :size="20" /></button>
+          <button class="lb-close" aria-label="关闭" @click="closePreview">
+            <Icon name="x" :size="18" />
+          </button>
+          <button
+            v-if="previewList.length > 1"
+            class="lb-nav lb-prev"
+            aria-label="上一张"
+            @click.stop="step(-1)"
+          >
+            <Icon name="chevron-left" :size="20" />
+          </button>
           <img :src="previewList[viewerIndex]" alt="预览" class="lb-img" @click.stop />
-          <button v-if="previewList.length > 1" class="lb-nav lb-next" aria-label="下一张" @click.stop="step(1)"><Icon name="chevron-right" :size="20" /></button>
-          <div v-if="previewList.length > 1" class="lb-count">{{ viewerIndex + 1 }} / {{ previewList.length }}</div>
+          <button
+            v-if="previewList.length > 1"
+            class="lb-nav lb-next"
+            aria-label="下一张"
+            @click.stop="step(1)"
+          >
+            <Icon name="chevron-right" :size="20" />
+          </button>
+          <div v-if="previewList.length > 1" class="lb-count">
+            {{ viewerIndex + 1 }} / {{ previewList.length }}
+          </div>
         </div>
       </Transition>
     </Teleport>
@@ -123,7 +144,9 @@ function onThumbError(item, event) {
   border-radius: 8px;
   background: var(--surface);
   cursor: zoom-in;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .question-image:hover {
   border-color: var(--accent);
@@ -153,7 +176,8 @@ function onThumbError(item, event) {
   border-radius: 10px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
 }
-.lb-close, .lb-nav {
+.lb-close,
+.lb-nav {
   position: absolute;
   display: inline-flex;
   align-items: center;
@@ -167,10 +191,24 @@ function onThumbError(item, event) {
   cursor: pointer;
   transition: background 0.15s;
 }
-.lb-close:hover, .lb-nav:hover { background: rgba(255, 255, 255, 0.24); }
-.lb-close { top: 20px; right: 20px; }
-.lb-prev { left: 20px; top: 50%; transform: translateY(-50%); }
-.lb-next { right: 20px; top: 50%; transform: translateY(-50%); }
+.lb-close:hover,
+.lb-nav:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+.lb-close {
+  top: 20px;
+  right: 20px;
+}
+.lb-prev {
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.lb-next {
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+}
 .lb-count {
   position: absolute;
   bottom: 22px;
@@ -180,6 +218,12 @@ function onThumbError(item, event) {
   font-size: 12.5px;
   letter-spacing: 0.08em;
 }
-.lightbox-enter-active, .lightbox-leave-active { transition: opacity 0.18s; }
-.lightbox-enter-from, .lightbox-leave-to { opacity: 0; }
+.lightbox-enter-active,
+.lightbox-leave-active {
+  transition: opacity 0.18s;
+}
+.lightbox-enter-from,
+.lightbox-leave-to {
+  opacity: 0;
+}
 </style>

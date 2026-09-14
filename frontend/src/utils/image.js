@@ -30,9 +30,7 @@ export function compressImageFile(file) {
           canvas.height = Math.max(1, Math.round(img.height * scale))
           canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
           const isPng = (file.type || '').includes('png')
-          const out = isPng
-            ? canvas.toDataURL('image/png')
-            : canvas.toDataURL('image/jpeg', 0.9)
+          const out = isPng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', 0.9)
           resolve({ dataUrl: out, file })
         } catch (err) {
           // 压缩失败（如跨域/内存不足）时退回原图，不阻塞录入
