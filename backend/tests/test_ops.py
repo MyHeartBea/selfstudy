@@ -41,7 +41,9 @@ class SnapshotTest(unittest.TestCase):
         import tempfile
         from pathlib import Path
 
-        self.tmp = tempfile.TemporaryDirectory(dir=r"D:\temp" if os.path.isdir(r"D:\temp") else None)
+        self.tmp = tempfile.TemporaryDirectory(
+            dir=r"D:\temp" if os.path.isdir(r"D:\temp") else None
+        )
         self.db_path = Path(self.tmp.name) / "kaoyan_mistakes.db"
         self.backup_dir = Path(self.tmp.name) / "backups"
         conn = sqlite3.connect(self.db_path)
@@ -56,9 +58,11 @@ class SnapshotTest(unittest.TestCase):
     def test_snapshot_creates_restorable_copy(self):
         from app import database
 
-        with patch.object(database.settings, "DB_PATH", self.db_path), patch.object(
-            database.settings, "BACKUP_DIR", self.backup_dir
-        ), patch.object(database.settings, "MAX_BACKUPS", 20):
+        with (
+            patch.object(database.settings, "DB_PATH", self.db_path),
+            patch.object(database.settings, "BACKUP_DIR", self.backup_dir),
+            patch.object(database.settings, "MAX_BACKUPS", 20),
+        ):
             name = database.snapshot_database("before-import-3")
             self.assertTrue(name and name.endswith(".db"))
             self.assertIn("before-import-3", name)
@@ -76,8 +80,9 @@ class SnapshotTest(unittest.TestCase):
             self.assertGreater(listed[0]["size_kb"], 0)
 
     def test_snapshot_missing_db_returns_none(self):
-        from app import database
         from pathlib import Path
+
+        from app import database
 
         with patch.object(database.settings, "DB_PATH", Path(self.tmp.name) / "nope.db"):
             self.assertIsNone(database.snapshot_database("x"))
@@ -85,9 +90,11 @@ class SnapshotTest(unittest.TestCase):
     def test_snapshot_keeps_recent_and_prunes_old(self):
         from app import database
 
-        with patch.object(database.settings, "DB_PATH", self.db_path), patch.object(
-            database.settings, "BACKUP_DIR", self.backup_dir
-        ), patch.object(database.settings, "MAX_BACKUPS", 3):
+        with (
+            patch.object(database.settings, "DB_PATH", self.db_path),
+            patch.object(database.settings, "BACKUP_DIR", self.backup_dir),
+            patch.object(database.settings, "MAX_BACKUPS", 3),
+        ):
             for i in range(6):
                 database.snapshot_database(f"n{i}")
             files = list(self.backup_dir.glob("kaoyan_mistakes_*.db"))

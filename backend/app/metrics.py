@@ -6,8 +6,7 @@
 
 import threading
 import time
-from collections import Counter, deque
-from typing import Optional
+from collections import deque
 
 from app.config import settings
 

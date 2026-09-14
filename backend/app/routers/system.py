@@ -8,7 +8,7 @@ from fastapi import APIRouter, Query
 from app import metrics
 from app.config import settings
 from app.database import get_connection, list_snapshots, snapshot_database
-from app.responses import ok, server_error
+from app.responses import error, ok, server_error
 from app.services import review_service, stats_service
 
 router = APIRouter(prefix="/api", tags=["系统"])

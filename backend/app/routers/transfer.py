@@ -61,16 +61,13 @@ def export_data():
             item["images"] = _export_images(item.get("images"))
             mistakes.append(item)
         knowledge = [
-            dict(row)
-            for row in conn.execute("SELECT * FROM knowledge_base ORDER BY id").fetchall()
+            dict(row) for row in conn.execute("SELECT * FROM knowledge_base ORDER BY id").fetchall()
         ]
         subjects = [
-            dict(row)
-            for row in conn.execute("SELECT * FROM subjects ORDER BY id").fetchall()
+            dict(row) for row in conn.execute("SELECT * FROM subjects ORDER BY id").fetchall()
         ]
         sub_subjects = [
-            dict(row)
-            for row in conn.execute("SELECT * FROM sub_subjects ORDER BY id").fetchall()
+            dict(row) for row in conn.execute("SELECT * FROM sub_subjects ORDER BY id").fetchall()
         ]
         return ok(
             {
@@ -89,11 +86,7 @@ def export_data():
 
 def _anki_escape(text) -> str:
     """TSV 字段转义：HTML 转义 + 换行转 <br> + 制表符转空格（Anki 字段支持 HTML）。"""
-    return (
-        html.escape(str(text or ""), quote=False)
-        .replace("\n", "<br>")
-        .replace("\t", " ")
-    )
+    return html.escape(str(text or ""), quote=False).replace("\n", "<br>").replace("\t", " ")
 
 
 @router.get("/export/anki")
@@ -157,10 +150,7 @@ def import_mistakes(body: ImportPayload):
         created = 0
         failed = []
         # 预加载科目/二级科目集合，避免逐条 build_mistake_fields 时 N+1 查询
-        valid_subjects = {
-            row["id"]
-            for row in conn.execute("SELECT id FROM subjects").fetchall()
-        }
+        valid_subjects = {row["id"] for row in conn.execute("SELECT id FROM subjects").fetchall()}
         valid_sub_subjects = {
             (row["subject_id"], row["id"])
             for row in conn.execute("SELECT subject_id, id FROM sub_subjects").fetchall()
@@ -168,9 +158,7 @@ def import_mistakes(body: ImportPayload):
         with conn:
             for index, item in enumerate(body.mistakes):
                 payload = item.model_dump()
-                errors = _validate_mistake_payload(
-                    payload, valid_subjects, valid_sub_subjects
-                )
+                errors = _validate_mistake_payload(payload, valid_subjects, valid_sub_subjects)
                 if errors:
                     failed.append({"index": index, "error": "；".join(errors)})
                     continue
@@ -189,10 +177,7 @@ def import_mistakes(body: ImportPayload):
                 cur = conn.execute(
                     f"INSERT INTO mistakes ({', '.join(MISTAKE_COLUMNS)}) "
                     f"VALUES ({', '.join('?' for _ in MISTAKE_COLUMNS)})",
-                    tuple(
-                        mistake_field(fields, column)
-                        for column in MISTAKE_COLUMNS
-                    ),
+                    tuple(mistake_field(fields, column) for column in MISTAKE_COLUMNS),
                 )
                 sync_mistake_tags(conn, cur.lastrowid, fields["knowledge_tags"])
                 created += 1

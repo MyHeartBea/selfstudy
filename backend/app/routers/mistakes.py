@@ -6,7 +6,14 @@ from fastapi import APIRouter, Depends, Query
 
 from app.database import get_connection, mistake_to_dict, snapshot_database
 from app.responses import error, ok, server_error
-from app.schemas import BatchMistakeRequest, GradeRequest, JudgeRequest, MistakeCreate, MistakeUpdate, SourceTypeUpdate
+from app.schemas import (
+    BatchMistakeRequest,
+    GradeRequest,
+    JudgeRequest,
+    MistakeCreate,
+    MistakeUpdate,
+    SourceTypeUpdate,
+)
 from app.security import ai_rate_limit
 from app.services import ai_service, answer_service, mistake_service, review_service
 from app.services.ai_service import AiNotConfigured, AiRequestError
@@ -92,9 +99,7 @@ def list_mistake_reviews(mistake_id: int):
     """返回单道错题的复习记录，按时间倒序。"""
     conn = get_connection()
     try:
-        exists = conn.execute(
-            "SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)
-        ).fetchone()
+        exists = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
         if exists is None:
             return error(404, "错题不存在")
         return ok(review_service.get_review_history(conn, mistake_id))
@@ -109,9 +114,7 @@ def judge_mistake(mistake_id: int, body: JudgeRequest):
     """自动判断答案：选择题比对选项，填空题规范化比对。"""
     conn = get_connection()
     try:
-        row = conn.execute(
-            "SELECT * FROM mistakes WHERE id = ?", (mistake_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
         if row is None:
             return error(404, "错题不存在")
         mistake = mistake_to_dict(row)
@@ -133,9 +136,7 @@ def judge_mistake(mistake_id: int, body: JudgeRequest):
         if question_type == "multi":
             # 政治多选：全对才得分，与选项顺序无关（口径统一在 answer_service）
             return ok(
-                answer_service.judge_multi(
-                    body.user_answer, mistake.get("correct_answer") or ""
-                )
+                answer_service.judge_multi(body.user_answer, mistake.get("correct_answer") or "")
             )
         if question_type == "fill":
             result = answer_service.judge_fill(
@@ -156,9 +157,7 @@ def grade_mistake(mistake_id: int, body: GradeRequest):
     """AI 批改解答题：按过程给分并返回详细解析。"""
     conn = get_connection()
     try:
-        row = conn.execute(
-            "SELECT * FROM mistakes WHERE id = ?", (mistake_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
         if row is None:
             return error(404, "错题不存在")
         mistake = mistake_to_dict(row)
@@ -193,7 +192,9 @@ def grade_mistake(mistake_id: int, body: GradeRequest):
         grade["grade_id"] = cur.lastrowid
         return ok(grade, "AI 批改完成")
     except AiNotConfigured:
-        return error(400, "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL")
+        return error(
+            400, "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL"
+        )
     except AiRequestError as exc:
         return error(502, str(exc))
     except Exception as exc:
@@ -266,9 +267,7 @@ def pause_mistake(mistake_id: int):
     """暂停该错题的复习推送。"""
     conn = get_connection()
     try:
-        exists = conn.execute(
-            "SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)
-        ).fetchone()
+        exists = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
         if exists is None:
             return error(404, "错题不存在")
         conn.execute(
@@ -288,9 +287,7 @@ def resume_mistake(mistake_id: int):
     """恢复该错题的复习推送。"""
     conn = get_connection()
     try:
-        exists = conn.execute(
-            "SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)
-        ).fetchone()
+        exists = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
         if exists is None:
             return error(404, "错题不存在")
         conn.execute(
@@ -323,14 +320,11 @@ def update_source_type(mistake_id: int, body: SourceTypeUpdate):
         return error(400, source_issue)
     conn = get_connection()
     try:
-        exists = conn.execute(
-            "SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)
-        ).fetchone()
+        exists = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
         if exists is None:
             return error(404, "错题不存在")
         conn.execute(
-            "UPDATE mistakes SET source_type = ?, source_year = ?, source_name = ? "
-            "WHERE id = ?",
+            "UPDATE mistakes SET source_type = ?, source_year = ?, source_name = ? WHERE id = ?",
             (
                 source_type,
                 source_year,

@@ -1,6 +1,5 @@
 """AI 服务层：调用 OpenAI 兼容的 chat/completions 接口。"""
 
-import base64
 import http.client
 import json
 import logging
@@ -288,8 +287,7 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
     if standard_tags:
         prompt += (
             "\n以下是系统里已有的标准知识点标签，若适用请直接使用，"
-            "不要新增近似叫法："
-            + "、".join(standard_tags[:40])
+            "不要新增近似叫法：" + "、".join(standard_tags[:40])
         )
     return prompt
 
@@ -367,9 +365,7 @@ def _extract_json(content: str) -> dict:
                 return json.loads(repaired)
             except json.JSONDecodeError as exc:
                 last_error = exc
-    raise last_error if last_error is not None else json.JSONDecodeError(
-        "无效 JSON", content, 0
-    )
+    raise last_error if last_error is not None else json.JSONDecodeError("无效 JSON", content, 0)
 
 
 _MATH_RUN_RE = re.compile(
@@ -392,6 +388,7 @@ def _looks_like_math(content: str) -> bool:
 
 def _normalize_math_delimiters(text: str) -> str:
     """成对保留合法 $...$ / $$...$$，删除 AI 生成的孤立或错位 $。"""
+
     def at_line_start(index: int) -> bool:
         if index == 0:
             return True
@@ -419,11 +416,7 @@ def _normalize_math_delimiters(text: str) -> str:
                 display_chars = []
             elif inline_open:
                 content = "".join(inline_chars)
-                out.append(
-                    "$" + content + "$"
-                    if _looks_like_math(content)
-                    else content
-                )
+                out.append("$" + content + "$" if _looks_like_math(content) else content)
                 inline_open = False
                 inline_chars = []
                 continue
@@ -437,11 +430,7 @@ def _normalize_math_delimiters(text: str) -> str:
                     display_open = True
                 else:
                     content = content.replace("$", "")
-                    out.append(
-                        "$" + content + "$"
-                        if _looks_like_math(content)
-                        else content
-                    )
+                    out.append("$" + content + "$" if _looks_like_math(content) else content)
                     index = next_display + 2
                     continue
             index += 2
@@ -455,11 +444,7 @@ def _normalize_math_delimiters(text: str) -> str:
                 inline_chars = []
             else:
                 content = "".join(inline_chars)
-                out.append(
-                    "$" + content + "$"
-                    if _looks_like_math(content)
-                    else content
-                )
+                out.append("$" + content + "$" if _looks_like_math(content) else content)
                 inline_open = False
                 inline_chars = []
             index += 1
@@ -553,8 +538,7 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
         question_type = "solution"
     else:
         has_options = any(
-            as_option(parsed.get(key))
-            for key in ("option_a", "option_b", "option_c", "option_d")
+            as_option(parsed.get(key)) for key in ("option_a", "option_b", "option_c", "option_d")
         )
         question_type = "choice" if has_options else "fill"
 
@@ -592,13 +576,7 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
     if source_type == "self":
         source_type = "other"
     if source_type not in ("real_exam", "mock", "other"):
-        source_type = (
-            "real_exam"
-            if "真题" in source
-            else "mock"
-            if "模拟" in source
-            else "other"
-        )
+        source_type = "real_exam" if "真题" in source else "mock" if "模拟" in source else "other"
     source_year = as_text(parsed.get("source_year"))
     if not source_year:
         year_match = re.search(r"(19|20)\d{2}", source)
@@ -704,9 +682,7 @@ def _clean_items(raw) -> List[dict]:
 
 def _strip_section_markers(text: str) -> str:
     """去掉识图阶段留下的【原文】/【题目】小标题行，避免存进数据库。"""
-    lines = [
-        ln for ln in str(text or "").split("\n") if not _SECTION_MARK_RE.match(ln.strip())
-    ]
+    lines = [ln for ln in str(text or "").split("\n") if not _SECTION_MARK_RE.match(ln.strip())]
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
@@ -882,9 +858,9 @@ def _parse_english_questions_prompt(standard_tags: List[str] | None = None) -> s
         '"option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...", '
         '"correct_answer": "选择题填 A/B/C/D，其他填参考答案文本", '
         '"analysis": "解析：用【定位】【来源】【思路】【总结】四段。'
-        '【定位】要指明原文具体句（如“第二段第二句”）并引用关键词，禁止只写“全文”；'
-        '【来源】写明哪年真题/哪篇哪题；'
-        '【思路】用通顺自然语言详细讲清推理与排除过程（可自然分段或“第一/第二”，但不要用 1.1/1.2 编号）；'
+        "【定位】要指明原文具体句（如“第二段第二句”）并引用关键词，禁止只写“全文”；"
+        "【来源】写明哪年真题/哪篇哪题；"
+        "【思路】用通顺自然语言详细讲清推理与排除过程（可自然分段或“第一/第二”，但不要用 1.1/1.2 编号）；"
         '【总结】点明考点与易错点。", '
         '"difficulty": 1-5 的整数, "difficulty_points": "主要难点简析", '
         '"knowledge_tags": ["标签1", "标签2"], "approach": "解题思路", '
@@ -997,16 +973,19 @@ def analyze_english(
         try:
             titles = _chat_json(
                 [
-                    {"role": "system", "content": (
-                        "你是考研英语阅读助手。用户会给你【题目与选项】原文，请**逐题照抄**成严格 JSON（不要 Markdown）：\n"
-                        '{"questions": [{"question": "题干", "option_a": "...", "option_b": "...", '
-                        '"option_c": "...", "option_d": "...", "correct_answer": "单字母或参考答案文本"}]}\n'
-                        "**必须遵守**：\n"
-                        "1. question 与 option_* 要**原样照抄**用户给的文字，禁止改写、翻译、润色或自行编题；\n"
-                        "2. 用户给了几道题就输出几道，不要多也不要少；选项缺失就留空串；\n"
-                        "3. 只列题目与答案，不要写解析；选择题 correct_answer 只能填单个字母；\n"
-                        "4. 用户没给答案时，correct_answer 留空串，**不要猜**。"
-                    )},
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是考研英语阅读助手。用户会给你【题目与选项】原文，请**逐题照抄**成严格 JSON（不要 Markdown）：\n"
+                            '{"questions": [{"question": "题干", "option_a": "...", "option_b": "...", '
+                            '"option_c": "...", "option_d": "...", "correct_answer": "单字母或参考答案文本"}]}\n'
+                            "**必须遵守**：\n"
+                            "1. question 与 option_* 要**原样照抄**用户给的文字，禁止改写、翻译、润色或自行编题；\n"
+                            "2. 用户给了几道题就输出几道，不要多也不要少；选项缺失就留空串；\n"
+                            "3. 只列题目与答案，不要写解析；选择题 correct_answer 只能填单个字母；\n"
+                            "4. 用户没给答案时，correct_answer 留空串，**不要猜**。"
+                        ),
+                    },
                     {"role": "user", "content": user_req},
                 ],
                 max_tokens=2500,
@@ -1023,16 +1002,25 @@ def analyze_english(
     todo = [q for q in questions_items if isinstance(q, dict) and q.get("question")]
 
     def _qa_task(q: dict) -> dict:
-        opts = " ".join(str(q.get(k) or "") for k in ("option_a", "option_b", "option_c", "option_d"))
+        opts = " ".join(
+            str(q.get(k) or "") for k in ("option_a", "option_b", "option_c", "option_d")
+        )
         try:
             return _chat_json(
                 [
                     {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
-                    {"role": "user", "content": (
-                        "题目：" + str(q.get("question"))
-                        + "\n选项：" + opts + "\n答案：" + str(q.get("correct_answer") or "")
-                        + "\n\n请按 JSON 输出（仅这一题，含题干/选项/答案/解析/难度/标签）。"
-                    )},
+                    {
+                        "role": "user",
+                        "content": (
+                            "题目："
+                            + str(q.get("question"))
+                            + "\n选项："
+                            + opts
+                            + "\n答案："
+                            + str(q.get("correct_answer") or "")
+                            + "\n\n请按 JSON 输出（仅这一题，含题干/选项/答案/解析/难度/标签）。"
+                        ),
+                    },
                 ],
                 max_tokens=3000,
                 timeout=_remaining(),
@@ -1078,13 +1066,14 @@ def _analyze_standard_content(
     """对非英语内容用标准错题 prompt 分析（数学/408 等，含 1.1/1.2 详细分步、更细致）。"""
     prompt = _parse_prompt(standard_tags)
     if instruction and instruction.strip():
-        text = (f"{text}\n\n【补充要求】{instruction.strip()}" if text else instruction.strip())
+        text = f"{text}\n\n【补充要求】{instruction.strip()}" if text else instruction.strip()
     if images:
-        # 先看图提取文字（快、稳），再用文本做详细分析，避免超大视觉生成超时
+        # 先看图提取文字（快、稳），再用文本做详细分析，避免超大视觉生成超时。
+        # 提字失败时保留原 text（下面的 `or text` 已兜住，无需再自赋值）
         try:
             text = _vision_extract_text(images, instruction, timeout) or text
         except Exception:
-            text = text
+            pass
     messages = [
         {"role": "system", "content": prompt},
         {"role": "user", "content": text or "请分析这道题。"},
@@ -1182,14 +1171,17 @@ def ocr_image(
         # 给文本分析链至少预留一小段预算，避免视觉提取吃满整个超时
         vision_cap = max(10, whole - 60)
         # 视觉只做简单识图提字（小输出、快、稳）
-        text = _vision_extract_text(
-            images,
-            instruction,
-            max(1, min(limit, vision_cap, whole)),
-            model=model,
-            base_url=base_url,
-            api_key=api_key,
-        ) or ""
+        text = (
+            _vision_extract_text(
+                images,
+                instruction,
+                max(1, min(limit, vision_cap, whole)),
+                model=model,
+                base_url=base_url,
+                api_key=api_key,
+            )
+            or ""
+        )
     left = max(5, int(deadline - time.monotonic()))
     # 自动检测：英语→整篇精读；数学/408→标准详细解析
     return analyze_english(
@@ -1269,11 +1261,7 @@ def vision_extract_text_multi(
     total = len(cleaned)
     for start in range(0, total, VISION_BATCH_SIZE):
         batch = cleaned[start : start + VISION_BATCH_SIZE]
-        label = (
-            f"第{start + 1}张"
-            if len(batch) == 1
-            else f"第{start + 1}-{start + len(batch)}张"
-        )
+        label = f"第{start + 1}张" if len(batch) == 1 else f"第{start + 1}-{start + len(batch)}张"
         try:
             text = _vision_extract_text(
                 batch,

@@ -31,17 +31,17 @@ class BudgetHeadroomTest(unittest.TestCase):
             seen["payload"] = json.loads(request.data.decode())
             return _resp("ok")
 
-        with patch.object(ai_service, "_post_chat", side_effect=fake_post), \
-             patch.object(ai_service, "is_configured", return_value=True):
+        with (
+            patch.object(ai_service, "_post_chat", side_effect=fake_post),
+            patch.object(ai_service, "is_configured", return_value=True),
+        ):
             ai_service._chat([{"role": "user", "content": "x"}], **chat_kwargs)
         return seen["payload"]
 
     def test_chat_applies_headroom_to_max_tokens(self):
         """`_chat` 实际下发的 max_tokens 必须带上推理余量。"""
         payload = self._capture_payload(max_tokens=4000)
-        self.assertEqual(
-            payload["max_tokens"], int(4000 * ai_service._REASONING_TOKEN_HEADROOM)
-        )
+        self.assertEqual(payload["max_tokens"], int(4000 * ai_service._REASONING_TOKEN_HEADROOM))
 
     def test_no_max_tokens_means_provider_default(self):
         """不指定 max_tokens 时不要凭空塞一个上限。"""
@@ -69,8 +69,10 @@ class TruncationRetryTest(unittest.TestCase):
                 return _resp("", "length", reasoning=payload["max_tokens"] - 2)
             return _resp("完整正文", "stop", reasoning=10)
 
-        with patch.object(ai_service, "_post_chat", side_effect=fake_post), \
-             patch.object(ai_service, "is_configured", return_value=True):
+        with (
+            patch.object(ai_service, "_post_chat", side_effect=fake_post),
+            patch.object(ai_service, "is_configured", return_value=True),
+        ):
             text, meta = ai_service._chat(
                 [{"role": "user", "content": "x"}], max_tokens=4000, with_meta=True
             )
@@ -87,8 +89,10 @@ class TruncationRetryTest(unittest.TestCase):
             payload = json.loads(request.data.decode())
             return _resp("被截断的正文", "length", reasoning=payload["max_tokens"] - 2)
 
-        with patch.object(ai_service, "_post_chat", side_effect=fake_post), \
-             patch.object(ai_service, "is_configured", return_value=True):
+        with (
+            patch.object(ai_service, "_post_chat", side_effect=fake_post),
+            patch.object(ai_service, "is_configured", return_value=True),
+        ):
             text, meta = ai_service._chat(
                 [{"role": "user", "content": "x"}], max_tokens=1000, with_meta=True
             )
@@ -104,31 +108,38 @@ class TruncationRetryTest(unittest.TestCase):
             budgets.append(payload["max_tokens"])
             return _resp("", "length", reasoning=payload["max_tokens"])
 
-        with patch.object(ai_service, "_post_chat", side_effect=fake_post), \
-             patch.object(ai_service, "is_configured", return_value=True):
+        with (
+            patch.object(ai_service, "_post_chat", side_effect=fake_post),
+            patch.object(ai_service, "is_configured", return_value=True),
+        ):
             ai_service._chat([{"role": "user", "content": "x"}], max_tokens=40000)
 
         self.assertTrue(all(b <= ai_service.MAX_TOKENS_CEILING for b in budgets), budgets)
 
     def test_plain_text_by_default(self):
         """默认返回纯字符串，不破坏既有调用点。"""
-        with patch.object(ai_service, "_post_chat", side_effect=lambda *a: _resp("hi")), \
-             patch.object(ai_service, "is_configured", return_value=True):
+        with (
+            patch.object(ai_service, "_post_chat", side_effect=lambda *a: _resp("hi")),
+            patch.object(ai_service, "is_configured", return_value=True),
+        ):
             self.assertEqual(ai_service._chat([{"role": "user", "content": "x"}]), "hi")
 
 
 class ChatJsonTest(unittest.TestCase):
     def test_normal_path_returns_parsed_json(self):
-        with patch.object(ai_service, "_post_chat",
-                          side_effect=lambda *a: _resp('{"a": [1, 2]}')), \
-             patch.object(ai_service, "is_configured", return_value=True):
+        with (
+            patch.object(ai_service, "_post_chat", side_effect=lambda *a: _resp('{"a": [1, 2]}')),
+            patch.object(ai_service, "is_configured", return_value=True),
+        ):
             self.assertEqual(
                 ai_service._chat_json([{"role": "user", "content": "x"}]), {"a": [1, 2]}
             )
 
     def test_empty_without_length_fails_with_clear_message(self):
-        with patch.object(ai_service, "_post_chat", side_effect=lambda *a: _resp("", "stop")), \
-             patch.object(ai_service, "is_configured", return_value=True):
+        with (
+            patch.object(ai_service, "_post_chat", side_effect=lambda *a: _resp("", "stop")),
+            patch.object(ai_service, "is_configured", return_value=True),
+        ):
             with self.assertRaises(ai_service.AiRequestError) as ctx:
                 ai_service._chat_json([{"role": "user", "content": "x"}], attempts=2)
         self.assertIn("内容为空", str(ctx.exception))
@@ -161,10 +172,14 @@ class VisionExtractionTest(unittest.TestCase):
 
     def test_truncated_vision_result_is_logged(self):
         """识图被截断要打警告日志，便于发现"原文缺失"。"""
-        with patch.object(
-            ai_service, "_chat",
-            return_value=("残文", {"truncated": True, "finish_reason": "length"}),
-        ), patch.object(ai_service.logger, "warning") as warn:
+        with (
+            patch.object(
+                ai_service,
+                "_chat",
+                return_value=("残文", {"truncated": True, "finish_reason": "length"}),
+            ),
+            patch.object(ai_service.logger, "warning") as warn,
+        ):
             ai_service._vision_extract_text(["AAAA"])
         self.assertTrue(warn.called, "截断必须记日志")
 

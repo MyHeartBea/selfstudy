@@ -49,6 +49,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 @app.middleware("http")
 async def log_http_errors(request: Request, call_next):
     # 未捕获异常由 unhandled_exception_handler 统一记录并返回约定 JSON，这里只记录 5xx 响应
@@ -59,9 +60,7 @@ async def log_http_errors(request: Request, call_next):
     except Exception:
         duration_ms = (time.perf_counter() - started) * 1000
         metrics.record(request.method, request.url.path, 500, duration_ms)
-        logger.exception(
-            "请求异常：%s %s（%.0fms）", request.method, request.url.path, duration_ms
-        )
+        logger.exception("请求异常：%s %s（%.0fms）", request.method, request.url.path, duration_ms)
         raise
 
     duration_ms = (time.perf_counter() - started) * 1000
@@ -234,6 +233,7 @@ if settings.FRONTEND_DIST.is_dir():
             headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
         )
 else:
+
     @app.get("/")
     async def root():
         return {

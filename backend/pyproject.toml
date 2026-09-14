@@ -1,0 +1,30 @@
+# Ruff 配置：只抓「真问题」，不做风格大改，避免制造巨大 diff。
+# 目标：未定义名/未使用变量与导入/导入顺序/可变默认值/print 残留等，
+# 这些是本次真的抓到过 bug 的规则（例：system.py 用了未导入的 error）。
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+# 与 .gitignore 对齐：数据/真题/缓存不参与检查
+exclude = ["data", "真题", ".venv", "venv", "__pycache__"]
+
+[tool.ruff.lint]
+select = [
+    "F",    # pyflakes：未定义名、未使用导入/变量、f-string 问题
+    "I",    # isort：导入顺序
+    "B",    # bugbear：可变默认值、except 陷阱等
+    "T201", # print 残留（后端服务应走 logging）
+]
+ignore = [
+    # FastAPI 依赖注入惯用法：在参数默认值里调用 Query/Depends 是官方写法
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 脚本/入口允许 print
+"main.py" = ["T201"]
+"tests/*" = ["T201"]
+
+[tool.ruff.format]
+# 格式跟随主流：双引号、4 空格；不在本次批次里强制改格式
+quote-style = "double"
+indent-style = "space"

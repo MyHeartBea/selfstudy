@@ -13,6 +13,8 @@ import json
 import unittest
 from unittest.mock import patch
 
+from pydantic import ValidationError
+
 from app.schemas import AiOcrRequest
 from app.services import ai_service
 
@@ -22,8 +24,15 @@ def fake_chat_factory(calls, vision_texts=None):
     vision_iter = iter(vision_texts or [])
     vision_calls = []
 
-    def fake_chat(messages, model=None, base_url=None, api_key=None, max_tokens=None,
-                  timeout=None, with_meta=False):
+    def fake_chat(
+        messages,
+        model=None,
+        base_url=None,
+        api_key=None,
+        max_tokens=None,
+        timeout=None,
+        with_meta=False,
+    ):
         content = messages[0]["content"]
         if isinstance(content, list):
             # 视觉提文字：记录本次带了几张图
@@ -37,8 +46,7 @@ def fake_chat_factory(calls, vision_texts=None):
         else:
             # 文本整理（analyze_knowledge）
             text = (
-                '{"tag_name": "合并知识点", "summary": "合并后的摘要", '
-                '"related_tags": ["A", "B"]}'
+                '{"tag_name": "合并知识点", "summary": "合并后的摘要", "related_tags": ["A", "B"]}'
             )
         # _chat 在 with_meta=True 时返回 (content, meta)：识图提字会带这个参数，
         # 假实现必须照此返回，否则 unpack 失败（CI 上踩过）
@@ -118,7 +126,7 @@ class OcrRequestSchemaTest(unittest.TestCase):
         self.assertEqual(len(body.images), 3)
 
     def test_neither_image_rejected(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             AiOcrRequest()
 
 

@@ -69,9 +69,8 @@ def _pick_engine():
     for language in languages:
         if str(language.language_tag).lower().startswith("zh"):
             return OcrEngine.try_create_from_language(language)
-    return (
-        OcrEngine.try_create_from_user_profile_languages()
-        or OcrEngine.try_create_from_language(languages[0])
+    return OcrEngine.try_create_from_user_profile_languages() or OcrEngine.try_create_from_language(
+        languages[0]
     )
 
 

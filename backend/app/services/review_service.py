@@ -34,9 +34,9 @@ def _utc_to_local_datetime(value):
     """把数据库中的 UTC 时间转成本地时间，用于本地日期统计。"""
     text = str(value or "")[:19]
     try:
-        return datetime.strptime(text, "%Y-%m-%d %H:%M:%S").replace(
-            tzinfo=timezone.utc
-        ).astimezone()
+        return (
+            datetime.strptime(text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone()
+        )
     except ValueError:
         return None
 
@@ -66,9 +66,17 @@ def _expand_passage_items(data: List[dict]) -> List[dict]:
                 for q in chosen:
                     entry = dict(item)
                     for key in (
-                        "question", "question_type", "option_a", "option_b", "option_c",
-                        "option_d", "correct_answer", "analysis", "difficulty",
-                        "difficulty_points", "approach",
+                        "question",
+                        "question_type",
+                        "option_a",
+                        "option_b",
+                        "option_c",
+                        "option_d",
+                        "correct_answer",
+                        "analysis",
+                        "difficulty",
+                        "difficulty_points",
+                        "approach",
                     ):
                         if q.get(key) is not None:
                             entry[key] = q[key]
@@ -92,8 +100,7 @@ def _count_reviewed_today(conn: sqlite3.Connection) -> int:
     """今日已复习的条数（用于把每日配额算成"今天还能做多少"）。"""
     day_start_utc, day_end_utc = local_day_bounds_utc()
     row = conn.execute(
-        "SELECT COUNT(*) AS c FROM review_records "
-        "WHERE reviewed_at >= ? AND reviewed_at < ?",
+        "SELECT COUNT(*) AS c FROM review_records WHERE reviewed_at >= ? AND reviewed_at < ?",
         (day_start_utc, day_end_utc),
     ).fetchone()
     return int(row["c"] or 0)
@@ -164,7 +171,9 @@ def get_today_queue(
             (fetch,),
         ).fetchall()
 
-    items = _expand_passage_items([mistake_to_dict(row) for row in rows])[:budget] if budget > 0 else []
+    items = (
+        _expand_passage_items([mistake_to_dict(row) for row in rows])[:budget] if budget > 0 else []
+    )
     return {
         "items": items,
         "dueTotal": due_total,
@@ -242,9 +251,7 @@ def get_practice_mistakes(
         sql += " ORDER BY RANDOM() LIMIT ?"
         params.append(limit)
     elif mode == "wrong_time":
-        sql += (
-            " ORDER BY COALESCE(last_wrong_at, m.created_at) ASC, m.id LIMIT ?"
-        )
+        sql += " ORDER BY COALESCE(last_wrong_at, m.created_at) ASC, m.id LIMIT ?"
         params.append(limit)
     else:
         sql += (
@@ -312,9 +319,7 @@ def review_mistake(
 
     now = datetime.now(timezone.utc)
     now_text = now.strftime("%Y-%m-%d %H:%M:%S")
-    next_at = (now + timedelta(days=interval)).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    next_at = (now + timedelta(days=interval)).strftime("%Y-%m-%d %H:%M:%S")
 
     conn.execute(
         "UPDATE mistakes SET mastery_level = ?, review_count = ?, wrong_count = ?, "
@@ -414,8 +419,7 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
     ).fetchall()
     mastery_map = {row["mastery_level"]: row["count"] for row in mastery_rows}
     mastery_distribution = [
-        {"mastery": level, "count": mastery_map.get(level, 0)}
-        for level in range(6)
+        {"mastery": level, "count": mastery_map.get(level, 0)} for level in range(6)
     ]
 
     # 薄弱知识点：走 mistake_tag_map 索引联表聚合（该表由写入路径同步维护、
@@ -428,17 +432,18 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
         "GROUP BY t.tag ORDER BY wrong_count DESC LIMIT 10"
     ).fetchall()
     weakest_tags = [
-        {"tag_name": row["tag"], "wrong_count": row["wrong_count"], "mistake_count": row["mistake_count"]}
+        {
+            "tag_name": row["tag"],
+            "wrong_count": row["wrong_count"],
+            "mistake_count": row["mistake_count"],
+        }
         for row in weak_rows
     ]
 
     today_local = datetime.now().astimezone().date()
-    start_local = (
-        datetime.now()
-        .astimezone()
-        .replace(hour=0, minute=0, second=0, microsecond=0)
-        - timedelta(days=6)
-    )
+    start_local = datetime.now().astimezone().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) - timedelta(days=6)
     start_utc = start_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     day_map = {
         (today_local - timedelta(days=i)).isoformat(): {
@@ -466,8 +471,7 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
     # 各科目复习情况：两个独立聚合再合并，避免 subjects×mistakes×review_records 三表
     # join 把每道错题的每条复习记录放大成一行。
     subject_mistakes = conn.execute(
-        "SELECT subject_id, COUNT(*) AS mistake_count "
-        "FROM mistakes GROUP BY subject_id"
+        "SELECT subject_id, COUNT(*) AS mistake_count FROM mistakes GROUP BY subject_id"
     ).fetchall()
     mistake_map = {row["subject_id"]: row["mistake_count"] for row in subject_mistakes}
     subject_reviews = conn.execute(
@@ -478,9 +482,7 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
         "GROUP BY m.subject_id"
     ).fetchall()
     review_map = {row["subject_id"]: row for row in subject_reviews}
-    subject_names = conn.execute(
-        "SELECT id, name FROM subjects ORDER BY id"
-    ).fetchall()
+    subject_names = conn.execute("SELECT id, name FROM subjects ORDER BY id").fetchall()
     by_subject_rows = []
     for subject in subject_names:
         sid = subject["id"]
@@ -496,11 +498,7 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
                 "review_count": review_count,
                 "correct_count": correct_count,
                 "wrong_count": wrong_count,
-                "accuracy": (
-                    round(correct_count / review_count * 100, 1)
-                    if review_count
-                    else 0.0
-                ),
+                "accuracy": (round(correct_count / review_count * 100, 1) if review_count else 0.0),
             }
         )
 

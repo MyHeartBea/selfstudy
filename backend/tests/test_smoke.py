@@ -48,9 +48,7 @@ class TestSmoke(unittest.TestCase):
         self.assertEqual(parsed["option_a"], "")
         self.assertEqual(parsed["option_b"], "")
 
-        multi = normalize_parsed(
-            {"question_type": "choice", "correct_answer": "ABCD"}
-        )
+        multi = normalize_parsed({"question_type": "choice", "correct_answer": "ABCD"})
         self.assertEqual(multi["correct_answer"], "")
 
     def test_extract_json_tolerates_surrounding_text(self):
@@ -129,12 +127,8 @@ class TestSmoke(unittest.TestCase):
                     (f"q{index}", str(index)),
                 )
             conn.commit()
-            random_rows = review_service.get_practice_mistakes(
-                conn, mode="random", count=3
-            )
-            curve_rows = review_service.get_practice_mistakes(
-                conn, mode="curve", count=3
-            )
+            random_rows = review_service.get_practice_mistakes(conn, mode="random", count=3)
+            curve_rows = review_service.get_practice_mistakes(conn, mode="curve", count=3)
             self.assertEqual(len(random_rows), 3)
             self.assertEqual(len(curve_rows), 3)
         finally:

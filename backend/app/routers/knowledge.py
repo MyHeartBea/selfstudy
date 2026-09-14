@@ -162,9 +162,7 @@ def auto_summarize(knowledge_id: int):
     """根据关联错题自动生成并保存知识点总结。"""
     conn = get_connection()
     try:
-        row = conn.execute(
-            "SELECT * FROM knowledge_base WHERE id = ?", (knowledge_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM knowledge_base WHERE id = ?", (knowledge_id,)).fetchone()
         if row is None:
             return error(404, "知识点不存在")
         tag_name = row["tag_name"]
@@ -187,7 +185,9 @@ def auto_summarize(knowledge_id: int):
         ).fetchone()
         return ok(knowledge_service.knowledge_to_dict(updated), "知识点总结已生成")
     except AiNotConfigured:
-        return error(400, "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL")
+        return error(
+            400, "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL"
+        )
     except AiRequestError as exc:
         return error(502, str(exc))
     except Exception as exc:

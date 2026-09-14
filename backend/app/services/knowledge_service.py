@@ -61,9 +61,7 @@ def knowledge_to_dict(row) -> dict:
     """把知识点行转为字典，并把关联标签字符串还原为数组。"""
     data = dict(row)
     related = data.get("related_tags") or ""
-    data["related_tags"] = [
-        tag.strip() for tag in related.split(",") if tag.strip()
-    ]
+    data["related_tags"] = [tag.strip() for tag in related.split(",") if tag.strip()]
     return data
 
 
@@ -273,9 +271,7 @@ def update_knowledge(
     if row is None:
         return None
     if subject_id is not None:
-        exists = conn.execute(
-            "SELECT 1 FROM subjects WHERE id = ?", (subject_id,)
-        ).fetchone()
+        exists = conn.execute("SELECT 1 FROM subjects WHERE id = ?", (subject_id,)).fetchone()
         if exists is None:
             raise ValueError("所选科目不存在")
         if sub_subject_id is not None:
@@ -362,9 +358,7 @@ def create_knowledge(
             errors.append("科目参数无效")
             subject_id = None
         else:
-            exists = conn.execute(
-                "SELECT 1 FROM subjects WHERE id = ?", (subject_id,)
-            ).fetchone()
+            exists = conn.execute("SELECT 1 FROM subjects WHERE id = ?", (subject_id,)).fetchone()
             if exists is None:
                 errors.append("所选科目不存在")
 
@@ -405,7 +399,5 @@ def create_knowledge(
         (tag_name, subject_id, sub_subject_id, summary, ",".join(related)),
     )
     conn.commit()
-    row = conn.execute(
-        "SELECT * FROM knowledge_base WHERE id = ?", (cur.lastrowid,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM knowledge_base WHERE id = ?", (cur.lastrowid,)).fetchone()
     return knowledge_to_dict(row), []

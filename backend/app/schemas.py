@@ -67,15 +67,15 @@ class ImportPayload(BaseModel):
 
 
 class PaperCreate(BaseModel):
-    subject: str = ''
-    year: str = ''
-    title: str = ''
+    subject: str = ""
+    year: str = ""
+    title: str = ""
     source_path: str
-    answer_path: str = ''
+    answer_path: str = ""
 
 
 class MockCreate(BaseModel):
-    exam_year: str = ''
+    exam_year: str = ""
     total: int = 0
     correct: int = 0
     score: int = 0

@@ -30,9 +30,7 @@ def get_vocab_by_word(conn: sqlite3.Connection, word: str):
 
 
 def get_vocab(conn: sqlite3.Connection, vocab_id: int):
-    return conn.execute(
-        "SELECT * FROM vocab_items WHERE id = ?", (vocab_id,)
-    ).fetchone()
+    return conn.execute("SELECT * FROM vocab_items WHERE id = ?", (vocab_id,)).fetchone()
 
 
 def list_vocab(
@@ -48,9 +46,7 @@ def list_vocab(
     where = []
     params: List[object] = []
     if search:
-        where.append(
-            "(word LIKE ? OR meaning LIKE ? OR note LIKE ? OR example LIKE ?)"
-        )
+        where.append("(word LIKE ? OR meaning LIKE ? OR note LIKE ? OR example LIKE ?)")
         like = f"%{search}%"
         params.extend([like, like, like, like])
     if mastery is not None:
@@ -68,9 +64,7 @@ def list_vocab(
         "alpha": "word COLLATE NOCASE ASC",
     }.get(sort, "created_at DESC, id DESC")
 
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM vocab_items {where_sql}", params
-    ).fetchone()[0]
+    total = conn.execute(f"SELECT COUNT(*) FROM vocab_items {where_sql}", params).fetchone()[0]
 
     if page is not None:
         rows = conn.execute(
@@ -108,7 +102,15 @@ def create_vocab(
         INSERT INTO vocab_items (word, meaning, phonetic, example, note, source, kind)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (word.strip(), meaning.strip(), phonetic.strip(), example.strip(), note.strip(), source.strip(), kind),
+        (
+            word.strip(),
+            meaning.strip(),
+            phonetic.strip(),
+            example.strip(),
+            note.strip(),
+            source.strip(),
+            kind,
+        ),
     )
     conn.commit()
     return get_vocab_by_word(conn, word)
@@ -126,9 +128,7 @@ def update_vocab(conn: sqlite3.Connection, vocab_id: int, fields: dict) -> Optio
     if not sets:
         return get_vocab(conn, vocab_id)
     params.append(vocab_id)
-    conn.execute(
-        f"UPDATE vocab_items SET {', '.join(sets)} WHERE id = ?", params
-    )
+    conn.execute(f"UPDATE vocab_items SET {', '.join(sets)} WHERE id = ?", params)
     conn.commit()
     return get_vocab(conn, vocab_id)
 
@@ -233,9 +233,7 @@ def review_vocab(conn: sqlite3.Connection, vocab_id: int, result: str) -> Option
     return vocab_to_dict(get_vocab(conn, vocab_id))
 
 
-def import_vocab(
-    conn: sqlite3.Connection, lines: List[str], source: str = ""
-) -> dict:
+def import_vocab(conn: sqlite3.Connection, lines: List[str], source: str = "") -> dict:
     """批量导入生词：每行「单词 释义」或「单词,释义」或「单词 —— 释义」，返回成功/失败明细。"""
     created = 0
     updated = 0
@@ -245,9 +243,7 @@ def import_vocab(
         if not text:
             continue
         parts = (
-            re.split(r"\s*[-—=]+\s*|\t|\s{2,}|,\s*", text, maxsplit=1)
-            if len(text) > 1
-            else [text]
+            re.split(r"\s*[-—=]+\s*|\t|\s{2,}|,\s*", text, maxsplit=1) if len(text) > 1 else [text]
         )
         if len(parts) == 1:
             parts = text.split(maxsplit=1)
@@ -278,9 +274,7 @@ def _is_ascii_word(word: str) -> bool:
     return bool(word) and all(ch.isascii() or ch in "-'. " for ch in word)
 
 
-def import_english_words(
-    conn: sqlite3.Connection, items: List[dict], source: str = ""
-) -> dict:
+def import_english_words(conn: sqlite3.Connection, items: List[dict], source: str = "") -> dict:
     """英语精读选词批量入生词本：每项 {word, meaning, phonetic, example, note, source}。
 
     已有单词时仅在字段缺失时补充（不覆盖用户已填内容）。
@@ -320,9 +314,7 @@ def import_english_words(
                 params.append(note)
             if sets:
                 params.append(existing["id"])
-                conn.execute(
-                    f"UPDATE vocab_items SET {', '.join(sets)} WHERE id = ?", params
-                )
+                conn.execute(f"UPDATE vocab_items SET {', '.join(sets)} WHERE id = ?", params)
                 updated += 1
             continue
         conn.execute(

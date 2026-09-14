@@ -72,9 +72,7 @@ class Settings:
     AI_VISION_DS_MODEL = os.environ.get("AI_VISION_DS_MODEL", "deepseek-flash")
     AI_TIMEOUT = int(os.environ.get("AI_TIMEOUT", "240"))
     # 首选 DeepSeek Vision 通道可处理复杂试题图片，因此给予更长的单次预算。
-    AI_VISION_PRIMARY_TIMEOUT = int(
-        os.environ.get("AI_VISION_PRIMARY_TIMEOUT", "240")
-    )
+    AI_VISION_PRIMARY_TIMEOUT = int(os.environ.get("AI_VISION_PRIMARY_TIMEOUT", "240"))
     # 备用视觉通道保持较短超时，避免首选失败后拖慢整体回退。
     AI_VISION_TIMEOUT = int(os.environ.get("AI_VISION_TIMEOUT", "20"))
     # 图片识别整体预算：所有视觉通道 + 本地 OCR 前的总耗时上限，需高于前端 300s 之外的余量。

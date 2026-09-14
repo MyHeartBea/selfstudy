@@ -23,9 +23,7 @@ def scan_papers():
     try:
         existing = {
             (r["source_path"], r["year"])
-            for r in conn.execute(
-                "SELECT source_path, year FROM exam_papers"
-            ).fetchall()
+            for r in conn.execute("SELECT source_path, year FROM exam_papers").fetchall()
         }
     finally:
         conn.close()

@@ -10,7 +10,6 @@ import sqlite3
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from app.database import local_day_bounds_utc
 from app.models.tables import TABLES_DDL
 from app.services import review_service
 

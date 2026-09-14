@@ -4,11 +4,9 @@ import sqlite3
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from app.database import get_connection
 from app.models.tables import TABLES_DDL
 from app.routers import ai as ai_router
-from app.services import answer_service, mistake_service, review_service
-from app.services import ai_service
+from app.services import ai_service, answer_service, mistake_service, review_service
 
 
 def make_conn() -> sqlite3.Connection:
@@ -118,21 +116,16 @@ class TestReviewSchedule(unittest.TestCase):
 
     def test_fill_review_rejudges_with_user_answer(self):
         self.conn.execute(
-            "UPDATE mistakes SET question_type = 'fill', correct_answer = '3.14' "
-            "WHERE id = ?",
+            "UPDATE mistakes SET question_type = 'fill', correct_answer = '3.14' WHERE id = ?",
             (self.id,),
         )
         self.conn.commit()
-        updated = review_service.review_mistake(
-            self.conn, self.id, False, user_answer="3.140"
-        )
+        updated = review_service.review_mistake(self.conn, self.id, False, user_answer="3.140")
         self.assertGreater(updated["mastery_level"], 0)
         history = review_service.get_review_history(self.conn, self.id)
         self.assertIn("你的答案", history[0]["note"])
         # 错误答案应判为 wrong：间隔重置为 1 天
-        updated2 = review_service.review_mistake(
-            self.conn, self.id, True, user_answer="2.00"
-        )
+        updated2 = review_service.review_mistake(self.conn, self.id, True, user_answer="2.00")
         self.assertEqual(updated2["mastery_level"], 0)
 
 
@@ -144,12 +137,8 @@ class TestAnswerEdges(unittest.TestCase):
         self.assertFalse(answer_service.answers_match("1.01", "1", tolerance=1e-3))
 
     def test_aliases_and_normalization(self):
-        self.assertTrue(
-            answer_service.answers_match(" ３．１４ ", "3.14", aliases=["π", "3.14"])
-        )
-        self.assertTrue(
-            answer_service.answers_match("pi", "π", aliases=["π", "pi"])
-        )
+        self.assertTrue(answer_service.answers_match(" ３．１４ ", "3.14", aliases=["π", "3.14"]))
+        self.assertTrue(answer_service.answers_match("pi", "π", aliases=["π", "pi"]))
 
     def test_judge_fill_shape(self):
         result = answer_service.judge_fill("2", "2", aliases=["二"])
@@ -166,19 +155,11 @@ class TestSourceValidation(unittest.TestCase):
         self.assertEqual(mistake_service.validate_source_type("REAL_EXAM"), "real_exam")
         with self.assertRaises(ValueError):
             mistake_service.validate_source_type("unknown")
-        self.assertIsNotNone(
-            mistake_service.validate_source_requirements("real_exam", "", "")
-        )
+        self.assertIsNotNone(mistake_service.validate_source_requirements("real_exam", "", ""))
+        self.assertIsNone(mistake_service.validate_source_requirements("real_exam", "2025", ""))
+        self.assertIsNotNone(mistake_service.validate_source_requirements("mock", "2026", ""))
         self.assertIsNone(
-            mistake_service.validate_source_requirements("real_exam", "2025", "")
-        )
-        self.assertIsNotNone(
-            mistake_service.validate_source_requirements("mock", "2026", "")
-        )
-        self.assertIsNone(
-            mistake_service.validate_source_requirements(
-                "mock", "2026", "李林六套卷(一)"
-            )
+            mistake_service.validate_source_requirements("mock", "2026", "李林六套卷(一)")
         )
 
 
@@ -227,9 +208,7 @@ class TestCapturePrompt(unittest.TestCase):
         return calls
 
     def test_analyze_text_includes_instruction(self):
-        messages = self._capture_chat(
-            ai_service.analyze_text, "题目", instruction="按配方法求解"
-        )
+        messages = self._capture_chat(ai_service.analyze_text, "题目", instruction="按配方法求解")
         user = messages[1]["content"]
         self.assertIn("按配方法求解", user)
         self.assertIn("【补充要求】", user)
@@ -339,6 +318,7 @@ class TestPdfOcrFallback(unittest.TestCase):
 
     def test_pdf_text_usable_threshold(self):
         from app.services.exam_paper_service import _pdf_text_usable
+
         # 空/过少（扫描版常见）→ 不可用 → 触发 OCR 兜底
         self.assertFalse(_pdf_text_usable(""))
         self.assertFalse(_pdf_text_usable("   "))
@@ -348,12 +328,15 @@ class TestPdfOcrFallback(unittest.TestCase):
 
     def test_extract_pdf_unsupported_suffix_raises(self):
         from pathlib import Path
+
         from app.services.exam_paper_service import extract_text
+
         with self.assertRaises(ValueError):
             extract_text(Path("foo.txt"))
 
     def test_is_math_subject_for_vision_first(self):
         from app.services.exam_paper_service import _is_math
+
         # 公式密集卷 → 视觉优先（LaTeX）
         self.assertTrue(_is_math("数学二"))
         self.assertTrue(_is_math("计算机408"))
@@ -364,6 +347,7 @@ class TestPdfOcrFallback(unittest.TestCase):
 
     def test_pdf_text_usable_rejects_garbled(self):
         from app.services.exam_paper_service import _pdf_text_usable
+
         # 乱码（大量控制符/不可读，可读占比过低）→ 不可用 → 触发视觉/OCR 兜底
         self.assertFalse(_pdf_text_usable("\x00\x01\x02\x03" * 100))
         self.assertFalse(_pdf_text_usable("\x00" * 300 + "\x01\x02\x03" * 100))

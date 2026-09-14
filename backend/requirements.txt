@@ -15,6 +15,9 @@ Pillow>=10.0.0
 python-docx>=1.1.0
 pypdf>=4.0.0
 
-# 测试（pytest + TestClient）
-pytest>=8.0.0
+# 测试：用标准库 unittest（python -m unittest discover -s tests），不依赖第三方测试框架。
+# httpx 是 FastAPI TestClient 的依赖。
 httpx>=0.27.0
+
+# 可选开发工具（CI 只装上面这些；本地需要 lint/格式化/提交钩子时再装）：
+#   pip install ruff pre-commit

@@ -59,6 +59,7 @@ class ClassifyFileTest(unittest.TestCase):
         self.assertEqual(eps.classify_file("24考研政治选择题解析.pdf"), "answer_key")
         # 「真题…答案速查」是速查册（题面在另一份文件里）
         self.assertEqual(eps.classify_file("2011年数二真题答案速查.pdf"), "answer_key")
+
     def test_paper_with_answers_is_mixed(self):
         """`真题及参考答案` 同时含题目与答案 → 合卷（不是纯答案册）。"""
         self.assertEqual(eps.classify_file("2024年数学（二）真题及参考答案.pdf"), "mixed")

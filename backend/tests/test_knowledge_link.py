@@ -32,9 +32,7 @@ def add_mistake(conn, question: str, tags, wrong=0, mastery=0, review_count=0) -
     )
     mid = cur.lastrowid
     for t in tags:
-        conn.execute(
-            "INSERT INTO mistake_tag_map (mistake_id, tag) VALUES (?, ?)", (mid, t)
-        )
+        conn.execute("INSERT INTO mistake_tag_map (mistake_id, tag) VALUES (?, ?)", (mid, t))
     conn.commit()
     return mid
 
@@ -87,7 +85,14 @@ class KnowledgeLinkTest(unittest.TestCase):
         self.assertEqual(res["matched_by"], "none")
         self.assertEqual(res["total"], 0)
         self.assertEqual(res["items"], [])
-        for key in ("avg_mastery", "wrong_total", "review_total", "due_now", "never_reviewed", "shown"):
+        for key in (
+            "avg_mastery",
+            "wrong_total",
+            "review_total",
+            "due_now",
+            "never_reviewed",
+            "shown",
+        ):
             self.assertIn(key, res["stats"], f"stats 缺少 {key}")
 
     def test_empty_tag_is_safe(self):

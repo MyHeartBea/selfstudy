@@ -3,7 +3,7 @@
 from fastapi import APIRouter
 
 from app.database import get_connection
-from app.responses import error, ok, server_error
+from app.responses import ok, server_error
 from app.services import stats_service
 
 router = APIRouter(prefix="/api", tags=["统计"])

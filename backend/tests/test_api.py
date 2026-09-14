@@ -4,9 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
 from app.config import settings
 from app.main import app
-from fastapi.testclient import TestClient
 
 
 class TestApiSmoke(unittest.TestCase):
@@ -81,9 +82,7 @@ class TestApiSmoke(unittest.TestCase):
 
     def test_real_exam_practice_mode(self):
         self._create_mistake()
-        r = self.client.get(
-            "/api/reviews/practice", params={"mode": "real_exam", "count": 10}
-        )
+        r = self.client.get("/api/reviews/practice", params={"mode": "real_exam", "count": 10})
         self.assertEqual(r.status_code, 200)
         data = r.json()["data"]
         self.assertTrue(data)
@@ -208,9 +207,9 @@ class TestApiSmoke(unittest.TestCase):
         self.assertEqual(r2.json()["data"]["created"], 1)
 
         # 列表可按题干搜回，且列表项不含英语大 JSON 字段（瘦身契约）
-        found = self.client.get(
-            "/api/mistakes", params={"search": "往返测试", "page": 1}
-        ).json()["data"]["items"]
+        found = self.client.get("/api/mistakes", params={"search": "往返测试", "page": 1}).json()[
+            "data"
+        ]["items"]
         self.assertTrue(found)
         self.assertNotIn("english_questions", found[0])
         self.assertNotIn("english_sentences", found[0])

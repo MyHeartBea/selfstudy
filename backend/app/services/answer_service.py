@@ -4,7 +4,6 @@ import re
 import unicodedata
 from typing import List, Optional
 
-
 PUNCTUATION = set("，。；：、！？“”‘’（）()【】[]《》〈〉·…—")
 NUMERIC_RE = re.compile(r"^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$")
 # 多选题答案只取 A-D 字母；模块级预编译，避免每次判分重复编译

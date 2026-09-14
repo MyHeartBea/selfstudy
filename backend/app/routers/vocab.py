@@ -1,7 +1,7 @@
 """生词本接口：CRUD、到期队列、闪卡复习与批量导入。"""
 
 import sqlite3
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Query
 

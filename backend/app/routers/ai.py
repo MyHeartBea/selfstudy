@@ -2,9 +2,10 @@
 
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
-from fastapi import APIRouter, Depends, Query
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import List
+
+from fastapi import APIRouter, Depends, Query
 
 from app.config import settings
 from app.database import get_connection
@@ -54,6 +55,7 @@ def _auto_subject_ids(conn, hint: str):
             return subject_id, sub_id
     return None, None
 
+
 AI_NOT_CONFIGURED_MESSAGE = (
     "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL"
 )
@@ -62,11 +64,7 @@ AI_NOT_CONFIGURED_MESSAGE = (
 def _vision_timeout_for(model: str, budget: float) -> int:
     """为首选视觉模型保留足够时间，同时受全局请求预算约束。"""
     is_primary = model.strip().lower() == settings.AI_VISION_DS_MODEL.strip().lower()
-    limit = (
-        settings.AI_VISION_PRIMARY_TIMEOUT
-        if is_primary
-        else settings.AI_VISION_TIMEOUT
-    )
+    limit = settings.AI_VISION_PRIMARY_TIMEOUT if is_primary else settings.AI_VISION_TIMEOUT
     return max(1, min(limit, int(budget)))
 
 
@@ -195,9 +193,7 @@ def ocr_image(body: AiOcrRequest):
                     parsed["method"] = "local"
                     parsed["raw_text"] = text
                     reason = (
-                        f"（视觉模型失败：{last_vision_error[:120]}）"
-                        if last_vision_error
-                        else ""
+                        f"（视觉模型失败：{last_vision_error[:120]}）" if last_vision_error else ""
                     )
                     return ok(parsed, f"本地 OCR 识别完成{reason}")
             except Exception as exc:
@@ -264,9 +260,7 @@ def english_analysis(body: AiEnglishRequest):
                 instruction=body.instruction,
                 timeout=max(5, int(min(settings.AI_TIMEOUT, budget))),
                 vision_timeout=(
-                    _vision_timeout_for(vision_model, budget)
-                    if vision_model
-                    else None
+                    _vision_timeout_for(vision_model, budget) if vision_model else None
                 ),
                 model=vision_model,
                 base_url=vision_base_url,
@@ -310,9 +304,7 @@ def weekly_report(force: int = Query(0, ge=0, le=1)):
     conn = get_connection()
     try:
         if not force:
-            row = conn.execute(
-                "SELECT value FROM app_meta WHERE key = ?", (cache_key,)
-            ).fetchone()
+            row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (cache_key,)).fetchone()
             if row and row["value"]:
                 try:
                     cached = json.loads(row["value"])

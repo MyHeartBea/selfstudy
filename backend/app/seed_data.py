@@ -44,21 +44,16 @@ def seed_subject_profiles(conn: sqlite3.Connection) -> None:
 
 def seed_formula_data(conn: sqlite3.Connection) -> None:
     """首次为公式库写入常用公式表。"""
-    seeded = conn.execute(
-        "SELECT 1 FROM app_meta WHERE key = 'formula_seeded'"
-    ).fetchone()
+    seeded = conn.execute("SELECT 1 FROM app_meta WHERE key = 'formula_seeded'").fetchone()
     if seeded is not None:
         return
 
     formulas = DEFAULT_FORMULAS
     conn.executemany(
-        "INSERT OR IGNORE INTO formula_items (category, title, content) "
-        "VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO formula_items (category, title, content) VALUES (?, ?, ?)",
         formulas,
     )
-    conn.execute(
-        "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('formula_seeded', '1')"
-    )
+    conn.execute("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('formula_seeded', '1')")
 
 
 def seed_database(conn: sqlite3.Connection) -> None:
@@ -134,10 +129,7 @@ def seed_database(conn: sqlite3.Connection) -> None:
         "INSERT OR IGNORE INTO knowledge_base "
         "(tag_name, subject_id, sub_subject_id, summary, related_tags) "
         "VALUES (?, 3, 6, ?, ?)",
-        [
-            (note["tag"], note["summary"], note.get("related", ""))
-            for note in QUADRATIC_FORM_NOTES
-        ],
+        [(note["tag"], note["summary"], note.get("related", "")) for note in QUADRATIC_FORM_NOTES],
     )
 
     mistakes = [

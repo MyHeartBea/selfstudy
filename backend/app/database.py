@@ -103,9 +103,7 @@ def list_snapshots(limit: int = 20) -> List[dict]:
         {
             "name": p.name,
             "size_kb": round(p.stat().st_size / 1024, 1),
-            "created_at": datetime.fromtimestamp(p.stat().st_mtime).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
+            "created_at": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
         }
         for p in files
     ]
@@ -150,8 +148,7 @@ def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
 def migrate_database(conn: sqlite3.Connection) -> None:
     """为旧数据库补充新字段，避免删库。"""
     existing_columns = {
-        row["name"]
-        for row in conn.execute("PRAGMA table_info(mistakes)").fetchall()
+        row["name"] for row in conn.execute("PRAGMA table_info(mistakes)").fetchall()
     }
     additions = {
         "question_type": "TEXT DEFAULT 'choice'",
@@ -182,22 +179,19 @@ def migrate_database(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE mistakes ADD COLUMN {column} {ddl}")
 
     review_columns = {
-        row["name"]
-        for row in conn.execute("PRAGMA table_info(review_records)").fetchall()
+        row["name"] for row in conn.execute("PRAGMA table_info(review_records)").fetchall()
     }
     if "user_answer" not in review_columns:
         conn.execute("ALTER TABLE review_records ADD COLUMN user_answer TEXT")
 
     knowledge_columns = {
-        row["name"]
-        for row in conn.execute("PRAGMA table_info(knowledge_base)").fetchall()
+        row["name"] for row in conn.execute("PRAGMA table_info(knowledge_base)").fetchall()
     }
     if "related_tags" not in knowledge_columns:
         conn.execute("ALTER TABLE knowledge_base ADD COLUMN related_tags TEXT")
 
     grade_columns = {
-        row["name"]
-        for row in conn.execute("PRAGMA table_info(solution_grades)").fetchall()
+        row["name"] for row in conn.execute("PRAGMA table_info(solution_grades)").fetchall()
     }
     for column in ("errors", "strengths", "solution", "alternate_methods"):
         if column not in grade_columns:
@@ -205,23 +199,20 @@ def migrate_database(conn: sqlite3.Connection) -> None:
 
     # 科目类型：math/english/politics/cs/generic，驱动前端按科目定制题型与交互
     subject_columns = {
-        row["name"]
-        for row in conn.execute("PRAGMA table_info(subjects)").fetchall()
+        row["name"] for row in conn.execute("PRAGMA table_info(subjects)").fetchall()
     }
     if "kind" not in subject_columns:
         conn.execute("ALTER TABLE subjects ADD COLUMN kind TEXT DEFAULT ''")
 
     # 生词本：单词/词语分类
     vocab_columns = {
-        row["name"]
-        for row in conn.execute("PRAGMA table_info(vocab_items)").fetchall()
+        row["name"] for row in conn.execute("PRAGMA table_info(vocab_items)").fetchall()
     }
     if "kind" not in vocab_columns:
         conn.execute("ALTER TABLE vocab_items ADD COLUMN kind TEXT DEFAULT 'word'")
     # 把含空格的短语归类为 phrase（历史数据默认 word，需回填）
     conn.execute(
-        "UPDATE vocab_items SET kind = 'phrase' "
-        "WHERE kind = 'word' AND TRIM(word) LIKE '% %'"
+        "UPDATE vocab_items SET kind = 'phrase' WHERE kind = 'word' AND TRIM(word) LIKE '% %'"
     )
 
     # 模考成绩存档表（v7）
@@ -279,9 +270,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_exam_questions_paper ON exam_questions(paper_id)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_exam_questions_paper ON exam_questions(paper_id)")
 
     _ensure_math_categories(conn)
     _ensure_english_categories(conn)
@@ -367,9 +356,7 @@ MATH_FIELDS = (
 def _normalize_existing_math(conn: sqlite3.Connection) -> None:
     """清理历史数据中残留/错位的 $，统一公式表述。"""
     for table, column in MATH_FIELDS:
-        rows = conn.execute(
-            f"SELECT id, {column} AS value FROM {table}"
-        ).fetchall()
+        rows = conn.execute(f"SELECT id, {column} AS value FROM {table}").fetchall()
         for row in rows:
             value = row["value"] or ""
             cleaned = _wrap_math(value)
@@ -388,20 +375,14 @@ def _ensure_math_categories(conn: sqlite3.Connection) -> None:
         return
     existing = {
         row["name"]
-        for row in conn.execute(
-            "SELECT name FROM sub_subjects WHERE subject_id = 3"
-        ).fetchall()
+        for row in conn.execute("SELECT name FROM sub_subjects WHERE subject_id = 3").fetchall()
     }
     added_high_math = False
     if "高等数学" not in existing:
-        conn.execute(
-            "INSERT INTO sub_subjects (subject_id, name) VALUES (3, '高等数学')"
-        )
+        conn.execute("INSERT INTO sub_subjects (subject_id, name) VALUES (3, '高等数学')")
         added_high_math = True
     if "线性代数" not in existing:
-        conn.execute(
-            "INSERT INTO sub_subjects (subject_id, name) VALUES (3, '线性代数')"
-        )
+        conn.execute("INSERT INTO sub_subjects (subject_id, name) VALUES (3, '线性代数')")
 
     if added_high_math:
         row = conn.execute(
@@ -429,9 +410,7 @@ def _ensure_english_categories(conn: sqlite3.Connection) -> None:
         return
     existing = {
         row["name"]
-        for row in conn.execute(
-            "SELECT name FROM sub_subjects WHERE subject_id = 2"
-        ).fetchall()
+        for row in conn.execute("SELECT name FROM sub_subjects WHERE subject_id = 2").fetchall()
     }
     for sub_id, name in (
         (7, "完形填空"),
@@ -453,9 +432,7 @@ def _ensure_politics_categories(conn: sqlite3.Connection) -> None:
 
     subject_id 按 seed 顺序为 1（政治）；仅对名字含"政治"的科目生效，避免硬编码错位。
     """
-    rows = conn.execute(
-        "SELECT id FROM subjects WHERE name LIKE '%政治%'"
-    ).fetchall()
+    rows = conn.execute("SELECT id FROM subjects WHERE name LIKE '%政治%'").fetchall()
     for row in rows:
         politics_id = row["id"]
         existing = {
@@ -534,20 +511,15 @@ def _seed_subject_guides(conn: sqlite3.Connection) -> None:
 
 def _classify_existing_sources(conn: sqlite3.Connection) -> None:
     """根据来源备注为旧错题补充分类，默认归为其他。"""
-    conn.execute(
-        "UPDATE mistakes SET source_type = 'other' WHERE source_type = 'self'"
-    )
+    conn.execute("UPDATE mistakes SET source_type = 'other' WHERE source_type = 'self'")
     conn.execute(
         "UPDATE mistakes SET source_type = 'real_exam' "
         "WHERE source_type = '' AND source LIKE '%真题%'"
     )
     conn.execute(
-        "UPDATE mistakes SET source_type = 'mock' "
-        "WHERE source_type = '' AND source LIKE '%模拟%'"
+        "UPDATE mistakes SET source_type = 'mock' WHERE source_type = '' AND source LIKE '%模拟%'"
     )
-    conn.execute(
-        "UPDATE mistakes SET source_type = 'other' WHERE source_type = ''"
-    )
+    conn.execute("UPDATE mistakes SET source_type = 'other' WHERE source_type = ''")
     rows = conn.execute(
         "SELECT id, source FROM mistakes "
         "WHERE source_type IN ('real_exam', 'mock') AND source_year = ''"

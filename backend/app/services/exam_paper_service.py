@@ -4,9 +4,8 @@ import json
 import queue
 import re
 import threading
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from app.config import PROJECT_ROOT, settings
 from app.services import ai_service
@@ -283,8 +282,7 @@ def _pdf_text_usable(text: str) -> bool:
     alnum = sum(1 for ch in s if ch.isascii() and ch.isalnum())
     space = sum(1 for ch in s if ch.isspace())
     punct = sum(
-        1 for ch in s
-        if ch in "，。、；：？！（）《》【】.,;:?!()[]\"'-+=<>/\\|%$#@&*^~`{}"
+        1 for ch in s if ch in "，。、；：？！（）《》【】.,;:?!()[]\"'-+=<>/\\|%$#@&*^~`{}"
     )
     good = cjk + alnum + space + punct
     return good / n >= settings.PDF_TEXT_RATIO
@@ -390,7 +388,17 @@ def _pdf_page_vision(pil, index: int, subject: str = "") -> str:
 
 _IMAGE_ROOT = PROJECT_ROOT / "data" / "images" / "exam_papers"
 _DIAGRAM_RE = re.compile(r"\[[^\]]*(?:图|示|表|树)[^\]]*\]")
-_FIGURE_HINTS = ("页表", "如下表", "如表", "表格如下", "如图所示", "如下图", "示意图", "下图", "如右图")
+_FIGURE_HINTS = (
+    "页表",
+    "如下表",
+    "如表",
+    "表格如下",
+    "如图所示",
+    "如下图",
+    "示意图",
+    "下图",
+    "如右图",
+)
 
 
 def _pdf_pages(path: Path, subject: str) -> list:
@@ -553,9 +561,9 @@ def _answer_letter(segment: str) -> str:
     """从一段答案文本里取选择题答案字母（A-D），取不到返回空串。"""
     seg = segment[:60]
     for pat in (
-        r"^\s*[（(]\s*([A-Da-d])\s*[)）]",   # (A) / （A）
-        r"^\s*([A-Da-d])\s*[.、．)）]",       # A. / A、
-        r"^\s*([A-Da-d])(?![A-Za-z])",        # 裸 A
+        r"^\s*[（(]\s*([A-Da-d])\s*[)）]",  # (A) / （A）
+        r"^\s*([A-Da-d])\s*[.、．)）]",  # A. / A、
+        r"^\s*([A-Da-d])(?![A-Za-z])",  # 裸 A
     ):
         m = re.match(pat, seg)
         if m:
@@ -744,7 +752,12 @@ def _run_import(paper_id: int) -> None:
             return
         exam_text = text_layer if not scanned else ("\n".join(t for _, t, _ in pages) or text_layer)
         if not exam_text.strip():
-            _set_status(conn, paper_id, "error", "未能从文件提取到文本（可能是扫描版 PDF，请换 Word/文本版）")
+            _set_status(
+                conn,
+                paper_id,
+                "error",
+                "未能从文件提取到文本（可能是扫描版 PDF，请换 Word/文本版）",
+            )
             return
 
         answer_text = ""
@@ -800,12 +813,17 @@ def _run_import(paper_id: int) -> None:
         if scanned:
             # 统一扁平分块拆题（对扫描/公式卷更完整，避免逐页漏掉同页多个综合题）；
             # 拆完再按题号在逐页文本里定位页码（可靠，供图示题存该页原图）。
-            for i, page_text, pil in pages:
+            for i, _page_text, pil in pages:
                 page_pils[i] = pil
             chunks = _chunk_text(exam_text)
             for idx, chunk in enumerate(chunks):
                 parsed = ai_service._chat_json(
-                    [{"role": "user", "content": _structure_prompt(paper["subject"], paper["year"], chunk)}],
+                    [
+                        {
+                            "role": "user",
+                            "content": _structure_prompt(paper["subject"], paper["year"], chunk),
+                        }
+                    ],
                     max_tokens=12000,
                 )
                 _collect(parsed.get("questions", []) or [])
@@ -816,7 +834,12 @@ def _run_import(paper_id: int) -> None:
             chunks = _chunk_text(exam_text)
             for idx, chunk in enumerate(chunks):
                 parsed = ai_service._chat_json(
-                    [{"role": "user", "content": _structure_prompt(paper["subject"], paper["year"], chunk)}],
+                    [
+                        {
+                            "role": "user",
+                            "content": _structure_prompt(paper["subject"], paper["year"], chunk),
+                        }
+                    ],
                     max_tokens=12000,
                 )
                 _collect(parsed.get("questions", []) or [])
@@ -877,7 +900,6 @@ def _run_import(paper_id: int) -> None:
                     )
 
         conn.execute("DELETE FROM exam_questions WHERE paper_id = ?", (paper_id,))
-        now_text = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         for q in questions:
             conn.execute(
                 "INSERT INTO exam_questions (paper_id, no, section, question_type, passage, "
@@ -904,7 +926,11 @@ def _run_import(paper_id: int) -> None:
         answered = sum(1 for q in questions if q["type"] == "choice" and q["correct_answer"])
         conn.execute(
             "UPDATE exam_papers SET status = 'done', status_note = ?, question_count = ? WHERE id = ?",
-            (f"客观题已配答案 {answered}/{sum(1 for q in questions if q['type'] == 'choice')}", len(questions), paper_id),
+            (
+                f"客观题已配答案 {answered}/{sum(1 for q in questions if q['type'] == 'choice')}",
+                len(questions),
+                paper_id,
+            ),
         )
         conn.commit()
     finally:

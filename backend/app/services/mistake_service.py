@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from app.config import PROJECT_ROOT, settings
+from app.config import PROJECT_ROOT
 from app.database import (
     mistake_field,
     mistake_tag_condition,
@@ -123,8 +123,8 @@ def process_images(images: Optional[List[Any]]) -> List[str]:
             payload = text
         try:
             data = base64.b64decode(payload)
-        except (ValueError, TypeError):
-            raise ValueError("图片数据不是有效的 base64")
+        except (ValueError, TypeError) as exc:
+            raise ValueError("图片数据不是有效的 base64") from exc
         if not data:
             continue
         if len(data) > IMAGE_MAX_BYTES:
@@ -213,11 +213,7 @@ def build_mistake_fields(
         except (TypeError, ValueError):
             errors.append("二级科目参数无效")
             sub_subject_id = None
-    if (
-        sub_subject_id is not None
-        and subject_id is not None
-        and not skip_subject_check
-    ):
+    if sub_subject_id is not None and subject_id is not None and not skip_subject_check:
         exists = conn.execute(
             "SELECT 1 FROM sub_subjects WHERE id = ? AND subject_id = ?",
             (sub_subject_id, subject_id),
@@ -339,12 +335,8 @@ def build_mistake_fields(
         "english_sentences_text": json.dumps(
             body.get("english_sentences") or [], ensure_ascii=False
         ),
-        "english_phrases_text": json.dumps(
-            body.get("english_phrases") or [], ensure_ascii=False
-        ),
-        "english_words_text": json.dumps(
-            body.get("english_words") or [], ensure_ascii=False
-        ),
+        "english_phrases_text": json.dumps(body.get("english_phrases") or [], ensure_ascii=False),
+        "english_words_text": json.dumps(body.get("english_words") or [], ensure_ascii=False),
         "english_questions_text": json.dumps(
             body.get("english_questions") or [], ensure_ascii=False
         ),
@@ -497,7 +489,9 @@ def get_mistake_detail(conn: sqlite3.Connection, mistake_id: int) -> Optional[di
     return data
 
 
-def create_mistake(conn: sqlite3.Connection, body: Dict[str, Any]) -> Tuple[Optional[dict], List[str]]:
+def create_mistake(
+    conn: sqlite3.Connection, body: Dict[str, Any]
+) -> Tuple[Optional[dict], List[str]]:
     """新建错题，并自动创建缺失的知识点词条。"""
     fields, errors = build_mistake_fields(body, conn)
     if errors:

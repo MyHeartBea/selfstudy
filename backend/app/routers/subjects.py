@@ -76,9 +76,7 @@ def update_subject_profile(subject_id: int, body: SubjectProfileUpdate):
     """更新科目的复习重点与方法建议（PATCH 语义：None 字段保持不变）。"""
     conn = get_connection()
     try:
-        exists = conn.execute(
-            "SELECT 1 FROM subjects WHERE id = ?", (subject_id,)
-        ).fetchone()
+        exists = conn.execute("SELECT 1 FROM subjects WHERE id = ?", (subject_id,)).fetchone()
         if exists is None:
             return error(404, "科目不存在")
         sets = []
@@ -96,7 +94,8 @@ def update_subject_profile(subject_id: int, body: SubjectProfileUpdate):
                 (subject_id,),
             ).fetchone()
             return ok(
-                _profile_to_dict(row) if row is not None
+                _profile_to_dict(row)
+                if row is not None
                 else {"subject_id": subject_id, "focus_areas": [], "review_tips": ""},
                 "科目档案无变化",
             )
@@ -104,8 +103,7 @@ def update_subject_profile(subject_id: int, body: SubjectProfileUpdate):
         conn.execute(
             "INSERT INTO subject_profiles (subject_id, focus_areas, review_tips) "
             "VALUES (?, '', '') "
-            "ON CONFLICT(subject_id) DO UPDATE SET "
-            + ", ".join(sets),
+            "ON CONFLICT(subject_id) DO UPDATE SET " + ", ".join(sets),
             (subject_id, *params),
         )
         conn.commit()
