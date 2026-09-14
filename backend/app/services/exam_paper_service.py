@@ -253,19 +253,27 @@ def _is_math(subject: str) -> bool:
 
 def _pdf_text_layer(path: Path) -> str:
     """用 pypdf 提取 PDF 文本层（前若干页合并）。"""
+    reader = None
     try:
         from pypdf import PdfReader
 
         reader = PdfReader(str(path))
+        parts = []
+        for page in reader.pages[:80]:
+            try:
+                parts.append(page.extract_text() or "")
+            except Exception:
+                continue
+        return "\n".join(parts)
     except Exception:
         return ""
-    parts = []
-    for page in reader.pages[:80]:
+    finally:
+        # pypdf 6.x 的 PdfReader 持有文件流；不关会让长批次导入累积句柄
         try:
-            parts.append(page.extract_text() or "")
+            if reader is not None:
+                reader.close()
         except Exception:
-            continue
-    return "\n".join(parts)
+            pass
 
 
 def _pdf_text_usable(text: str) -> bool:
@@ -294,9 +302,6 @@ def _pdf_ocr(path: Path, subject: str = "") -> str:
     数学/408：视觉模型优先（输出 LaTeX，公式准确），失败退本地 OCR；
     其他科目：本地 Windows OCR 优先（快、免费），失败退视觉模型。
     """
-    import base64
-    import io
-
     try:
         import pypdfium2 as pdfium
     except Exception:
@@ -305,12 +310,28 @@ def _pdf_ocr(path: Path, subject: str = "") -> str:
 
     try:
         pdf = pdfium.PdfDocument(str(path))
-        pages = len(pdf)
     except Exception:
         return ""
+    try:
+        return _pdf_ocr_pages(pdf, subject, local_ocr)
+    finally:
+        # pypdfium2 的文档对象不在 GC 时立刻释放（C 层缓冲），必须显式关，
+        # 否则批量导入会一直涨内存 / 占住文件句柄
+        try:
+            pdf.close()
+        except Exception:
+            pass
 
+
+def _pdf_ocr_pages(pdf, subject: str, local_ocr, max_pages: int = 0) -> str:
+    import base64
+    import io
+
+    pages = len(pdf)
     math = _is_math(subject)
     limit = settings.PDF_OCR_PAGES or pages
+    if max_pages:
+        limit = min(limit, max_pages)
     out: List[str] = []
     # 正常试卷页数少，全量提取才能覆盖全部题目；仅在累计文本足够拆题(约2段)时提前刹车，
     # 避免 100+ 页的「解析/答案速查」类大文件被整本拖慢。
@@ -406,9 +427,6 @@ def _pdf_pages(path: Path, subject: str) -> list:
 
     数学/408 优先视觉(LaTeX)，本地 OCR 兜底；文科目反之。只保留能提取出文字的页。
     """
-    import base64
-    import io
-
     try:
         import pypdfium2 as pdfium
     except Exception:
@@ -417,9 +435,23 @@ def _pdf_pages(path: Path, subject: str) -> list:
 
     try:
         pdf = pdfium.PdfDocument(str(path))
-        pages = len(pdf)
     except Exception:
         return []
+    try:
+        return _pdf_pages_render(pdf, subject, local_ocr)
+    finally:
+        # 同上：必须显式关，否则「渲染 → 视觉调用」的长流程结束前句柄一直占着
+        try:
+            pdf.close()
+        except Exception:
+            pass
+
+
+def _pdf_pages_render(pdf, subject: str, local_ocr) -> list:
+    import base64
+    import io
+
+    pages = len(pdf)
     math = _is_math(subject)
     limit = settings.PDF_OCR_PAGES or pages
     result: list = []
@@ -476,15 +508,17 @@ def _page_for_no(no: str, page_items: list) -> int:
     """按题号在逐页提取文本里定位该题所在页（可靠，供图示题存图）。
 
     匹配「行首 题号 + .（、．）」形式，例如 page 文本里 "46.（8 分）..."。
+    **找不到返回 -1**（不是 0）：0 是第 1 页的合法页码，若用 0 表示「未找到」，
+    图示题会把无关的第 1 页截图当作该题原图存进库（页面截图会骗人）。
     """
     n = str(no or "").strip()
     if not n.isdigit():
-        return 0
+        return -1
     pat = re.compile(r"^[^\S\n]*" + re.escape(n) + r"[.．、]", re.M)
     for i, text, _pil in page_items:
         if pat.search(text or ""):
             return i
-    return 0
+    return -1
 
 
 def _page_diagram_image(paper_id: int, source: Path, page_idx: int, cache: dict, pil=None) -> str:
@@ -492,19 +526,29 @@ def _page_diagram_image(paper_id: int, source: Path, page_idx: int, cache: dict,
 
     用于「图示选项」题：把该页截图留存，前端模考/详情可查看原图（同页复用缓存）。
     扫描路径已渲染过该页时，传入 pil 避免重复渲染。
+    **page_idx < 0（题号未定位到页）一律不出图**：宁可没有图，也不要拿别的页冒充。
     """
     try:
         key = int(page_idx)
+        if key < 0:
+            return ""
         if key in cache:
             return cache[key]
-        import pypdfium2 as pdfium
+        if pil is None:
+            import pypdfium2 as pdfium
+
+            pdf = pdfium.PdfDocument(str(source))
+            try:
+                if key >= len(pdf):
+                    return ""
+                pil = pdf[key].render(scale=2.4).to_pil()
+            finally:
+                try:
+                    pdf.close()
+                except Exception:
+                    pass
         from PIL import Image
 
-        if pil is None:
-            pdf = pdfium.PdfDocument(str(source))
-            if key < 0 or key >= len(pdf):
-                return ""
-            pil = pdf[key].render(scale=2.4).to_pil()
         pil = pil.convert("RGB")
         if pil.width > 900:
             pil = pil.resize((900, int(pil.height * 900 / pil.width)), Image.LANCZOS)
@@ -872,7 +916,11 @@ def _run_import(paper_id: int) -> None:
                 _collect(parsed.get("questions", []) or [])
                 _set_status(conn, paper_id, "structuring", f"AI 拆题中 {idx + 1}/{len(chunks)} 段")
             for q in questions:
-                q["page_idx"] = _page_for_no(q["no"], pages)
+                # 只在文本定位成功时覆盖模型给的页码；定位失败(-1)保留模型自报值，
+                # 否则会把原本可用的页码清成 -1。
+                located = _page_for_no(q["no"], pages)
+                if located >= 0:
+                    q["page_idx"] = located
         else:
             chunks = _chunk_text(exam_text)
             for idx, chunk in enumerate(chunks):
@@ -956,11 +1004,16 @@ def _run_import(paper_id: int) -> None:
         if any(_has_diagram_option(q) for q in questions):
             _img_cache: dict = {}
             for q in questions:
-                if scanned and _has_diagram_option(q):
-                    page = q.get("page_idx", 0)
-                    q["diagram_image"] = _page_diagram_image(
-                        paper_id, source, page, _img_cache, page_pils.get(page)
-                    )
+                if not (scanned and _has_diagram_option(q)):
+                    continue
+                page = q.get("page_idx", -1)
+                if not isinstance(page, int) or page < 0:
+                    # 题号没能在逐页文本里定位（-1）→ 不给图，绝不用第 1 页冒充
+                    q["diagram_image"] = ""
+                    continue
+                q["diagram_image"] = _page_diagram_image(
+                    paper_id, source, page, _img_cache, page_pils.get(page)
+                )
 
         conn.execute("DELETE FROM exam_questions WHERE paper_id = ?", (paper_id,))
         for q in questions:

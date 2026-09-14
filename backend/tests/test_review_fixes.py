@@ -7,6 +7,8 @@
 - H2 合卷（mixed）用自身文本兜底答案
 """
 
+import inspect
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -178,6 +180,126 @@ class CollectToleratesBadPageTest(unittest.TestCase):
         src = inspect.getsource(eps._run_import)
         self.assertIn("except (TypeError, ValueError)", src)
         self.assertNotRegex(src, r"page_idx if page_idx is not None else int\(q\.get\(\"page\"\)")
+
+
+class PageLocatorSentinelTest(unittest.TestCase):
+    """M6：「未定位到页码」必须与「第 1 页」区分开。
+
+    原实现两者都返回 0，图示题于是把无关的第 1 页截图当作该题原图存进库。
+    """
+
+    def _pages(self):
+        # 题 1 在第 0 页，题 9 在第 1 页，题 7 谁的页面上都没有
+        return [
+            (0, "一、选择题\n1. 下列结论正确的是（ ）", None),
+            (1, "9.（12 分）设函数 f(x)=x^2", None),
+        ]
+
+    def test_found_on_first_page_returns_zero(self):
+        self.assertEqual(eps._page_for_no("1", self._pages()), 0)
+
+    def test_found_on_later_page(self):
+        self.assertEqual(eps._page_for_no("9", self._pages()), 1)
+
+    def test_not_found_returns_negative(self):
+        self.assertEqual(eps._page_for_no("7", self._pages()), -1)
+        self.assertEqual(eps._page_for_no("", self._pages()), -1)
+        self.assertEqual(eps._page_for_no("abc", self._pages()), -1)
+
+    def test_negative_page_never_renders_an_image(self):
+        """-1 必须直接返回空串（绝不能用第 1 页冒充），且不碰 pypdfium2。"""
+        calls = []
+
+        class _Boom:
+            def __call__(self, *_a, **_k):
+                calls.append(1)
+                raise AssertionError("负数页码不该去打开/渲染 PDF")
+
+        with patch.dict(sys.modules, {"pypdfium2": _Boom()}):
+            self.assertEqual(eps._page_diagram_image(1, Path("nope.pdf"), -1, {}), "")
+        self.assertEqual(calls, [])
+
+    def test_collect_fallback_still_used_when_locator_fails(self):
+        """定位失败时必须保留模型自报页码，而不是把它清成 -1。"""
+        src = inspect.getsource(eps._run_import)
+        self.assertIn("if located >= 0:", src)
+
+
+class PdfHandleReleaseTest(unittest.TestCase):
+    """M3：pypdfium2 文档对象必须显式 close（C 层缓冲不会随 GC 立刻释放）。"""
+
+    @staticmethod
+    def _fake_pdfium():
+        state = {}
+
+        class _Bmp:
+            def to_pil(self):
+                from PIL import Image
+
+                return Image.new("RGB", (4, 4), "white")
+
+        class _Page:
+            def render(self, scale=1.0):
+                return _Bmp()
+
+        class _Doc:
+            def __init__(self, _path):
+                state["opened"] = state.get("opened", 0) + 1
+
+            def __len__(self):
+                return 1
+
+            def __getitem__(self, _i):
+                return _Page()
+
+            def close(self):
+                state["closed"] = state.get("closed", 0) + 1
+
+        class _Mod:
+            PdfDocument = _Doc
+
+        return _Mod(), state
+
+    def test_ocr_releases_document(self):
+        mod, state = self._fake_pdfium()
+        from app.services import local_ocr
+
+        with (
+            patch.dict(sys.modules, {"pypdfium2": mod}),
+            patch.object(eps, "_pdf_page_vision", return_value="0.1 函数"),
+            patch.object(local_ocr, "is_available", return_value=False),
+        ):
+            text = eps._pdf_ocr(Path("x.pdf"), "数学二")
+        self.assertIn("[[PAGE:0]]", text)
+        self.assertEqual(state.get("opened"), 1)
+        self.assertEqual(state.get("closed"), 1)
+
+    def test_ocr_releases_document_even_when_render_raises(self):
+        mod, state = self._fake_pdfium()
+
+        class _Explode:
+            def __len__(self):
+                return 1
+
+            def __getitem__(self, _i):
+                raise RuntimeError("boom")
+
+            def close(self):
+                state["closed"] = state.get("closed", 0) + 1
+
+        mod.PdfDocument = lambda _p: _Explode()
+        from app.services import local_ocr
+
+        with (
+            patch.dict(sys.modules, {"pypdfium2": mod}),
+            patch.object(local_ocr, "is_available", return_value=False),
+        ):
+            self.assertEqual(eps._pdf_ocr(Path("x.pdf"), "英语二"), "")
+        self.assertEqual(state.get("closed"), 1)
+
+    def test_source_closes_pdf_streams(self):
+        for fn in (eps._pdf_text_layer, eps._pdf_ocr, eps._pdf_pages):
+            self.assertIn("close", inspect.getsource(fn), f"{fn.__name__} 未释放句柄")
 
 
 if __name__ == "__main__":
