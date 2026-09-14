@@ -30,6 +30,12 @@ Thumbs.db
 .coverage.*
 htmlcov/
 
+# Playwright（E2E 产物：报告、trace、失败截图）
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+frontend/.playwright/
+
 # Local temp
 temp/
 真题/

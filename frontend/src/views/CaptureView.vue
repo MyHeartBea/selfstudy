@@ -442,7 +442,13 @@ onUnmounted(() => {
             <Icon v-if="analyzing" name="refresh" :size="15" class="spin" />
             <Icon v-else name="image" :size="15" />
             选择/粘贴题目图片
-            <input type="file" accept="image/*" class="visually-hidden" @change="onFileChange" />
+            <input
+              type="file"
+              accept="image/*"
+              class="visually-hidden"
+              data-testid="pick-main-image"
+              @change="onFileChange"
+            />
           </label>
           <UiButton v-if="previewImage" variant="outline" @click="removeMainImage"
             >移除图片</UiButton
@@ -493,7 +499,13 @@ onUnmounted(() => {
           <label class="pick-label btn btn-outline btn-md" style="align-self: center">
             <Icon name="plus-circle" :size="14" />
             继续添加图片
-            <input type="file" accept="image/*" class="visually-hidden" @change="onFileChange" />
+            <input
+              type="file"
+              accept="image/*"
+              class="visually-hidden"
+              data-testid="pick-more-image"
+              @change="onFileChange"
+            />
           </label>
         </div>
 

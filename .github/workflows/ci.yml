@@ -58,8 +58,8 @@ jobs:
       - run: npm install
       - name: Lint (eslint + prettier)
         run: |
-          npx eslint src tests
-          npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js"
+          npx eslint src tests e2e playwright.config.js
+          npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js" "e2e/**/*.js" "playwright.config.js"
       # 原先只 build、不跑测试：卡片点击 / 知识点弹窗 / 关联错题区 这些
       # DOM 级回归（happy-dom + @vue/test-utils）在 CI 里从未被验证
       - name: Run frontend tests
@@ -67,3 +67,30 @@ jobs:
       # build 必须保留：Vue 模板编译错误只有 build 能发现（lint 与单测都会放过）
       - name: Build frontend
         run: npm run build
+
+  # 真浏览器 E2E：命中测试（整块可点）与真实 paste 事件只有这里能覆盖。
+  # 自己起 vite dev（Playwright webServer），所有 /api 在浏览器层打桩，不需要后端。
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      # CI 必须有真浏览器：装 Playwright 自带 chromium（本机开发时用系统 Chrome，不下载）
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Run E2E (card click + capture)
+        run: npm run test:e2e
+      - name: Upload E2E report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+

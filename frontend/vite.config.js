@@ -11,7 +11,8 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    port: 5174,
+    // 端口可由 E2E_PORT 覆盖：Playwright 传入固定端口并用 --strictPort，避免静默换端口导致 baseURL 打空
+    port: Number(process.env.E2E_PORT) || 5174,
     proxy: {
       '/api': 'http://127.0.0.1:8000',
       '/images': 'http://127.0.0.1:8000',

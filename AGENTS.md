@@ -33,12 +33,25 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 测试
 cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（148 个）
 cd frontend && npm test                                  # Vitest 49 个；含 DOM 级交互回归（happy-dom）
+cd frontend && npm run test:e2e                          # Playwright 23 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
 cd backend && ruff check app tests && ruff format --check app tests
-cd frontend && npx eslint src tests && npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js"
+cd frontend && npx eslint src tests e2e playwright.config.js && npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js" "e2e/**/*.js" "playwright.config.js"
 pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / 密钥扫描
 ```
+
+> **E2E 只补单测覆盖不到的盲区**（`frontend/e2e/`，Playwright，配置 `frontend/playwright.config.js`）：
+> ①**真命中测试**——卡片整块可点（`.k-hit` 覆盖层被 `z-index:2` 子元素盖住那次事故，
+> 单测用 `trigger('click')` 直接派发事件、**绕开命中测试**，所以永远抓不到）；
+> ②**真 paste 事件**——智能录入多图暂存（原生 `ClipboardEvent` + `DataTransfer`，断言
+> "只暂存不自动分析、点按钮才发、**且只发一次**、请求体里带着全部图"）；
+> ③**渲染烟测**——8 条主路由在真浏览器渲染且零 console/page 错误（HTTP 200 是假阳性：SPA 空壳也回 200）。
+> 本机用**系统 Chrome**（`channel: 'chrome'`，不下载几百 MB 浏览器）；CI 单独 job 装官方 chromium。
+> 所有 `/api/**` 都在浏览器层打桩（`e2e/fixtures.js` 的 `mockApi`），**不依赖后端、不碰真实数据库**。
+> 两个踩过的坑已写进 fixtures 注释：路由正则**必须锚定 `^https?://host/api`**（否则会拦掉
+> `/src/api/request.js` 这个真实前端模块 → 页面白屏），打桩数据**形状必须与真实接口一致**
+> （数组写成 `{items:[]}` 会让 `.filter` / `for..of` 直接抛 TypeError）。
 
 > **CI 与本地不等价，别再被"本地全绿"骗一次**：CI 是 **Python 3.11**（本地 3.12）、
 > **没有 `backend/.env`**、依赖只有 `fastapi uvicorn pydantic httpx coverage ruff`
@@ -233,4 +246,5 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ⑥**安全**：`/api/papers` 的 `source_path`/`answer_path` 增加 `_resolve_inside()` —— 拒绝绝对路径、`..` 段、越出根目录的路径（生产实测 7 种穿越全部 400）；`routers/system.py` 补 `error` 导入（F821 真 bug）；
   ⑦**架构拆分**：`ai_service.py` 1402 → 约 950 行，英语整篇流水线抽到 `app/services/ai_english.py`（约 500 行，真并发 `executor.submit` + `.result()`，通过 `_svc()` 惰性引用模块以便 mock 生效），底部保留兼容 re-export；
   ⑧**工具链**：后端 Ruff、前端 ESLint 扁平配置 + Prettier、`pre-commit`（含密钥扫描与大文件检查，`scripts/`）、CI 增加 ruff/eslint/prettier/前端单测/覆盖率门槛 55%；顺带修出两个真 bug（`FormulaView.vue` 的 `reciteRevealed` 未声明、`system.py` 的 F821）。
-  测试：**后端 138、前端 49**，覆盖率约 62%。
+  ⑨**前端 E2E（Playwright）**：`frontend/e2e/` 23 个用例 —— 卡片整块可点（含键盘 Enter/Space 等价入口、`@click.stop` 不误开详情）、智能录入多图暂存（3 张只暂存 / 只发一次请求 / 请求体 3 张图齐）、8 条主路由渲染烟测（桌面 + Pixel 7 两档）。CI 新增独立 `frontend-e2e` job；`frontend/src/views/CaptureView.vue` 两个 file input 加了 `data-testid`（文案/序号定位会静默点到别的 input）。
+  测试：**后端 148、前端 49 + E2E 23**，覆盖率约 62%。

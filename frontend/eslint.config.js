@@ -7,8 +7,15 @@ import globals from 'globals'
 
 export default [
   {
-    // 构建产物、依赖、字体子集不参与检查
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'public/**'],
+    // 构建产物、依赖、字体子集不参与检查；Playwright 产物同理
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'public/**',
+      'playwright-report/**',
+      'test-results/**',
+    ],
   },
 
   js.configs.recommended,
@@ -74,6 +81,14 @@ export default [
   {
     // 测试文件：vitest 全局 + 允许长文件
     files: ['tests/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+
+  {
+    // E2E（Playwright）：跑在 Node 里，但 page.evaluate 回调里是浏览器环境
+    files: ['e2e/**/*.js', 'playwright.config.js'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },

@@ -26,7 +26,7 @@ repos:
         name: eslint + prettier (frontend)
         entry: node scripts/frontend_lint.mjs check
         language: system
-        files: ^frontend/(src|tests)/.*\.(js|vue|css)$
+        files: ^frontend/(src|tests|e2e)/.*\.(js|vue|css)$|^frontend/playwright\.config\.js$
         pass_filenames: false
 
       # 通用卫生：大文件 / 行尾空白 / 文件末尾换行
