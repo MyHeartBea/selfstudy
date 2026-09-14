@@ -31,7 +31,7 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（138 个）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（148 个）
 cd frontend && npm test                                  # Vitest 49 个；含 DOM 级交互回归（happy-dom）
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
@@ -39,6 +39,17 @@ cd backend && ruff check app tests && ruff format --check app tests
 cd frontend && npx eslint src tests && npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js"
 pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / 密钥扫描
 ```
+
+> **CI 与本地不等价，别再被"本地全绿"骗一次**：CI 是 **Python 3.11**（本地 3.12）、
+> **没有 `backend/.env`**、依赖只有 `fastapi uvicorn pydantic httpx coverage ruff`
+> —— **没有 Pillow / pypdf / pypdfium2 / python-docx / winsdk**，用到它们的地方必须
+> 自己 `skipIf`/`try-import` 兜底。要复现 CI：
+> `git clone D:\km-v2 <临时目录> && git checkout <sha>`，删掉 `backend/.env`，
+> 用 Python 3.11 venv 装上面那串依赖，再跑 `coverage run -m unittest discover -s tests`。
+> **翻车过一次**：假渲染页返回 `bytes` 而非 PIL 对象，`bytes.save()` 的 AttributeError
+> 被 `_pdf_ocr_pages` 里宽泛的 `except Exception: continue` 静默吞掉，
+> 本地（有 Pillow）全绿、CI 报"返回空串"，排查了很久。**给渲染/IO 路径写假件时，
+> 先确认返回类型真的是调用方要的对象类型**；遇到"莫名返回空值"优先怀疑被兜底 except 吃掉。
 
 > **质量工具链**：后端 Ruff（`backend/pyproject.toml`，只选 F/B/T201，**刻意不含 I(isort)** ——
 > isort 与 `ruff format` 在导入段空行上互不认账，会让 pre-commit 反复震荡）；前端 ESLint 扁平配置 +
