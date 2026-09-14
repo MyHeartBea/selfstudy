@@ -3,6 +3,7 @@
 import base64
 import http.client
 import json
+import logging
 import re
 import socket
 import time
@@ -12,6 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 from app.config import settings
+
+logger = logging.getLogger("kaoyan.ai")
 
 
 class AiNotConfigured(Exception):
@@ -44,103 +47,131 @@ def _chat(
 ):
     """调用对话补全。默认返回纯文本；with_meta=True 时返回 (文本, 元信息)。
 
-    元信息含 finish_reason 与 reasoning_tokens，用于识别「推理模型把预算全用在
-    reasoning_content 上、content 为空」这种失败。
+    **输出预算是"正文 + 推理"的总额**：`deepseek-flash` 是推理模型，会先花掉一段
+    reasoning_tokens 再产出正文。若只按"正文长度"给 max_tokens，预算会被推理吃光
+    → finish_reason=length、content 为空或**被静默截断**（识图提字最容易被截，
+    表现为"原文只识出一两段"）。
+
+    所以这里统一处理两件事：
+    1. 实际下发 `max_tokens` 时乘上 1.5 倍推理余量；
+    2. 一旦 finish_reason=length（被截断），**自动翻倍预算重试**，最多重试 3 轮。
+    这样所有调用方（含 `_vision_extract_text`）都不必各自记得处理截断。
     """
     if not is_configured():
         raise AiNotConfigured()
     url = (base_url or settings.AI_BASE_URL).rstrip("/") + "/chat/completions"
-    payload = {
-        "model": model or settings.AI_MODEL,
-        "messages": messages,
-        "temperature": 0.2,
-    }
-    if response_format is not None:
-        payload["response_format"] = response_format
-    if max_tokens is not None:
-        payload["max_tokens"] = max_tokens
-    request = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key or settings.AI_API_KEY}",
-        },
-        method="POST",
-    )
-    # 直连 AI 服务，绕开环境变量注入的占位代理（例如 http://127.0.0.1:9）。
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    try:
-        last_message = ""
-        for attempt in range(4):
-            try:
-                with opener.open(
-                    request,
-                    timeout=timeout or settings.AI_TIMEOUT,
-                ) as response:
-                    data = json.loads(response.read().decode("utf-8"))
-                break
-            except urllib.error.HTTPError as exc:
-                detail = exc.read().decode("utf-8", errors="replace")
-                last_message = f"AI 服务返回 {exc.code}: {detail[:300]}"
-                # 429 与服务端临时错误都值得重试
-                if exc.code in (429, 500, 502, 503) and attempt < 3:
-                    time.sleep(2 * (attempt + 1))
-                    continue
-                raise AiRequestError(last_message) from exc
-            except (
-                http.client.IncompleteRead,
-                http.client.RemoteDisconnected,
-                ConnectionError,
-                TimeoutError,
-                socket.timeout,
-                urllib.error.URLError,
-            ) as exc:
-                # 上游断连/超时：0 bytes 等偶发，重试更稳
-                last_message = f"AI 连接中断：{exc}"
-                if attempt < 3:
-                    time.sleep(2 * (attempt + 1))
-                    continue
-                raise AiRequestError(last_message) from exc
-            except OSError as exc:
-                last_message = f"AI 网络错误：{exc}"
-                if attempt < 3:
-                    time.sleep(2 * (attempt + 1))
-                    continue
-                raise AiRequestError(last_message) from exc
-        else:
-            raise AiRequestError(last_message)
-    except Exception as exc:
-        raise AiRequestError(str(exc)) from exc
-    try:
-        choice = data["choices"][0]
-    except (KeyError, IndexError) as exc:
-        raise AiRequestError("AI 服务响应格式异常") from exc
 
-    message = choice.get("message") or {}
-    content = message.get("content") or ""
-    if not with_meta:
+    budget = int(max_tokens * _REASONING_TOKEN_HEADROOM) if max_tokens else None
+    attempts = 4
+    last_meta: dict = {}
+
+    for attempt in range(attempts):
+        payload = {
+            "model": model or settings.AI_MODEL,
+            "messages": messages,
+            "temperature": 0.2,
+        }
+        if response_format is not None:
+            payload["response_format"] = response_format
+        if budget is not None:
+            payload["max_tokens"] = min(MAX_TOKENS_CEILING, budget)
+
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key or settings.AI_API_KEY}",
+            },
+            method="POST",
+        )
+        data = _post_chat(opener, request, timeout)
+        try:
+            choice = data["choices"][0]
+        except (KeyError, IndexError) as exc:
+            raise AiRequestError("AI 服务响应格式异常") from exc
+
+        message = choice.get("message") or {}
+        content = message.get("content") or ""
+        usage = data.get("usage") or {}
+        last_meta = {
+            "finish_reason": choice.get("finish_reason") or "",
+            "reasoning_tokens": int(
+                (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
+            ),
+            "completion_tokens": int(usage.get("completion_tokens") or 0),
+            "has_reasoning": bool(message.get("reasoning_content")),
+            "requested_max_tokens": budget,
+            "truncated": False,
+        }
+
+        # 被预算截断 → 加大预算重试（最后一轮就把截断结果交出去，由调用方决定）
+        if last_meta["finish_reason"] == "length" and attempt < attempts - 1:
+            last_meta["truncated"] = True
+            logger.warning(
+                "AI 输出被截断（finish_reason=length，推理 %s tokens，预算 %s）→ 翻倍重试",
+                last_meta["reasoning_tokens"],
+                budget,
+            )
+            budget = min(MAX_TOKENS_CEILING, (budget or 4000) * 2)
+            continue
+
+        last_meta["truncated"] = last_meta["finish_reason"] == "length"
+        if with_meta:
+            return content, last_meta
         return content
 
-    usage = data.get("usage") or {}
-    reasoning_tokens = (usage.get("completion_tokens_details") or {}).get(
-        "reasoning_tokens"
-    )
-    meta = {
-        "finish_reason": choice.get("finish_reason") or "",
-        "reasoning_tokens": int(reasoning_tokens or 0),
-        "completion_tokens": int(usage.get("completion_tokens") or 0),
-        "has_reasoning": bool(message.get("reasoning_content")),
-        "requested_max_tokens": max_tokens,
-    }
-    return content, meta
+    if with_meta:
+        return "", last_meta
+    return ""
+
+
+def _post_chat(opener, request, timeout: int | None) -> dict:
+    """单次 HTTP 调用（含网络层重试），返回解析后的响应体。"""
+    last_message = ""
+    for attempt in range(4):
+        try:
+            with opener.open(
+                request,
+                timeout=timeout or settings.AI_TIMEOUT,
+            ) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")
+            last_message = f"AI 服务返回 {exc.code}: {detail[:300]}"
+            # 429 与服务端临时错误都值得重试
+            if exc.code in (429, 500, 502, 503) and attempt < 3:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise AiRequestError(last_message) from exc
+        except (
+            http.client.IncompleteRead,
+            http.client.RemoteDisconnected,
+            ConnectionError,
+            TimeoutError,
+            socket.timeout,
+            urllib.error.URLError,
+        ) as exc:
+            # 上游断连/超时：0 bytes 等偶发，重试更稳
+            last_message = f"AI 连接中断：{exc}"
+            if attempt < 3:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise AiRequestError(last_message) from exc
+        except OSError as exc:
+            last_message = f"AI 网络错误：{exc}"
+            if attempt < 3:
+                time.sleep(2 * (attempt + 1))
+                continue
+            raise AiRequestError(last_message) from exc
+    raise AiRequestError(last_message or "AI 调用失败")
 
 
 # 推理模型（deepseek-flash）会先花掉一段 reasoning_tokens 再产出正文。
 # 若 max_tokens 只按"输出正文"估算，预算会被推理吃光 → finish_reason=length、
-# content 为空（实测 12000 预算里有 11998 是 reasoning_tokens，正文 0 字）。
-# 策略：首轮只按原预算的 1.5 倍（省时间省钱），**一旦真的被截断就翻倍重试**，
-# 而不是直接判定失败——这样绝大多数调用首轮就过，只有重活才付额外成本。
+# content 为空或被静默截断（实测 12000 预算里有 11998 是 reasoning_tokens，正文 0 字）。
+# 余量与"截断就翻倍重试"的逻辑统一放在 `_chat` 里，所有调用方自动受益。
 _REASONING_TOKEN_HEADROOM = 1.5
 
 # 单次调用的 max_tokens 上限
@@ -148,17 +179,15 @@ MAX_TOKENS_CEILING = 64000
 
 
 def _json_chat_budget(max_tokens: int | None) -> int:
-    """为推理 token 预留少量余量后的 max_tokens。"""
-    if not max_tokens:
-        return 16000
-    return min(MAX_TOKENS_CEILING, int(max_tokens * _REASONING_TOKEN_HEADROOM))
+    """JSON 调用的基础预算（`_chat` 会再乘推理余量并处理截断重试）。"""
+    return int(max_tokens or 8000)
 
 
 def _chat_json(messages: List[dict], attempts: int = 3, **kwargs) -> dict:
-    """调用 AI 并解析严格 JSON。空内容/畸形/截断都算失败并重试（最多 3 次）。
+    """调用 AI 并解析严格 JSON。空内容/畸形都算失败并重试（最多 3 次）。
 
-    对推理模型特别处理：先用留了推理余量的预算调用；若 finish_reason=length
-    （预算被推理耗光导致正文为空），翻倍预算再试，避免"拆题结果为空"这种假失败。
+    截断（finish_reason=length）已由 `_chat` 内部翻倍预算重试处理；这里再兜一层：
+    若最终仍是被截断的 JSON（`_extract_json` 无法修复），当作失败重试。
     """
     last = None
     budget = _json_chat_budget(kwargs.pop("max_tokens", None))
@@ -169,9 +198,9 @@ def _chat_json(messages: List[dict], attempts: int = 3, **kwargs) -> dict:
             if reason == "length":
                 last = ValueError(
                     f"输出预算被耗尽（finish_reason=length，推理用了 "
-                    f"{meta.get('reasoning_tokens')} tokens）；已调大预算重试"
+                    f"{meta.get('reasoning_tokens')} tokens）"
                 )
-                budget = min(MAX_TOKENS_CEILING, budget * 2)
+                budget = min(MAX_TOKENS_CEILING, max(budget * 2, 8000))
             else:
                 last = ValueError(f"AI 返回内容为空（finish_reason={reason}）")
             if i < attempts - 1:
@@ -231,6 +260,10 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
         "如果某个选项缺失，填空字符串即可；如果无法确定正确答案，"
         "给出最可能的答案并在解析中说明。source_type：真题填 real_exam 并填写年份，"
         "模拟题填 mock 并填写年份和卷名，其他填 other。\n"
+        "**题干与选项必须原样照抄用户给的内容**（只允许做一件事：把数学表达式用 $...$ 或 $$...$$ 包起来）："
+        "严禁改写、精简、润色、重新表述或自行编造题干与选项；"
+        "看不清或缺失的部分保留原样，宁可留着也不要猜。"
+        "用户给了几道题就输出几道，不要增减题目。\n"
         "题干（question）和选项（option_a~d）中的数学表达式必须全部用 $...$ 或 $$...$$ 包裹，"
         "禁止出现裸露的 ^、_、\\alpha、A^2β 等未渲染文本；例如 $A^2\\beta=\\beta$、$\\alpha^T\\beta=0$、$E-k\\alpha\\alpha^T$。\n"
         "解析（analysis）必须符合以下风格：\n"
@@ -669,6 +702,14 @@ def _clean_items(raw) -> List[dict]:
     return items
 
 
+def _strip_section_markers(text: str) -> str:
+    """去掉识图阶段留下的【原文】/【题目】小标题行，避免存进数据库。"""
+    lines = [
+        ln for ln in str(text or "").split("\n") if not _SECTION_MARK_RE.match(ln.strip())
+    ]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
 def normalize_english_parsed(parsed: dict, fallback_text: str = "") -> dict:
     """规整英语整篇解析结果：保留标准错题字段，并挂上英语附加内容与多题。"""
     if not isinstance(parsed, dict):
@@ -676,7 +717,7 @@ def normalize_english_parsed(parsed: dict, fallback_text: str = "") -> dict:
     is_english = bool(parsed.get("is_english"))
     base = normalize_parsed(parsed, fallback_text)
     base["is_english"] = is_english
-    base["passage_text"] = str(parsed.get("passage") or "").strip()
+    base["passage_text"] = _strip_section_markers(parsed.get("passage") or "")
     base["passage_translation"] = str(parsed.get("passage_translation") or "").strip()
     base["english_sentences"] = _clean_items(parsed.get("sentences"))
     base["english_phrases"] = _clean_items(parsed.get("phrases"))
@@ -726,24 +767,89 @@ def _vision_extract_text(
     调用方通道（多通道回退由路由层逐个尝试），保证回退链真正生效。
     """
     content = []
-    head = "请识别这几张图片中的文字，原样完整输出（保留段落与换行）；只输出文字本身，不要解释。"
+    head = (
+        "请把这几张图片里的文字**原样、完整**提取出来（保留段落与换行），只输出文字本身，不要解释、不要翻译、不要总结。\n"
+        "重要：\n"
+        "1. 标题、正文、题目、选项都要提取，**一个字都不能漏**；\n"
+        "2. 不要改写、不要润色、不要补全你没看清的内容；看不清就按原样输出你能看到的字符；\n"
+        "3. 如果是试卷/文章，请用 `【原文】` 和 `【题目】` 两个小标题把「文章正文」与「题目+选项」分开；\n"
+        "4. 数学公式用 LaTeX（$...$）表示；\n"
+        "5. **不要输出水印、页码、机构名、公众号/小红书号、二维码说明等无关文字**"
+        "（例如“小红书号：xxx”“扫码关注”“第 3 页 共 10 页”这类都不要）。"
+    )
     if instruction and instruction.strip():
-        head += "\n" + instruction
+        head += "\n\n【补充要求】" + instruction.strip()
     content.append({"type": "text", "text": head})
     for img in images:
         data_url = img.strip()
         if not data_url.startswith("data:"):
             data_url = f"data:{_guess_mime(data_url)};base64," + data_url
         content.append({"type": "image_url", "image_url": {"url": data_url}})
-    result = _chat(
+    result, meta = _chat(
         [{"role": "user", "content": content}],
         model=model or settings.AI_VISION_DS_MODEL,
         base_url=base_url,
         api_key=api_key,
-        max_tokens=4000,
+        # 识图必须给足预算：deepseek-flash 是推理模型，实测单次识图会先花掉
+        # ~12000 reasoning tokens，若只给 4000/8000，正文会在中途被静默截断，
+        # 表现为"英语原文只识出一两段"。这里给 16000（_chat 还会再乘推理余量，
+        # 并在真被截断时翻倍重试）。
+        max_tokens=16000,
         timeout=timeout,
+        with_meta=True,
     )
-    return str(result or "").strip()
+    text = str(result or "").strip()
+    if meta.get("truncated"):
+        # _chat 已翻倍重试过仍被截断：必须让上层知道，否则会拿残缺原文去做分析
+        # ——表现就是"英语原文只识出一两段、题目和原文错位"。
+        logger.warning(
+            "识图结果疑似被截断（已提取 %d 字，finish_reason=%s）",
+            len(text),
+            meta.get("finish_reason"),
+        )
+    return text
+
+
+_SECTION_MARK_RE = re.compile(
+    r"^\s*[【\[]\s*(原文|文章|正文|passage|text)\s*[】\]]\s*$"
+    r"|^\s*[【\[]\s*(题目|问题|试题|选项|questions?)\s*[】\]]\s*$",
+    re.I,
+)
+
+
+def _split_ocr_sections(text: str) -> tuple:
+    """把识图文本按【原文】/【题目】小标题拆成 (文章正文, 题目与选项)。
+
+    为什么必须拆：不拆的话整页（文章＋题干＋选项）会被当成"原文"送进精读，
+    阅读模型会去翻译题目、题目环节再靠 AI 重写题干 —— 实测表现就是
+    "题目与给出的题目完全不一致、原文里混着选项"。
+    拆开之后：阅读/翻译/逐句只看文章，题目清单只看题目部分，题干原样保留。
+
+    识别不到小标题时退化为 (全文, 全文)，保持旧行为不倒退。
+    """
+    raw = str(text or "")
+    lines = raw.split("\n")
+    passage: List[str] = []
+    questions: List[str] = []
+    mode = "passage"
+    seen_mark = False
+    for line in lines:
+        m = _SECTION_MARK_RE.match(line.strip())
+        if m:
+            seen_mark = True
+            # 命中【原文】类标题 → 之后进文章；命中【题目】类标题 → 之后进题目
+            mode = "passage" if m.group(1) else "questions"
+            continue
+        (passage if mode == "passage" else questions).append(line)
+
+    if not seen_mark:
+        return raw.strip(), raw.strip()
+    body = "\n".join(passage).strip()
+    quiz = "\n".join(questions).strip()
+    if not body:
+        # 只有题目没有正文（例如只截了题目页）→ 两边都用题目，保证不丢内容
+        return quiz, quiz
+    return body, (quiz or body)
 
 
 def _parse_english_reading_prompt(standard_tags: List[str] | None = None) -> str:
@@ -789,7 +895,9 @@ def _parse_english_questions_prompt(standard_tags: List[str] | None = None) -> s
         '"analysis": "该题解析（含定位/来源/思路/总结）", "difficulty": 3, '
         '"difficulty_points": "该题难点", "approach": "该题思路"}]}\n'
         "顶层填第 1 题，第 2 题起的题目逐一放进 questions 数组。选择题 correct_answer 只能填单个字母 A/B/C/D。"
-        "题干与选项里的数学/LaTeX 表达式用 $...$ 包裹。"
+        "题干与选项里的数学/LaTeX 表达式用 $...$ 包裹。\n"
+        "**题干与选项必须原样照抄用户给出的文字**：严禁改写、精简、翻译或自行编造题目；"
+        "用户给了几道题就输出几道，不要增减。只有解析（analysis）需要你自己撰写。"
     )
     if standard_tags:
         prompt += (
@@ -846,13 +954,17 @@ def analyze_english(
     if not source_text.strip():
         raise AiRequestError("未能从图片或文本中获取到内容")
 
-    # ① 阅读/翻译/句子拆解 + 是否英语
+    # 把「文章正文」与「题目+选项」拆开：混在一起会让阅读模型去翻译题目、
+    # 题目环节再靠 AI 重写题干（实测就是"题目与给的不一致、原文里混着选项"）。
+    passage_text, quiz_text = _split_ocr_sections(source_text)
+
+    # ① 阅读/翻译/句子拆解 + 是否英语（只看文章正文，不带题目与选项）
     reading = _chat_json(
         [
             {"role": "system", "content": _parse_english_reading_prompt(standard_tags)},
-            {"role": "user", "content": source_text},
+            {"role": "user", "content": passage_text},
         ],
-        max_tokens=4000,
+        max_tokens=8000,
         timeout=_remaining(),
     )
     if not reading.get("is_english"):
@@ -867,17 +979,18 @@ def analyze_english(
             return _chat_json(
                 [
                     {"role": "system", "content": _parse_english_vocab_prompt()},
-                    {"role": "user", "content": source_text},
+                    {"role": "user", "content": passage_text},
                 ],
-                max_tokens=4000,
+                max_tokens=8000,
                 timeout=_remaining(),
             )
         except Exception:
             return {}
 
-    user_req = source_text
+    # 题目环节只喂题目与选项；原文仅供参考定位
+    user_req = f"【原文】\n{passage_text}\n\n【题目与选项】\n{quiz_text}"
     if instruction and instruction.strip():
-        user_req = f"{source_text}\n\n【要求】{instruction.strip()}"
+        user_req += f"\n\n【要求】{instruction.strip()}"
 
     def _titles_task() -> list:
         # 先列题目清单（小、稳），逐题解析放下一波并发
@@ -885,10 +998,14 @@ def analyze_english(
             titles = _chat_json(
                 [
                     {"role": "system", "content": (
-                        "你是考研英语阅读助手。根据用户提供的原文与题目，输出严格的 JSON（不要 Markdown）：\n"
+                        "你是考研英语阅读助手。用户会给你【题目与选项】原文，请**逐题照抄**成严格 JSON（不要 Markdown）：\n"
                         '{"questions": [{"question": "题干", "option_a": "...", "option_b": "...", '
                         '"option_c": "...", "option_d": "...", "correct_answer": "单字母或参考答案文本"}]}\n'
-                        "只列出题目（含选项与答案），不要写解析；选择题 correct_answer 只能单个字母。"
+                        "**必须遵守**：\n"
+                        "1. question 与 option_* 要**原样照抄**用户给的文字，禁止改写、翻译、润色或自行编题；\n"
+                        "2. 用户给了几道题就输出几道，不要多也不要少；选项缺失就留空串；\n"
+                        "3. 只列题目与答案，不要写解析；选择题 correct_answer 只能填单个字母；\n"
+                        "4. 用户没给答案时，correct_answer 留空串，**不要猜**。"
                     )},
                     {"role": "user", "content": user_req},
                 ],
@@ -943,7 +1060,7 @@ def analyze_english(
     # 组装完整结构
     qa["is_english"] = True
     qa["subject_hint"] = "英语"
-    qa["passage"] = source_text
+    qa["passage"] = passage_text
     qa["passage_translation"] = reading.get("passage_translation", "")
     qa["sentences"] = reading.get("sentences", [])
     qa["phrases"] = vocab.get("phrases", [])

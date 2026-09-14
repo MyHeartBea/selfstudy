@@ -22,7 +22,8 @@ def fake_chat_factory(calls, vision_texts=None):
     vision_iter = iter(vision_texts or [])
     vision_calls = []
 
-    def fake_chat(messages, model=None, base_url=None, api_key=None, max_tokens=None, timeout=None):
+    def fake_chat(messages, model=None, base_url=None, api_key=None, max_tokens=None,
+                  timeout=None, with_meta=False):
         content = messages[0]["content"]
         if isinstance(content, list):
             # 视觉提文字：记录本次带了几张图
@@ -30,14 +31,20 @@ def fake_chat_factory(calls, vision_texts=None):
             vision_calls.append(n_images)
             calls.append(n_images)
             try:
-                return next(vision_iter)
+                text = next(vision_iter)
             except StopIteration:
-                return ""
-        # 文本整理（analyze_knowledge）
-        return (
-            '{"tag_name": "合并知识点", "summary": "合并后的摘要", '
-            '"related_tags": ["A", "B"]}'
-        )
+                text = ""
+        else:
+            # 文本整理（analyze_knowledge）
+            text = (
+                '{"tag_name": "合并知识点", "summary": "合并后的摘要", '
+                '"related_tags": ["A", "B"]}'
+            )
+        # _chat 在 with_meta=True 时返回 (content, meta)：识图提字会带这个参数，
+        # 假实现必须照此返回，否则 unpack 失败（CI 上踩过）
+        if with_meta:
+            return text, {"finish_reason": "stop", "truncated": False}
+        return text
 
     return fake_chat, vision_calls
 
@@ -78,14 +85,18 @@ class MultiImageExtractTest(unittest.TestCase):
         """某一批识别失败时，其余批次内容仍要保留并标注失败批次。"""
         state = {"n": 0}
 
-        def flaky_chat(messages, **kwargs):
+        def flaky_chat(messages, with_meta=False, **kwargs):
             content = messages[0]["content"]
             if isinstance(content, list):
                 state["n"] += 1
                 if state["n"] == 2:
                     raise RuntimeError("模拟第二批超时")
-                return f"第{state['n']}批文字"
-            return '{"tag_name": "t", "summary": "s", "related_tags": []}'
+                text = f"第{state['n']}批文字"
+            else:
+                text = '{"tag_name": "t", "summary": "s", "related_tags": []}'
+            if with_meta:
+                return text, {"finish_reason": "stop", "truncated": False}
+            return text
 
         images = [f"img{i}" for i in range(1, 7)]  # 2 批
         with patch.object(ai_service, "_chat", side_effect=flaky_chat):
