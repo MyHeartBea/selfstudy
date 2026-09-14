@@ -130,10 +130,11 @@ AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 
 - 后端 **148 个**测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）；
   前端 Vitest **49 个**：`cd frontend && npm test`（判分/筛选/Markdown 纯函数 + **卡片点击、知识点弹窗、关联错题区的 DOM 级交互回归**，环境 happy-dom）
-- 前端 **E2E 23 个**（Playwright，真浏览器）：`cd frontend && npm run test:e2e` —— 补单测抓不到的盲区：
-  **卡片整块可点的真命中测试**（单测 `trigger('click')` 会绕过命中测试）、**真实 paste 事件驱动的多图暂存**
-  （断言只暂存 / 只发一次请求 / 请求体带齐全部图片）、**8 条主路由渲染烟测**（零 console 错误）。
-  用例内所有 `/api/**` 在浏览器层打桩，**不需要启动后端**。
+- 前端 **E2E 31 个**（Playwright，真浏览器）：`cd frontend && npm run test:e2e` —— 补单测抓不到的盲区：
+  **卡片整块可点的真命中测试**（单测 `trigger('click')` 会绕过命中测试；桌面与窄屏都跑）、
+  **真实 paste 事件驱动的多图暂存**（断言只暂存 / 只发一次请求 / 请求体带齐全部图片 /
+  **解析结果真的渲染出来**，而不只是"请求发出去了"）、**10 条主路由渲染烟测**（零 console 错误）。
+  用例内所有 `/api/**` 在浏览器层打桩，**不需要启动后端**；本机用系统 Chrome，CI 装自带 chromium。
 - GitHub Actions（`.github/workflows/ci.yml`）三个 job：`backend-tests`（ruff check + format --check、
   unittest、**覆盖率门槛 55%**）、`frontend-test-build`（eslint + prettier、vitest、build）、
   `frontend-e2e`（装 chromium 后跑 Playwright，失败上传报告）

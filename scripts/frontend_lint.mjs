@@ -23,15 +23,16 @@ const run = (args) => {
   return res.status ?? 1
 }
 
-// e2e 与 playwright.config.js 一并纳入检查：E2E 代码同样是工程资产，
-// 且它跑在 Node 里（不是打包产物），lint 能提前抓出漏 import 之类的问题
+// e2e 与配置文件一并纳入检查：E2E 代码同样是工程资产（不是打包产物），
+// vite.config.js 里也有真实逻辑（E2E_PORT），漏检就会积累出"没人看过的代码"
 const globs = [
   'src/**/*.{js,vue,css}',
   'tests/**/*.js',
   'e2e/**/*.js',
   'playwright.config.js',
+  'vite.config.js',
 ]
-const eslintTargets = ['src', 'tests', 'e2e', 'playwright.config.js']
+const eslintTargets = ['src', 'tests', 'e2e', 'playwright.config.js', 'vite.config.js']
 const eslintArgs =
   mode === 'format' ? ['eslint', ...eslintTargets, '--fix'] : ['eslint', ...eslintTargets]
 const prettierArgs =

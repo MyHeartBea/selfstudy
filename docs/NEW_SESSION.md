@@ -34,8 +34,9 @@
 ## 测试与验证（含手法的坑）
 - 后端：`cd backend && python -m unittest discover -s tests`（148 个）。
 - 前端单测：`cd frontend && npm test`（Vitest 49 个，含 DOM 级交互回归；`vite.config.js` 里 `test.environment='happy-dom'`）。
-- 前端 E2E：`cd frontend && npm run test:e2e`（Playwright 23 个，真 Chrome；自起 vite dev，`/api/**` 全部在浏览器层打桩，**不需要后端**）。
-- 静态检查：`cd backend && ruff check app tests && ruff format --check app tests`；`cd frontend && npx eslint src tests e2e playwright.config.js && npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js" "e2e/**/*.js" "playwright.config.js"`；一次性 `pre-commit run --all-files`。
+- 前端 E2E：`cd frontend && npm run test:e2e`（Playwright 31 个，真 Chrome；自起 vite dev 于 **5274**，`/api/**` 全部在浏览器层打桩，**不需要后端**）。
+- 静态检查：`cd backend && ruff check app tests && ruff format --check app tests`；`cd frontend && npx eslint src tests e2e playwright.config.js vite.config.js && npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js" "e2e/**/*.js" "playwright.config.js" "vite.config.js"`；一次性 `pre-commit run --all-files`。
+- **E2E 写法的四个坑（都有注释，别再犯）**：①打桩数据必须是**真实响应字段名/形状**（`passage_text` 而非 `passage`；数组别写成 `{items:[]}`），写错不会红；②Playwright **否定断言在元素不存在时算通过**，要用正向断言；③断言同步点放"结果已渲染"，别只 poll 请求次数；④用 `expectAllApiStubbed(calls)` 兜住漏打桩（未打桩只回 404，axios 只弹 toast、不写 console）。
 - **改前端必须再跑 `npm run build`**：Vue 模板编译错误只有 build 能发现（lint 与单测都会放过）。
 - **UiModal 是 Teleport 到 `document.body`**：测试里查弹窗必须 `document.querySelector`，不要用 `wrapper.find`。
 - **测试收尾必须 `unmount()`**，不要在 `beforeEach` 里 `document.body.innerHTML=''`——直接清空会让 Vue 的 Teleport 记账错乱，组件监听器静默失效（踩过）。

@@ -44,14 +44,26 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > **E2E 只补单测覆盖不到的盲区**（`frontend/e2e/`，Playwright，配置 `frontend/playwright.config.js`）：
 > ①**真命中测试**——卡片整块可点（`.k-hit` 覆盖层被 `z-index:2` 子元素盖住那次事故，
 > 单测用 `trigger('click')` 直接派发事件、**绕开命中测试**，所以永远抓不到）；
-> ②**真 paste 事件**——智能录入多图暂存（原生 `ClipboardEvent` + `DataTransfer`，断言
-> "只暂存不自动分析、点按钮才发、**且只发一次**、请求体里带着全部图"）；
-> ③**渲染烟测**——8 条主路由在真浏览器渲染且零 console/page 错误（HTTP 200 是假阳性：SPA 空壳也回 200）。
-> 本机用**系统 Chrome**（`channel: 'chrome'`，不下载几百 MB 浏览器）；CI 单独 job 装官方 chromium。
+> ②**真 paste 事件**——智能录入多图暂存（原生 `ClipboardEvent` + `DataTransfer`），并断言
+> **解析结果真的渲染出来**（`.ep-bilingual` / 译文），而不只是"请求发出去了"；
+> ③**渲染烟测**——10 条主路由在真浏览器渲染且零 console/page 错误（HTTP 200 是假阳性：SPA 空壳也回 200）。
+> 本机默认用**系统 Chrome**（`channel: 'chrome'`，不下载几百 MB 浏览器），
+> `E2E_CHROME=0` 可切回自带浏览器；CI 单独 job 装官方 chromium。
+> 默认端口 **5274**（刻意与开发端口 5174 错开，避免 `reuseExistingServer` 静默复用旧 checkout 的 dev server）。
 > 所有 `/api/**` 都在浏览器层打桩（`e2e/fixtures.js` 的 `mockApi`），**不依赖后端、不碰真实数据库**。
-> 两个踩过的坑已写进 fixtures 注释：路由正则**必须锚定 `^https?://host/api`**（否则会拦掉
-> `/src/api/request.js` 这个真实前端模块 → 页面白屏），打桩数据**形状必须与真实接口一致**
-> （数组写成 `{items:[]}` 会让 `.filter` / `for..of` 直接抛 TypeError）。
+>
+> **写 E2E 时踩过的坑（都已写进代码注释，别再犯）**：
+> - 路由正则**必须锚定 `^https?://host/api`**，否则会拦掉 `/src/api/request.js` 这个真实前端模块 → 白屏；
+> - 打桩数据的**形状必须与真实接口一致**且**字段名要是响应形状**：`/api/knowledge/tags` 是
+>   `[{tag,mistake_count}]` 不是 `{items:[...]}`；`/api/ai/english` 返回的是
+>   `passage_text/english_sentences/...`（由 `ai_english.normalize_english_parsed` 规整）
+>   而**不是** LLM 入参名 `passage/sentences`。写错不会红（前端自己 catch 掉了），
+>   结果是"结果渲染"整条链路没人验 —— 这正是本次修掉的头号问题；
+> - **否定断言在元素不存在时算通过**（Playwright 的 `not.toHaveText`），必须改成正向断言；
+> - **断言同步点要放在"结果已渲染"**，别只 `poll` 请求次数（采样到 1 就放行，迟到的第二次请求看不到）；
+> - 用 `expectAllApiStubbed(calls)` 兜住漏打桩（未打桩只回 404 时，axios 只弹 toast、
+>   不写 console，`page.on('console')` 也抓不到，烟测会假绿）；
+> - 定位隐藏 `input[type=file]` 用 `data-testid`，别按序号/文案（页面上有多个，会静默点错）。
 
 > **CI 与本地不等价，别再被"本地全绿"骗一次**：CI 是 **Python 3.11**（本地 3.12）、
 > **没有 `backend/.env`**、依赖只有 `fastapi uvicorn pydantic httpx coverage ruff`
@@ -246,5 +258,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ⑥**安全**：`/api/papers` 的 `source_path`/`answer_path` 增加 `_resolve_inside()` —— 拒绝绝对路径、`..` 段、越出根目录的路径（生产实测 7 种穿越全部 400）；`routers/system.py` 补 `error` 导入（F821 真 bug）；
   ⑦**架构拆分**：`ai_service.py` 1402 → 约 950 行，英语整篇流水线抽到 `app/services/ai_english.py`（约 500 行，真并发 `executor.submit` + `.result()`，通过 `_svc()` 惰性引用模块以便 mock 生效），底部保留兼容 re-export；
   ⑧**工具链**：后端 Ruff、前端 ESLint 扁平配置 + Prettier、`pre-commit`（含密钥扫描与大文件检查，`scripts/`）、CI 增加 ruff/eslint/prettier/前端单测/覆盖率门槛 55%；顺带修出两个真 bug（`FormulaView.vue` 的 `reciteRevealed` 未声明、`system.py` 的 F821）。
-  ⑨**前端 E2E（Playwright）**：`frontend/e2e/` 23 个用例 —— 卡片整块可点（含键盘 Enter/Space 等价入口、`@click.stop` 不误开详情）、智能录入多图暂存（3 张只暂存 / 只发一次请求 / 请求体 3 张图齐）、8 条主路由渲染烟测（桌面 + Pixel 7 两档）。CI 新增独立 `frontend-e2e` job；`frontend/src/views/CaptureView.vue` 两个 file input 加了 `data-testid`（文案/序号定位会静默点到别的 input）。
-  测试：**后端 148、前端 49 + E2E 23**，覆盖率约 62%。
+  ⑨**前端 E2E（Playwright）**：`frontend/e2e/` 31 个用例（desktop + Pixel 7 两档 project）—— 卡片整块可点（含键盘 Enter/Space 等价入口、`@click.stop` 不误开详情，桌面与窄屏都跑）、智能录入多图暂存（3 张只暂存 / 只发一次请求 / 请求体 3 张图齐 / **解析结果真的渲染**）、10 条主路由渲染烟测。CI 新增独立 `frontend-e2e` job；`frontend/src/views/CaptureView.vue` 主图 input 加 `data-testid`。
+  ⑩**E2E 自查（用 dsh-code-review 审查这批新代码后修的）**：打桩夹具字段名/形状对齐真实契约（`/api/ai/english` 的 `passage_text` 等、`/api/knowledge/tags` 的 `[{tag,mistake_count}]`）；否定断言改正向；断言同步点从"请求已发"改为"结果已渲染"（并用变异测试证明断言真的会失败）；新增 `expectAllApiStubbed`（漏打桩即失败）与 `guardPageErrors`（三个 spec 都装页面错误守卫）；`vite.config.js` 纳入 lint 目标（此前 `process.env` 无人检查）；E2E 默认端口改 5274 避免误复用旧 dev server；mobile project 补跑卡片点击。
+  测试：**后端 148、前端 49 + E2E 31**，覆盖率约 62%。

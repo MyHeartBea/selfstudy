@@ -87,8 +87,14 @@ export default [
   },
 
   {
-    // E2E（Playwright）：跑在 Node 里，但 page.evaluate 回调里是浏览器环境
-    files: ['e2e/**/*.js', 'playwright.config.js'],
+    // E2E（Playwright）与构建/测试配置：跑在 Node 里，但 page.evaluate 回调里是浏览器环境
+    files: [
+      'e2e/**/*.js',
+      'playwright.config.js',
+      // vite.config.js 里用到 process.env（E2E_PORT）——原来不在任何 lint 目标里，
+      // 一旦有人把它加进目标就会因 no-undef 直接红，所以这里先给 node globals
+      'vite.config.js',
+    ],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },

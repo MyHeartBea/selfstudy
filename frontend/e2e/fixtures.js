@@ -9,8 +9,8 @@ import zlib from 'node:zlib'
 
 export { test, expect }
 
-/** 项目统一响应包（与后端 app.responses.ok 一致）。 */
-export function ok(data, message = 'ok') {
+/** 项目统一响应包（与后端 app.responses.ok 一致，默认 message 也是 'success'）。 */
+export function ok(data, message = 'success') {
   return { code: 200, data, message }
 }
 
@@ -69,12 +69,11 @@ export async function pasteImage(page, { name = 'shot.png', rgb = [255, 255, 255
 }
 
 /**
- * 按 data-testid 走「选择图片」路径。
+ * 按 data-testid 走「选择图片」路径（主图那个 input）。
  *
- * 为什么不按文案/序号定位：「继续添加图片」与「选择参考图片…」都套在 `label.pick-label` 里，
- * 追加区（.more-images）只有在**已有附图**时才渲染 —— 用文案 + first() 会静默落到另一个
- * label 上，用 nth(1) 拿到的也可能是参考图那个 input，点击"成功"但文件进了别处，
- * 比直接失败更难查。testid 不受 DOM 顺序与文案影响。
+ * 为什么不按序号定位：页面上同时存在多个 `input[type=file]`（主图、参考图，
+ * 附图区渲染后还有"继续添加"），`nth(1)` 很可能落到参考图那个 input 上 ——
+ * 点击"成功"但文件进了别处，比直接失败更难查。testid 不受 DOM 顺序与文案影响。
  */
 export async function pickImageByTestId(
   page,
@@ -145,10 +144,15 @@ export async function mockApi(page, overrides = {}) {
     const path = url.pathname
     // 记下请求体：多图用例要断言"一次请求带了几张图"，这是核心回归点
     const body = readBody(request)
-    calls.push({ method: request.method(), path, url: url.toString(), body })
+    const entry = { method: request.method(), path, url: url.toString(), body }
+    calls.push(entry)
 
     const data = resolver(path, request.method(), overrides)
     if (data === undefined) {
+      // 漏打桩必须**可断言**：只回 404 的话，axios 拦截器只弹 toast（不写 console），
+      // Playwright 的 page.on('console') 也抓不到「Failed to load resource」这类
+      // DevTools Log 域消息 —— 页面于是照样渲染静态标题，烟测假绿。见 expectAllApiStubbed。
+      entry.unmatched = true
       return route.fulfill({
         status: 404,
         json: { code: 404, data: null, message: '未打桩：' + path },
@@ -157,6 +161,34 @@ export async function mockApi(page, overrides = {}) {
     return route.fulfill({ status: 200, json: ok(data) })
   })
   return calls
+}
+
+/**
+ * 用例收尾断言：本次会话里**没有任何未打桩的接口**。
+ *
+ * 不这么做的后果：新增一个视图调用时忘了补桩 → 页面数据全空但静态文案还在 →
+ * render-smoke 依然全绿（marker 命中的多是各页写死的 h2）。
+ */
+export function expectAllApiStubbed(calls) {
+  const missed = calls.filter((c) => c.unmatched).map((c) => `${c.method} ${c.path}`)
+  expect(missed, `以下接口未打桩，测试结论不可信：${[...new Set(missed)].join(', ')}`).toHaveLength(
+    0,
+  )
+}
+
+/**
+ * 装上页面级错误守卫，返回 errors 数组（用例收尾断言其为空）。
+ *
+ * 只有 render-smoke 装了守卫是不够的：capture / card-click 里如果 Vue 渲染抛错
+ * （走 console.error）或未捕获异常，测试会照样绿。
+ */
+export function guardPageErrors(page) {
+  const errors = []
+  page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`))
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') errors.push(`console: ${msg.text()}`)
+  })
+  return errors
 }
 
 /** 空壳但**形状正确**的响应：真实接口字段名保证页面 computed 不炸（如 stats.total_mistakes）。 */
@@ -188,9 +220,19 @@ function resolver(path, method, overrides) {
       ? overrides[path]({ path, method })
       : overrides[path]
   }
+  // 带路径参数的接口：/api/subjects/<id>/profile 等
+  if (/^\/api\/subjects\/\d+\/profile$/.test(path)) {
+    // 形状对齐 routers/subjects.py:66 的"无档案"分支
+    return { subject_id: Number(path.split('/')[3]), focus_areas: [], review_tips: '' }
+  }
   // —— 业务数据 ——
   if (path === '/api/knowledge') return { items: knowledgeRows, total: knowledgeRows.length }
-  if (path === '/api/knowledge/tags') return { items: knowledgeRows.map((r) => r.tag_name) }
+  // 真实接口返回 [{tag, mistake_count}] 数组（routers/knowledge.py），不是 {items:[字符串]}：
+  // 写成后者会让 MistakeForm 的 `.map((item) => item.tag)` 抛 TypeError，且被它自己的
+  // catch 静默吞掉 —— E2E 里标签联想恒为空，与生产行为不一致。
+  if (path === '/api/knowledge/tags') {
+    return knowledgeRows.map((r) => ({ tag: r.tag_name, mistake_count: 1 }))
+  }
   if (path === '/api/formulas') return formulaRows
   if (path === '/api/mistakes') return { items: [], total: 0 }
   if (path === '/api/mistakes/approaches') return []
@@ -228,6 +270,8 @@ function resolver(path, method, overrides) {
   if (path === '/api/health') return { status: 'ok', database: true, version: 'e2e', metrics: {} }
   if (path === '/api/knowledge/linked-mistakes') return { items: [] }
   if (path === '/api/ai/weekly-report') return { causes: [], summary: '', week_count: 0 }
+  if (path === '/api/export') return { mistakes: [], vocab: [] }
+  if (path === '/api/export/anki') return ''
   return undefined
 }
 

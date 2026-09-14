@@ -499,13 +499,7 @@ onUnmounted(() => {
           <label class="pick-label btn btn-outline btn-md" style="align-self: center">
             <Icon name="plus-circle" :size="14" />
             继续添加图片
-            <input
-              type="file"
-              accept="image/*"
-              class="visually-hidden"
-              data-testid="pick-more-image"
-              @change="onFileChange"
-            />
+            <input type="file" accept="image/*" class="visually-hidden" @change="onFileChange" />
           </label>
         </div>
 
