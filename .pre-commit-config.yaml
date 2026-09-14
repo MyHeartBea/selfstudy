@@ -1,0 +1,44 @@
+# pre-commit 配置：本地钩子优先（不依赖远程 hook 源，避免代理不稳导致提交被卡）。
+# 安装：pip install pre-commit && pre-commit install
+# 手动全量跑：pre-commit run --all-files
+repos:
+  # 后端：Ruff（lint + 格式化），使用项目 backend/pyproject.toml 的规则
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (backend)
+        entry: python -m ruff check --fix
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+        args: [--config, backend/pyproject.toml, backend/app, backend/tests]
+
+      - id: ruff-format
+        name: ruff format (backend)
+        entry: python -m ruff format
+        language: system
+        files: ^backend/.*\.py$
+        pass_filenames: false
+        args: [--config, backend/pyproject.toml, backend/app, backend/tests]
+
+      # 前端：ESLint + Prettier（经 node 脚本跨平台调用；Windows 无 bash）
+      - id: frontend-lint
+        name: eslint + prettier (frontend)
+        entry: node scripts/frontend_lint.mjs check
+        language: system
+        files: ^frontend/(src|tests)/.*\.(js|vue|css)$
+        pass_filenames: false
+
+      # 通用卫生：大文件 / 行尾空白 / 文件末尾换行
+      - id: preflight
+        name: preflight hygiene (size / whitespace / EOF)
+        entry: python scripts/preflight_check.py
+        language: system
+        pass_filenames: false
+
+      # 密钥泄漏：只扫「暂存的新增行」，命中即拦截且不回显密钥
+      - id: secrets
+        name: secret scan (staged only)
+        entry: python scripts/check_secrets.py
+        language: system
+        pass_filenames: false

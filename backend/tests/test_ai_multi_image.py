@@ -13,10 +13,9 @@ import json
 import unittest
 from unittest.mock import patch
 
-from pydantic import ValidationError
-
 from app.schemas import AiOcrRequest
 from app.services import ai_service
+from pydantic import ValidationError
 
 
 def fake_chat_factory(calls, vision_texts=None):

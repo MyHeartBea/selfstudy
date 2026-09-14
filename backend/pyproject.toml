@@ -8,9 +8,11 @@ line-length = 100
 exclude = ["data", "真题", ".venv", "venv", "__pycache__"]
 
 [tool.ruff.lint]
+# 只抓真问题。**刻意不含 I(isort)**：isort 的导入排序与 ruff format 在导入段空行上
+# 会互相不认账（format 之后 check --fix 又要改、反之亦然），造成 pre-commit 钩子
+# 来回震荡、永远无法通过。ruff 官方建议格式化统一交给 ruff format，故此处不选 I。
 select = [
     "F",    # pyflakes：未定义名、未使用导入/变量、f-string 问题
-    "I",    # isort：导入顺序
     "B",    # bugbear：可变默认值、except 陷阱等
     "T201", # print 残留（后端服务应走 logging）
 ]
