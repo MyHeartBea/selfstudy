@@ -136,6 +136,16 @@ curl -s -H "User-Agent: Mozilla/5.0" \
 用它立刻看到 pending 的 #74。另新增 `scripts/check_workflow.py` 排除"workflow 语法非法被
 GitHub 静默拒绝"这一可能（4 个 job 结构合法）。**下次 CI 像没跑，先查 workflow 维度端点。**
 
+### 补充：GitHub Actions 存在数十分钟级的事件延迟（第二次观察到）
+
+- 提交 `bd7a04d` / `6931c84` 推送后长时间没有任何 run；后来 **run #74 是挂在更晚的 `62bed63` 上**出现的，
+  即那两次 push 的事件**没有生成 run**。
+- 阶段 1 的 `4192e9a` 推送后同样在 12 分钟内没有任何 run（多次查询 workflow 维度端点均只见旧的 #74）。
+
+结论：本项目当前的 Actions 事件投递偶发丢失/长延迟。**依赖 CI 才能宣称完成的事项，
+若 12 分钟内没看到 run，不要判定为"代码有问题"**，也不要反复重试推送刷屏；
+应记录为"CI 待确认"，并在下一次推送时一并确认（或到 Actions 页面手动 `Re-run` / 手动触发 workflow_dispatch）。
+
 
 ## 七、下一步（阶段 2）
 
