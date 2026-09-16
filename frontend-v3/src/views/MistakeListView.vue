@@ -151,7 +151,7 @@ usePageMotion(pageRoot, { stagger: 55 })
 <template>
   <main ref="pageRoot" id="main" class="pad">
     <header class="head">
-      <span class="mono">[02] INDEX · 错题星表</span>
+      <h1 class="mono page-h1">错题星表</h1>
       <span class="mono">{{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
     </header>
 
@@ -290,6 +290,13 @@ usePageMotion(pageRoot, { stagger: 55 })
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .pad {
   position: relative;
   z-index: var(--z-content);

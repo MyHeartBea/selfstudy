@@ -120,7 +120,7 @@ onMounted(async () => {
 <template>
   <main id="main" ref="pageRoot" class="pad">
     <header class="head">
-      <span class="mono">[12] FREE STUDY · 自主练习</span>
+      <h1 class="mono page-h1">自主练习</h1>
       <span class="mono">{{ progressText }}</span>
     </header>
 
@@ -206,6 +206,13 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .pad {
   position: relative;
   z-index: var(--z-content);

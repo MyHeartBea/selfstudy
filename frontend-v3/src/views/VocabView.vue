@@ -137,7 +137,7 @@ usePageMotion(pageRoot, { stagger: 55 })
 <template>
   <main ref="pageRoot" id="main" class="pad">
     <header class="head">
-      <span class="mono">[06] LEXICON · 生词本</span>
+      <h1 class="mono page-h1">生词本</h1>
       <span class="mono">
         {{ stats?.total ?? total }} 词 · 已掌握 {{ stats?.mastered ?? 0 }} · 待复习
         {{ stats?.due ?? 0 }}
@@ -220,6 +220,13 @@ usePageMotion(pageRoot, { stagger: 55 })
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .pad {
   position: relative;
   z-index: var(--z-content);

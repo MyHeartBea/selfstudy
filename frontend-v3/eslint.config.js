@@ -54,9 +54,17 @@ export default [
 
   {
     // 测试与配置文件跑在 Node 里；page.evaluate 之类回调里则是浏览器环境
-    files: ['tests/**/*.js', 'vite.config.js'],
+    files: ['tests/**/*.js', 'e2e/**/*.js', 'playwright.config.js', 'vite.config.js'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
+    },
+  },
+
+  {
+    // E2E 跑在 Node 里（Buffer/process），并使用 Playwright 的测试全局
+    files: ['e2e/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node },
     },
   },
 

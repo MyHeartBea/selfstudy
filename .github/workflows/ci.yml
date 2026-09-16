@@ -96,6 +96,31 @@ jobs:
         working-directory: .
         run: python scripts/check_bundle_budget.py
 
+  # v3 真浏览器 E2E（Playwright，独立端口 5176）
+  # 后端不需要：E2E 里所有 /api 请求都用 page.route 打桩，所以 CI 里可独立运行。
+  frontend-v3-e2e:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-v3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run v3 E2E
+        run: npx playwright test
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v3-playwright-report
+          path: frontend-v3/playwright-report/
+          retention-days: 7
+
   # 真浏览器 E2E：命中测试（整块可点）与真实 paste 事件只有这里能覆盖。
   # 自己起 vite dev（Playwright webServer），所有 /api 在浏览器层打桩，不需要后端。
   frontend-e2e:

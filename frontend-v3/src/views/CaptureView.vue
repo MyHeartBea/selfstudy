@@ -206,14 +206,14 @@ usePageMotion(pageRoot, { stagger: 55 })
 <template>
   <main ref="pageRoot" id="main" class="tray">
     <header class="head">
-      <span class="mono">[03] TRAY · 蘸墨台</span>
+      <h1 class="mono page-h1">智能录入</h1>
       <span class="mono">{{ frames.length }} / {{ MAX_FRAMES }} 帧</span>
     </header>
 
     <!-- 左：取帧区 -->
     <section class="intake reveal" data-reveal>
       <div class="bore">
-        <p class="big">蘸墨</p>
+        <h2 class="big">蘸墨</h2>
         <p class="sub">
           一次可选多张（原文 / 题干 / 选项分屏截图），<b>全部取齐后再研墨</b>—— 不是每贴一张就跑一次
           AI。也可以直接 Ctrl+V 粘贴，多张一起收。
@@ -340,6 +340,13 @@ usePageMotion(pageRoot, { stagger: 55 })
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .tray {
   position: relative;
   z-index: var(--z-content);

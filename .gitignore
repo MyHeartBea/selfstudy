@@ -40,3 +40,8 @@ frontend/.playwright/
 # Local temp
 temp/
 真题/
+
+# Playwright 产物
+frontend-v3/test-results/
+frontend-v3/playwright-report/
+frontend-v3/.playwright/
