@@ -19,12 +19,14 @@ const brandEl = ref(null)
 const ctaEl = ref(null)
 
 const LINKS = [
-  { to: '/', label: '星表', code: '01' },
+  { to: '/stats', label: '成册', code: '01' },
   { to: '/review', label: '复习', code: '02' },
   { to: '/capture', label: '录入', code: '03' },
   { to: '/mistakes', label: '错题', code: '04' },
   { to: '/knowledge', label: '知识', code: '05' },
-  { to: '/design', label: '规格', code: '06' },
+  { to: '/vocab', label: '生词', code: '06' },
+  { to: '/formulas', label: '公式', code: '07' },
+  { to: '/design', label: '规格', code: '08' },
 ]
 
 let stops = []

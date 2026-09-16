@@ -15,6 +15,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
+import { usePageMotion } from '../design/usePageMotion'
+
 import { aiApi } from '../core/api'
 import { toast } from '../ui/toast'
 import StarRow from '../ui/StarRow.vue'
@@ -26,6 +28,7 @@ import UiTextarea from '../ui/UiTextarea.vue'
 const MAX_FRAMES = 5
 
 /** 暂存的帧：{ dataUrl, base64 } */
+const pageRoot = ref(null)
 const frames = ref([])
 const reference = ref(null)
 const instruction = ref('')
@@ -195,17 +198,20 @@ const summary = computed(() => {
 
 onMounted(() => window.addEventListener('paste', onPaste))
 onBeforeUnmount(() => window.removeEventListener('paste', onPaste))
+
+/** 页面级动效：错峰入场 + 视差 + 磁吸 + 路径描绘（见 design/usePageMotion） */
+usePageMotion(pageRoot, { stagger: 55 })
 </script>
 
 <template>
-  <main id="main" class="tray">
+  <main ref="pageRoot" id="main" class="tray">
     <header class="head">
       <span class="mono">[03] TRAY · 蘸墨台</span>
       <span class="mono">{{ frames.length }} / {{ MAX_FRAMES }} 帧</span>
     </header>
 
     <!-- 左：取帧区 -->
-    <section class="intake">
+    <section class="intake reveal" data-reveal>
       <div class="bore">
         <p class="big">蘸墨</p>
         <p class="sub">
@@ -284,7 +290,7 @@ onBeforeUnmount(() => window.removeEventListener('paste', onPaste))
     </section>
 
     <!-- 右：初测结果 -->
-    <aside class="assay">
+    <aside class="assay reveal" data-reveal>
       <span class="mono alab">初测结果</span>
 
       <UiEmpty

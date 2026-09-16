@@ -91,6 +91,50 @@ export const baseApi = {
 /** 便于测试替换（单测里注入假 client） */
 export const __client = client
 
+/* ────────────────────────────── 统计 ────────────────────────────── */
+export const statsApi = {
+  /**
+   * 全局统计。字段（基线实测）：
+   * total_mistakes / today_new /
+   * by_subject[{subject_id,name,count,avg_difficulty}] /
+   * by_sub_subject[{sub_subject_id,subject_id,subject_name,name,count,avg_difficulty}] /
+   * by_question_type[{question_type,name,count}] / by_source_type[{source_type,name,count}]
+   */
+  overview: () => unwrap(client.get('/stats')),
+
+  /** GET /api/dashboard - { stats, reviews }（首屏一次拿全，减少往返） */
+  dashboard: () => unwrap(client.get('/dashboard')),
+}
+
+/* ────────────────────────────── 生词 ────────────────────────────── */
+export const vocabApi = {
+  /**
+   * 列表（服务端分页）。字段（基线实测）：
+   * items[{ id, word, meaning, phonetic, example, note, source, kind,
+   *        mastery_level, review_count, last_result, last_reviewed_at, next_review_at, created_at }]
+   * 另有 total / page / page_size
+   */
+  list: (params = { page: 1, page_size: 30 }) => unwrap(client.get('/vocab', { params })),
+
+  /** GET /api/vocab/stats - { total, mastered, due, distribution:[{mastery,count}] } */
+  stats: () => unwrap(client.get('/vocab/stats')),
+
+  /** GET /api/vocab/due?limit=N - **裸数组**（不是分页对象） */
+  due: (limit = 30) => unwrap(client.get('/vocab/due', { params: { limit } })),
+
+  /** POST /api/vocab/{id}/review body { result: 'known' | 'fuzzy' | 'unknown' } */
+  review: (id, result) => unwrap(client.post(`/vocab/${id}/review`, { result })),
+}
+
+/* ────────────────────────────── 公式 ────────────────────────────── */
+export const formulasApi = {
+  /** GET /api/formulas - [{ id, category, title, content, created_at, updated_at }]（无分页） */
+  list: () => unwrap(client.get('/formulas')),
+
+  /** POST /api/formulas body { category, title, content } */
+  create: (payload) => unwrap(client.post('/formulas', payload)),
+}
+
 /* ────────────────────────────── AI 解析 ────────────────────────────── */
 /**
  * 重要事实（实测）：这两个端点**是同步阻塞的**，英语整篇精读实测 165-210 秒。

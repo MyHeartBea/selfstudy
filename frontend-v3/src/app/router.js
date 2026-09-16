@@ -44,6 +44,24 @@ const routes = [
     name: 'knowledge',
     component: () => import('../views/KnowledgeView.vue'),
   },
+  {
+    // 学习统计 · 成册（Bento 非对称网格）
+    path: '/stats',
+    name: 'stats',
+    component: () => import('../views/StatsView.vue'),
+  },
+  {
+    // 生词本（闪卡快刷 + 词表）
+    path: '/vocab',
+    name: 'vocab',
+    component: () => import('../views/VocabView.vue'),
+  },
+  {
+    // 公式背诵（KaTeX 只在这一页按需加载）
+    path: '/formulas',
+    name: 'formulas',
+    component: () => import('../views/FormulaView.vue'),
+  },
   // 兜底：未实现的路由回首页，避免开发期白屏
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -65,6 +83,9 @@ const TITLES = {
   capture: '智能录入',
   mistakes: '错题星表',
   knowledge: '知识点库',
+  stats: '学习统计',
+  vocab: '生词本',
+  formulas: '公式背诵',
 }
 
 router.afterEach((to) => {

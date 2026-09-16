@@ -134,9 +134,25 @@ onBeforeUnmount(() => {
   document.body.style.overflow = ''
 })
 
-/** 落墨圆盘的扩散半径：随真实进度增长（用 vmax 保证窄屏也铺满） */
-const inkRadius = computed(() => `${18 + progress.value * 1.35}vmax`)
 const readout = computed(() => String(Math.round(progress.value)).padStart(3, '0'))
+
+/* ── 目镜几何与读数（第二段"校准"的视觉核心） ───────────────────────────
+   旧版只有一颗点 + 一个数字，画面信息密度撑不起"装置"；这一版加入
+   望远镜十字丝 + 双向旋转刻度环 + 24 条角刻度，并把真实进度写成环形弧。 */
+const RING_R = 92
+const RING_C = 2 * Math.PI * RING_R
+const ringDash = computed(() => {
+  const on = (progress.value / 100) * RING_C
+  return `${on.toFixed(1)} ${(RING_C - on).toFixed(1)}`
+})
+/** 揭幕：以中心为原点的软边圆形遮罩半径（替代旧版硬边斜切） */
+const revealR = computed(() => `${8 + progress.value * 1.5}vmax`)
+const phaseLabel = computed(() => {
+  if (phase.value === 'opening') return '就绪'
+  if (phase.value === 'calibrating') return progress.value > 66 ? '装载星表' : '对准赤经'
+  return '观测站上线'
+})
+const TICKS = Array.from({ length: 24 }, (_, i) => i * 15)
 </script>
 
 <template>
@@ -147,135 +163,308 @@ const readout = computed(() => String(Math.round(progress.value)).padStart(3, '0
     :aria-valuenow="Math.round(progress)"
     aria-valuemin="0"
     aria-valuemax="100"
-    aria-label="正在装载星表"
+    aria-label="正在校准观测站"
+    :style="{ '--reveal': revealR, '--p': progress / 100 }"
   >
-    <!-- 悬停的星点：第一段的唯一元素 -->
-    <span class="seed" aria-hidden="true"></span>
+    <!-- 黑场背景：以中心为原点的软边圆形透明区，随进度向外扩散，露出下面的星点场。
+         刻意**不用**独立的不透明遮罩层压在目镜之上 —— 那样会把刻度环整个盖住（已踩过）。 -->
+    <span class="veil" aria-hidden="true"></span>
 
-    <!-- 落墨：随进度扩散的圆盘（多尺度模糊 = 墨在纤维里洇开） -->
-    <span class="ink" :style="{ '--r': inkRadius }" aria-hidden="true"></span>
+    <!-- 目镜：十字丝 + 双向旋转刻度环 + 角刻度 -->
+    <div class="optic" aria-hidden="true">
+      <svg class="reticle" viewBox="0 0 240 240" width="240" height="240">
+        <g class="ticks">
+          <line
+            v-for="(a, i) in TICKS"
+            :key="a"
+            :x1="120"
+            :y1="i % 2 ? 6 : 2"
+            :x2="120"
+            :y2="i % 2 ? 14 : 20"
+            :transform="`rotate(${a} 120 120)`"
+          />
+        </g>
+        <g class="ring-in">
+          <circle cx="120" cy="120" r="62" />
+          <line x1="120" y1="52" x2="120" y2="62" />
+        </g>
+        <g class="ring-out">
+          <circle cx="120" cy="120" r="92" class="track" />
+          <circle cx="120" cy="120" r="92" class="prog" :stroke-dasharray="ringDash" />
+          <line x1="120" y1="24" x2="120" y2="36" />
+        </g>
+        <g class="cross">
+          <line x1="120" y1="86" x2="120" y2="104" />
+          <line x1="120" y1="136" x2="120" y2="154" />
+          <line x1="86" y1="120" x2="104" y2="120" />
+          <line x1="136" y1="120" x2="154" y2="120" />
+        </g>
+      </svg>
+      <span class="seed"></span>
+      <span class="halo"></span>
+    </div>
 
-    <!-- 读数：等宽、极小、靠下 —— 仪器感 -->
-    <div class="readout">
-      <span class="mono label">研错本 · 夜航星图</span>
-      <span class="num digits">{{ readout }}</span>
-      <span class="mono hint">任意键跳过</span>
+    <!-- HUD 四角读数 -->
+    <div class="hud">
+      <span class="corner tl mono">研错本 · 夜航星图</span>
+      <span class="corner tr mono">NOCTURNAL ATLAS</span>
+      <span class="corner bl mono"><i class="live"></i>{{ phaseLabel }}</span>
+      <span class="corner br mono">任意键跳过</span>
+      <span class="digits num">{{ readout }}</span>
     </div>
   </div>
 </template>
 
 <style scoped>
-.ink-loader {
-  position: fixed;
+/* 启动页样式（重做版）—— 只保留仍然有效的部分。
+   被删掉的旧写法（保留说明以防回退）：
+     · `.veil` 作为独立整屏不透明层 —— 它排在目镜之后，会把刻度环整个盖住。
+       正确做法：遮罩即启动页自身的背景（见下 `.ink-loader::before`），目镜自然浮在其上。
+     · 旧版硬边斜切 `clip-path` 揭幕 —— 观感像"切一刀"，改为软边圆形扩散。 */
+
+/* ── 黑场背景：软边圆形透明区，随 --reveal 扩散 ────────────────────── */
+.ink-loader::before {
+  content: '';
+  position: absolute;
   inset: 0;
-  z-index: var(--z-loader);
   background: var(--sky-0);
-  overflow: hidden;
-  cursor: pointer;
-}
-/* 揭幕：沿斜向掀起（clip-path 只影响合成，不触发布局） */
-.ink-loader.opening {
-  clip-path: polygon(0 0, 100% 0, 100% 0, 0 0);
-  transition: clip-path 0.6s var(--e-settle);
+  -webkit-mask-image: radial-gradient(
+    circle var(--reveal) at 50% 50%,
+    transparent 0 62%,
+    #000 100%
+  );
+  mask-image: radial-gradient(circle var(--reveal) at 50% 50%, transparent 0 62%, #000 100%);
   pointer-events: none;
+  transition:
+    -webkit-mask-image 0.14s linear,
+    mask-image 0.14s linear;
 }
-.ink-loader.inking .seed {
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.4);
+/* 静默段还没有扩散，整屏保持黑场 */
+.ink-loader.rest::before {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
-/* 悬停的星点：极小的白点，轻微脉动 */
-.seed {
+/* ── 目镜：十字丝 + 双向旋转刻度环 + 角刻度 ───────────────────────── */
+.optic {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 5px;
-  height: 5px;
-  margin: 0;
-  border-radius: 50%;
-  background: var(--ink-0);
-  box-shadow: 0 0 12px 2px oklch(0.945 0.014 265 / 0.5);
-  transform: translate(-50%, -50%);
-  animation: seed 2.6s var(--e-drift) infinite;
+  width: 240px;
+  height: 240px;
+  margin: -120px 0 0 -120px;
+  display: grid;
+  place-items: center;
   transition:
     opacity 0.5s var(--e-settle),
-    transform 0.5s var(--e-settle);
+    transform 0.7s var(--e-settle);
+  z-index: 2;
+}
+.ink-loader.opening .optic {
+  opacity: 0;
+  transform: scale(1.35);
+}
+/* 揭幕期间立刻收起所有前景信息（HUD / 读数 / 星点），
+   否则那 0.5s 的淡出里读数会叠在已经露出的首页内容上 —— 截图确认过这个瑕疵 */
+.ink-loader.opening .hud,
+.ink-loader.opening .optic,
+.ink-loader.opening .seed {
+  opacity: 0;
+  transition: opacity 0.22s linear;
+}
+.ink-loader.rest .reticle {
+  opacity: 0;
+}
+.reticle {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.6s var(--e-settle);
+}
+.ticks line {
+  stroke: var(--ink-3);
+  stroke-width: 1;
+  opacity: 0.75;
+}
+.ring-in circle,
+.ring-out circle {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+.ring-out .track {
+  stroke: var(--line);
+}
+.ring-out .prog {
+  stroke: var(--redshift);
+  stroke-width: 2;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 6px oklch(0.665 0.196 34 / 0.6));
+  transform: rotate(-90deg);
+  transform-origin: 120px 120px;
+}
+.ring-in line,
+.ring-out line {
+  stroke: var(--vein);
+  stroke-width: 2;
+}
+.cross line {
+  stroke: var(--ink-1);
+  stroke-width: 1;
+  opacity: 0.9;
+}
+/* 双向旋转：内圈顺时针 26s、外圈逆时针 40s —— 仪器在扫天 */
+.ring-in {
+  transform-origin: 120px 120px;
+  animation: spin-cw 26s linear infinite;
+}
+.ring-out {
+  transform-origin: 120px 120px;
+  animation: spin-ccw 40s linear infinite;
+}
+@keyframes spin-cw {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes spin-ccw {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+/* ── 中心星点 + 墨晕 ─────────────────────────────────────────────── */
+.seed {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-0);
+  box-shadow: 0 0 14px 3px oklch(0.945 0.014 265 / 0.6);
+  animation: seed 2.6s var(--e-drift) infinite;
+  z-index: 3;
 }
 @keyframes seed {
   0%,
   100% {
-    opacity: 0.55;
+    opacity: 0.7;
+    transform: scale(1);
   }
   50% {
     opacity: 1;
+    transform: scale(1.25);
   }
 }
+/* 墨晕：随进度增强的柔光，与刻度环进度同步 */
+.halo {
+  position: absolute;
+  width: 46vmax;
+  height: 46vmax;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    oklch(0.945 0.014 265 / 0.18) 0 16%,
+    oklch(0.665 0.196 34 / 0.12) 32%,
+    transparent 60%
+  );
+  filter: blur(34px);
+  opacity: calc(0.22 + var(--p, 0) * 0.78);
+  pointer-events: none;
+  z-index: 1;
+}
+.ink-loader.rest .halo {
+  opacity: 0;
+}
 
-/* 落墨：一个随进度扩散的圆，三层模糊叠出"洇开"的层次 */
-.ink {
+/* ── HUD 四角读数 ───────────────────────────────────────────────── */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.corner {
+  position: absolute;
+  color: var(--ink-2);
+}
+.tl {
+  left: var(--pad);
+  top: var(--pad);
+}
+.tr {
+  right: var(--pad);
+  top: var(--pad);
+}
+.bl {
+  left: var(--pad);
+  bottom: var(--pad);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-0);
+}
+.br {
+  right: var(--pad);
+  bottom: var(--pad);
+  color: var(--ink-3);
+}
+.live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--vein);
+  animation: ping 2.2s var(--e-settle) infinite;
+}
+@keyframes ping {
+  0% {
+    box-shadow: 0 0 0 0 oklch(0.775 0.098 200 / 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 9px oklch(0.775 0.098 200 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.775 0.098 200 / 0);
+  }
+}
+/* 巨型读数：底部居中，与刻度环同一数值 */
+.digits {
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: calc(var(--r) * 2);
-  height: calc(var(--r) * 2);
-  margin: calc(var(--r) * -1) 0 0 calc(var(--r) * -1);
-  background:
-    radial-gradient(circle at 50% 50%, oklch(0.945 0.014 265 / 0.98) 0 34%, transparent 72%),
-    radial-gradient(circle at 47% 52%, oklch(0.665 0.196 34 / 0.55) 0 30%, transparent 78%),
-    radial-gradient(circle at 53% 47%, oklch(0.775 0.098 200 / 0.3) 0 26%, transparent 80%);
-  filter: blur(28px) contrast(1.06);
-  will-change: width, height;
-}
-.ink-loader.rest .ink {
-  width: 0;
-  height: 0;
-  margin: 0;
-}
-
-/* 读数：固定在底部两侧，不与墨迹抢视觉 */
-.readout {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: var(--pad);
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  pointer-events: none;
-}
-.digits {
+  bottom: calc(var(--pad) + 6px);
+  transform: translateX(-50%);
   font-family: var(--font-mono);
   font-weight: 300;
-  font-size: clamp(2.2rem, 7vw, 5.4rem);
-  line-height: 0.82;
+  font-size: clamp(2rem, 6vw, 4.4rem);
+  line-height: 0.85;
   letter-spacing: -0.05em;
   color: var(--ink-0);
-  mix-blend-mode: difference; /* 墨迹盖过来时读数反相，始终可读 */
-}
-.label {
-  color: var(--ink-1);
-}
-.hint {
-  color: var(--ink-3);
+  mix-blend-mode: difference;
 }
 
 @media (max-width: 640px) {
-  .readout {
-    flex-wrap: wrap;
-  }
-  .hint {
+  .tr,
+  .br {
     display: none;
+  }
+  .optic {
+    width: 190px;
+    height: 190px;
+    margin: -95px 0 0 -95px;
+  }
+  .reticle {
+    width: 190px;
+    height: 190px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .seed {
+  .seed,
+  .ring-in,
+  .ring-out,
+  .live {
     animation: none;
   }
-  .ink {
-    filter: blur(20px);
+  .ink-loader::before {
+    display: none;
   }
 }
 </style>

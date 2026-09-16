@@ -16,6 +16,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
+import { usePageMotion } from '../design/usePageMotion'
+
 import { reviewsApi } from '../core/api'
 import { toast } from '../ui/toast'
 import InkDot from '../ui/InkDot.vue'
@@ -24,6 +26,7 @@ import UiButton from '../ui/UiButton.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiTag from '../ui/UiTag.vue'
 
+const pageRoot = ref(null)
 const loading = ref(true)
 const error = ref('')
 const queue = ref([])
@@ -158,10 +161,13 @@ onMounted(() => {
   window.addEventListener('keydown', onKey)
 })
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+
+/** 页面级动效：错峰入场 + 视差 + 磁吸 + 路径描绘（见 design/usePageMotion） */
+usePageMotion(pageRoot, { stagger: 55 })
 </script>
 
 <template>
-  <main id="main" class="verse">
+  <main ref="pageRoot" id="main" class="verse">
     <header class="head">
       <span class="mono">[01] VERSE · 今日复习</span>
       <span class="mono">
@@ -170,7 +176,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     </header>
 
     <!-- 左：墨量柱 -->
-    <aside class="well-col" aria-hidden="true">
+    <aside class="well-col reveal" aria-hidden="true" data-reveal>
       <span class="mono wlab">墨量</span>
       <div class="well">
         <i class="fill" :style="{ height: inkRatio + '%' }"></i>
@@ -180,7 +186,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <span class="mono wsub">剩余</span>
     </aside>
 
-    <section class="stage">
+    <section class="stage reveal" data-reveal>
       <UiEmpty v-if="loading" variant="skeleton" thumb :rows="3" />
 
       <UiEmpty v-else-if="error" title="星表载入失败" :hint="error">

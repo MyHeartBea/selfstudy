@@ -50,3 +50,13 @@ repos:
         entry: python scripts/check_secrets.py
         language: system
         pass_filenames: false
+
+      # v3 页面动效接线：import / 根元素 ref / 调用 三者必须齐全
+      # 起因：一次批量注入漏了 import，运行时报 usePageMotion is not defined，
+      # 组件挂载失败导致**整页空白**，而构建 / lint / 单测全部通过、window error 也不触发。
+      - id: page-motion-wiring
+        name: page motion wiring (frontend-v3)
+        entry: python scripts/check_page_motion.py
+        language: system
+        files: ^frontend-v3/src/(views|design)/.*\.(js|vue)$
+        pass_filenames: false

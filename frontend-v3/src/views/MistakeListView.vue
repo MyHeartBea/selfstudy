@@ -12,6 +12,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
+import { usePageMotion } from '../design/usePageMotion'
+
 import { baseApi, mistakesApi } from '../core/api'
 import { toast } from '../ui/toast'
 import InkCard from '../ui/InkCard.vue'
@@ -26,6 +28,7 @@ import UiTag from '../ui/UiTag.vue'
 
 const PAGE_SIZE = 20
 
+const pageRoot = ref(null)
 const loading = ref(true)
 const errorText = ref('')
 const items = ref([])
@@ -140,17 +143,20 @@ onMounted(() => {
   load()
 })
 onBeforeUnmount(() => clearTimeout(searchTimer))
+
+/** 页面级动效：错峰入场 + 视差 + 磁吸 + 路径描绘（见 design/usePageMotion） */
+usePageMotion(pageRoot, { stagger: 55 })
 </script>
 
 <template>
-  <main id="main" class="pad">
+  <main ref="pageRoot" id="main" class="pad">
     <header class="head">
       <span class="mono">[02] INDEX · 错题星表</span>
       <span class="mono">{{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
     </header>
 
     <!-- 筛选条：整行可输入的搜索 + 两个下拉 -->
-    <div class="filters">
+    <div class="filters reveal" data-reveal>
       <UiField
         v-model="filters.search"
         label="搜索"
@@ -186,7 +192,7 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
     />
 
     <template v-else>
-      <div class="grid">
+      <div class="grid reveal" data-reveal>
         <InkCard
           v-for="row in items"
           :key="row.id"
@@ -210,7 +216,7 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
         </InkCard>
       </div>
 
-      <div class="pager">
+      <div class="pager reveal" data-reveal>
         <UiButton :disabled="page <= 1" @click="((page -= 1), load())">上一页</UiButton>
         <span class="mono pnum">{{ page }} / {{ totalPages }}</span>
         <UiButton :disabled="page >= totalPages" @click="((page += 1), load())">下一页</UiButton>

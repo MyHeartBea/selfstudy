@@ -14,6 +14,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
+import { usePageMotion } from '../design/usePageMotion'
+
 import { baseApi, knowledgeApi } from '../core/api'
 import { toast } from '../ui/toast'
 import InkCard from '../ui/InkCard.vue'
@@ -26,6 +28,7 @@ import UiTag from '../ui/UiTag.vue'
 
 const PAGE_SIZE = 24
 
+const pageRoot = ref(null)
 const loading = ref(true)
 const errorText = ref('')
 const items = ref([])
@@ -138,16 +141,19 @@ onMounted(() => {
   load()
 })
 onBeforeUnmount(() => clearTimeout(timer))
+
+/** 页面级动效：错峰入场 + 视差 + 磁吸 + 路径描绘（见 design/usePageMotion） */
+usePageMotion(pageRoot, { stagger: 55 })
 </script>
 
 <template>
-  <main id="main" class="pad">
+  <main ref="pageRoot" id="main" class="pad">
     <header class="head">
       <span class="mono">[04] SPECIMENS · 知识点库</span>
       <span class="mono">{{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
     </header>
 
-    <div class="filters">
+    <div class="filters reveal" data-reveal>
       <UiField
         v-model="filters.search"
         label="按标签筛选"
@@ -162,7 +168,7 @@ onBeforeUnmount(() => clearTimeout(timer))
       />
     </div>
 
-    <div v-if="tags.length" class="tagbar">
+    <div v-if="tags.length" class="tagbar reveal" data-reveal>
       <button
         v-for="t in tags.slice(0, 12)"
         :key="t.tag"
@@ -186,7 +192,7 @@ onBeforeUnmount(() => clearTimeout(timer))
     />
 
     <template v-else>
-      <div class="wall">
+      <div class="wall reveal" data-reveal>
         <InkCard v-for="row in items" :key="row.id" spine="var(--vein)" @select="openDetail(row)">
           <div class="chead">
             <h3 class="kname">{{ row.tag_name }}</h3>
@@ -212,7 +218,7 @@ onBeforeUnmount(() => clearTimeout(timer))
         </InkCard>
       </div>
 
-      <div class="pager">
+      <div class="pager reveal" data-reveal>
         <UiButton :disabled="page <= 1" @click="((page -= 1), load())">上一页</UiButton>
         <span class="mono pnum">{{ page }} / {{ totalPages }}</span>
         <UiButton :disabled="page >= totalPages" @click="((page += 1), load())">下一页</UiButton>
