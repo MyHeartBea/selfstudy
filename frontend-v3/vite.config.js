@@ -17,6 +17,7 @@ export default defineConfig({
   base: BASE,
   plugins: [vue()],
   test: {
+    // DOM 级测试需要浏览器环境（与 v2 一致）
     environment: 'happy-dom',
     include: ['tests/**/*.test.js'],
   },
