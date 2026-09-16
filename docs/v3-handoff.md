@@ -219,3 +219,32 @@ powershell -File scripts/serve_frontend.ps1 -Target v2
 ### 归档与删除（**暂不执行**）
 v2 打最终 tag 后**保留**，等你实际用 v3 跑一段（建议至少一二周、覆盖录入与复习两条主流程）
 再决定是否删除。删除前建议先 `git tag` 留档并确认冷备可还原。
+
+## 十、生产路径验证（已完成，切前最后一块拼图）
+
+**问题**：切换前，所有验证都跑在 vite dev（5175）上；而"v3 的 **dist 构建产物**
+经后端 SPA 回退能否正常工作"从未被证明 —— 这恰恰是切换后真实要跑的形态。
+
+**做法**（不碰 8000，用户使用不受影响）：同一个后端换端口与 dist 即可，
+因为 config.py 支持 `PORT` 与 `FRONTEND_DIST` 两个环境变量：
+
+```powershell
+# 起一个专门服务 v3 构建产物的后端实例
+$env:PORT='8100'; $env:FRONTEND_DIST='D:/km-v2/frontend-v3/dist'
+python main.py      # 工作目录 backend/
+```
+
+**结果（全部通过）**：
+- `/api/health` ok（同一个后端与同一张库，v2.1.0）
+- 首页返回的是 **v3 外壳**（后端的 SPA 回退能正确吐出 frontend-v3/dist/index.html）
+- `contract_diff --check`：28 端点**无差异**
+- `KM_AUDIT_BASE=http://127.0.0.1:8100 python scripts/audit_pages.py`：**14/14 通过**
+- `KM_AUDIT_BASE=http://127.0.0.1:8100 python scripts/audit_a11y.py`：**全部"无问题"**
+
+**两个地址的区别（别混）**：
+- `5175` = vite dev（热更新、模块未打包），开发时用
+- `8100` = **v3 的生产形态**（真实 dist + 真实后端），切换后的样子就是这个
+- `8000` = 当前生产（仍是 v2）
+
+**仍待用户确认的一步**：把 8000 的 FRONTEND_DIST 指到 v3（即 `serve_frontend.ps1 -Target v3`）。
+这是对外行为变更，需用户点头；回滚是一条命令。
