@@ -90,3 +90,57 @@ export const baseApi = {
 
 /** 便于测试替换（单测里注入假 client） */
 export const __client = client
+
+/* ────────────────────────────── AI 解析 ────────────────────────────── */
+/**
+ * 重要事实（实测）：这两个端点**是同步阻塞的**，英语整篇精读实测 165-210 秒。
+ * 所以：
+ *   - axios 的 timeout 必须给足（上面 client 已设 300000），不要用更短的覆盖
+ *   - UI 必须显示**真实阶段**而不是百分比（假进度比没有进度更伤信任）
+ */
+export const aiApi = {
+  /**
+   * 英语整篇精读（多图或文本）。
+   * 契约：POST /api/ai/english - data 含 passage_text / passage_translation /
+   *       english_sentences / english_phrases / english_words / english_questions
+   *       （**是响应形状，不是请求形状**，见 ai_english.normalize_english_parsed）
+   */
+  english: ({ images = [], text = '', instruction = '' }) =>
+    unwrap(client.post('/ai/english', { images, text, instruction }, { silent: true })),
+
+  /**
+   * 通用 OCR / 题目解析（带参考图时也走这个）。
+   * 契约：POST /api/ai/ocr body { image_base64, images, instruction, reference_image_base64 }
+   */
+  ocr: ({ images = [], instruction = '', referenceImage = '' }) =>
+    unwrap(
+      client.post(
+        '/ai/ocr',
+        {
+          image_base64: images[0] || '',
+          images,
+          instruction,
+          reference_image_base64: referenceImage,
+        },
+        { silent: true },
+      ),
+    ),
+}
+
+/* ────────────────────────────── 错题 ────────────────────────────── */
+export const mistakesApi = {
+  /**
+   * 列表。
+   * 契约：GET /api/mistakes 不传 page 返回数组；传 page 返回 { items, total, page, page_size }
+   */
+  list: (params = {}) => unwrap(client.get('/mistakes', { params })),
+
+  /** 详情：GET /api/mistakes/{id} */
+  detail: (id) => unwrap(client.get(`/mistakes/${id}`)),
+
+  /** 新建：POST /api/mistakes（字段见 schemas.MistakeCreate） */
+  create: (payload) => unwrap(client.post('/mistakes', payload)),
+
+  /** 批量删除：POST /api/mistakes/batch { ids, action } */
+  batch: (ids, action = 'delete') => unwrap(client.post('/mistakes/batch', { ids, action })),
+}

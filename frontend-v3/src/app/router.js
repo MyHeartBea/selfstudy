@@ -26,6 +26,12 @@ const routes = [
     name: 'review',
     component: () => import('../views/ReviewView.vue'),
   },
+  {
+    // 智能录入 · 蘸墨台（多帧暂存 + 一次研墨）
+    path: '/capture',
+    name: 'capture',
+    component: () => import('../views/CaptureView.vue'),
+  },
   // 兜底：未实现的路由回首页，避免开发期白屏
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -44,6 +50,7 @@ const TITLES = {
   atlas: '夜航星图',
   design: '设计规格',
   review: '今日复习',
+  capture: '智能录入',
 }
 
 router.afterEach((to) => {
