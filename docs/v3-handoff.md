@@ -103,10 +103,27 @@ frontend-v3/
 - v3 构建通过：`dist` gzip 约 43 KB（vendor 34.6 / app 5.3 / css 2.5）
 - 真浏览器（无头 Chrome + SwiftShader）验证外壳：
   - 启动页时序正确：`rest`(≈0.9s) → `inking`(≈1.4s) → `opening`(≈3.5s) → 卸载，`body.ready` 生效
-  - 星点场真绘制：截图右半区 3480 个亮像素、强边占比 2.73%（雾气柔和，无硬边）
+  - 星点场真绘制：截图右半区 3484 个亮像素、强边占比 2.73%（雾气柔和，无硬边）
   - 自定义光标 / 雾气 / 颗粒均在位；无横向溢出；页面零异常
 - v2 未受影响：`/api/health` ok、`/stats` 首页 200、148 后端测试通过、v2 前端 lint 通过
 - 契约基线一致：28 端点 `--check` 无差异
+- **CI run #74 全绿**（sha `62bed63`）：backend-tests / frontend-test-build /
+  **frontend-v3-build** / frontend-e2e 四个 job 全部 success
+- v3 单测 5 个通过（`tests/inkLoader.test.js`）
+
+### 排查记录：CI 曾"看起来不触发"
+
+一度以为推送没触发 CI（`per_page=1` 的 runs 列表接口返回陈旧数据，连续两次都看到旧的 #73）。
+正解是查 **workflow 维度**的端点并带分支过滤：
+
+```bash
+curl -s -H "User-Agent: Mozilla/5.0" \
+  "https://api.github.com/repos/<owner>/<repo>/actions/workflows/<id>/runs?per_page=1&branch=main"
+```
+
+用它立刻看到 pending 的 #74。另新增 `scripts/check_workflow.py` 排除"workflow 语法非法被
+GitHub 静默拒绝"这一可能（4 个 job 结构合法）。**下次 CI 像没跑，先查 workflow 维度端点。**
+
 
 ## 七、下一步（阶段 1）
 
