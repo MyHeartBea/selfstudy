@@ -14,11 +14,11 @@
 | **1** | 材质层 / 六条动效原语 / 章节外壳（滚动隐藏·磁吸）/ 规格页 | **已完成** |
 | **2** | 组件库：UiButton / UiField / UiTag / InkCard / InkDot / StarRow | **已完成** |
 | **2b** | 组件库续：UiTextarea / UiSelect / UiCheck / toast / UiModal / UiEmpty(含 skeleton) | **已完成** |
-| 3 | 核心场景（复习 / 录入 / 错题 / 知识点） | **进行中：复习页已完成** |
-| 3b | 核心场景续：录入 / 错题 / 知识点 | 未开始 |
-| 4 | 剩余页面（统计 / 真题 / 模考 / 生词 / 公式 / 科目 / 练习 / 设置） | 未开始 |
-| 5 | 移动端重排 + 可访问性 + 性能预算 | 未开始 |
-| 6 | 切换（FRONTEND_DIST）+ 契约对照 + v2 归档 | 未开始 |
+| 3 | 核心场景（复习 / 录入 / 错题 / 知识点） | **已完成（四页）** |
+| 4 | 剩余业务页（统计 / 真题 / 模考 / 生词 / 公式 / 科目 / 练习 / 设置） | **已完成（五页）** |
+| 5 | 可访问性 + 性能预算 | **已完成**（移动端经用户确认**不做**） |
+| 6 | 切换（FRONTEND_DIST）+ 契约对照 + v2 归档 | **待用户确认后执行** |
+
 
 ### 阶段 1 追加决策：GSAP 推迟到阶段 3
 
@@ -180,3 +180,42 @@ GitHub 静默拒绝"这一可能（4 个 job 结构合法）。**下次 CI 像�
   阶段 3 起是真实业务页面，改色成本显著上升，**建议在阶段 3 前确认**。
   dev server：`http://127.0.0.1:5175`，规格页 `/design`。
 
+## 九、阶段 6 切换清单（v3 已完成，等你点头）
+
+### 现状
+- v3：`frontend-v3/`，**14 个路由**，单测 64 个，首屏 189 KB / 240 KB 预算
+- 全部验证脚本可复跑：`scripts/audit_pages.py`（14 页巡检）、`scripts/audit_a11y.py`（可访问性）、
+  `scripts/check_bundle_budget.py`（体积预算，已进 CI）
+- v2：`frontend/` **零改动**；tag `v2-stable-2026-09-16`；冷备 `D:\temp\km-v2-backup\`
+- 后端与数据库：**完全未动**；`scripts/contract_diff.py --check` 28 端点无差异
+
+### 切换步骤（顺序不可颠倒）
+```powershell
+cd D:\km-v2
+
+# 1) 切换前核对
+python scripts/contract_diff.py --check docs/contract-baseline.json   # 期望：无差异
+cd frontend-v3; npm run build; cd ..                                  # 产出 dist
+Test-Path frontend\dist\index.html                                   # v2 产物仍在（回滚依赖它）
+
+# 2) 切换（唯一入口，不要手改 FRONTEND_DIST）
+powershell -File scripts/serve_frontend.ps1 -Target v3                # 改 .env 并重启后端 + 探活
+
+# 3) 切换后验证（注意端口变成 8000）
+python scripts/contract_diff.py --check docs/contract-baseline.json   # 期望：仍无差异
+# 用环境变量指向生产端口跑同一套巡检（不用改代码）
+$env:KM_AUDIT_BASE = "http://127.0.0.1:8000"
+python scripts/audit_pages.py
+python scripts/audit_a11y.py
+Remove-Item Env:\KM_AUDIT_BASE
+
+# 4) 回滚（任何时候都可用，一条命令）
+powershell -File scripts/serve_frontend.ps1 -Target v2
+```
+
+### 工具链自检（已在两个基址跑过）
+`audit_pages.py` 在 5175（v3）上 14/14 通过；在 8000（当前 v2）上会对 `/mocks` 与 `/settings` 报 FAIL —— 因为 **v2 没有这两个路由**，说明巡检本身是有效的。
+
+### 归档与删除（**暂不执行**）
+v2 打最终 tag 后**保留**，等你实际用 v3 跑一段（建议至少一二周、覆盖录入与复习两条主流程）
+再决定是否删除。删除前建议先 `git tag` 留档并确认冷备可还原。

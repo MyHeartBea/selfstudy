@@ -14,6 +14,7 @@
 半透明背景无法可靠估值时跳过该节点并计数，不虚报。
 """
 import json
+import os
 import re
 import subprocess
 import sys
@@ -26,7 +27,9 @@ from pathlib import Path
 
 from cdp import WS, CHROME, PORT  # noqa: E402  (同目录下的极简 CDP 客户端)
 
-BASE = "http://127.0.0.1:5175"
+# 基址可用环境变量覆盖：切换后指向生产端口即可复用同一套审计
+#   KM_AUDIT_BASE=http://127.0.0.1:8000 python scripts/audit_pages.py
+BASE = os.environ.get("KM_AUDIT_BASE", "http://127.0.0.1:5175")
 ROUTER = Path(r"D:\km-v2\frontend-v3\src\app\router.js")
 
 src = ROUTER.read_text(encoding='utf-8')
