@@ -20,6 +20,12 @@ const routes = [
     name: 'design',
     component: () => import('../views/DesignView.vue'),
   },
+  {
+    // 今日复习 · 砚台（阶段 3 第一页，接真实 API）
+    path: '/review',
+    name: 'review',
+    component: () => import('../views/ReviewView.vue'),
+  },
   // 兜底：未实现的路由回首页，避免开发期白屏
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -37,6 +43,7 @@ export const router = createRouter({
 const TITLES = {
   atlas: '夜航星图',
   design: '设计规格',
+  review: '今日复习',
 }
 
 router.afterEach((to) => {

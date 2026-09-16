@@ -20,7 +20,8 @@ const ctaEl = ref(null)
 
 const LINKS = [
   { to: '/', label: '星表', code: '01' },
-  { to: '/design', label: '规格', code: '02' },
+  { to: '/review', label: '复习', code: '02' },
+  { to: '/design', label: '规格', code: '03' },
 ]
 
 let stops = []
