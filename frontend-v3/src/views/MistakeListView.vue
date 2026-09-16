@@ -25,9 +25,10 @@ import UiField from '../ui/UiField.vue'
 import UiModal from '../ui/UiModal.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
+import EnglishPanel from '../components/EnglishPanel.vue'
 import MathText from '../components/MathText.vue'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 9 // 3×3：用户要求每页 9 题
 
 const pageRoot = ref(null)
 const loading = ref(true)
@@ -125,6 +126,15 @@ function typeTone(t) {
   )
 }
 
+/** 取题图：后端 images 是数组（可能是相对路径或 dataURL），取第一张 */
+function firstImage(row) {
+  const list = Array.isArray(row?.images) ? row.images : []
+  const f = list.find((x) => x && typeof x === 'string')
+  if (!f) return ''
+  // 相对路径交给后端静态目录（vite 已代理 /images）
+  return f.startsWith('data:') || f.startsWith('http') ? f : `/images/${f.replace(/^\/+/, '')}`
+}
+
 function applyFilters() {
   page.value = 1
   load()
@@ -209,7 +219,24 @@ usePageMotion(pageRoot, { stagger: 55 })
             <span v-if="row.source" class="mono src">{{ row.source }}</span>
           </div>
           <p class="q"><MathText :text="row.question" /></p>
+          <!-- 题图：真题截图/公式图，没有就整块不出现（不留空框） -->
+          <img
+            v-if="firstImage(row)"
+            class="shot"
+            :src="firstImage(row)"
+            :alt="`第 ${row.id} 题的题目图像`"
+            loading="lazy"
+          />
+
           <div class="cfoot">
+            <span class="diff" :aria-label="`难度 ${row.difficulty || 0} / 5`">
+              <i
+                v-for="n in 5"
+                :key="n"
+                :class="{ on: n <= (row.difficulty || 0) }"
+                aria-hidden="true"
+              ></i>
+            </span>
             <InkDot :value="Math.round((row.mastery_level || 0) / 20)" label="掌握度" />
             <StarRow :value="row.review_count || 0" :max="7" label="复习遍数" />
             <span class="mono cnt">错 {{ row.wrong_count || 0 }} 次</span>
@@ -281,6 +308,9 @@ usePageMotion(pageRoot, { stagger: 55 })
           </div>
         </div>
 
+        <!-- 英语题：中英对照 + 逐句拆解 + 短语/生词与词性（按 v2 的字段形状呈现） -->
+        <EnglishPanel v-if="detail.passage_text" :data="detail" />
+
         <p class="mono dnote">编辑与复习入口在后续页面接入。</p>
       </div>
       <template #foot>
@@ -351,6 +381,34 @@ usePageMotion(pageRoot, { stagger: 55 })
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.shot {
+  display: block;
+  width: 100%;
+  max-height: 132px;
+  object-fit: cover;
+  object-position: top;
+  margin-top: 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--sky-0);
+}
+
+/* 难度：五枚墨点式星条，不用字符星号（全站禁用字符图标） */
+.diff {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.diff i {
+  width: 11px;
+  height: 3px;
+  background: var(--sky-3);
+  transition: background 0.3s var(--e-settle);
+}
+.diff i.on {
+  background: var(--gold);
+}
+
 .cfoot {
   display: flex;
   align-items: center;
