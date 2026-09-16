@@ -32,6 +32,12 @@ const routes = [
     name: 'capture',
     component: () => import('../views/CaptureView.vue'),
   },
+  {
+    // 错题星表（列表 + 详情）
+    path: '/mistakes',
+    name: 'mistakes',
+    component: () => import('../views/MistakeListView.vue'),
+  },
   // 兜底：未实现的路由回首页，避免开发期白屏
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -51,6 +57,7 @@ const TITLES = {
   design: '设计规格',
   review: '今日复习',
   capture: '智能录入',
+  mistakes: '错题星表',
 }
 
 router.afterEach((to) => {
