@@ -26,6 +26,18 @@ TEXT_SUFFIXES = {
     ".txt", ".cfg", ".toml", ".cmd", ".ps1", ".sh",
 }
 
+# 硬性约束（用户明确要求，写进钩子避免靠人记得）：
+# 前端源码与样张页面全程禁止 emoji。代理对（surrogate）与常见符号区都算命中。
+EMOJI_RE = re.compile(
+    "[\U0001f000-\U0001faff"  # 表情、象形、补充符号
+    "\u2190-\u21ff"           # 箭头（图标必须用 Lucide，不许用字符箭头）
+    "\u2600-\u27bf"           # 各类符号与装饰
+    "\u2b00-\u2bff"           # 杂项符号与箭头
+    "\ufe0f]"                 # 变体选择符（emoji 呈现）
+)
+# 只强制约束"我们自己写的前端与文档"，不扫第三方产物
+EMOJI_SCOPES = ("frontend-v3/src/", "frontend/src/", "docs/art-direction")
+
 
 def staged_files() -> list:
     out = subprocess.run(
@@ -63,6 +75,26 @@ def main() -> int:
                 break
         if text and not text.endswith("\n"):
             problems.append(f"{rel}: 文件末尾缺少换行")
+
+    # 3) emoji / 字符图标：前端源码与样张页面禁止（图标统一走 Lucide）
+    for rel in files:
+        rel_posix = rel.replace("\\", "/")
+        if not rel_posix.startswith(EMOJI_SCOPES):
+            continue
+        p = REPO_ROOT / rel
+        if not p.is_file() or p.suffix.lower() not in TEXT_SUFFIXES:
+            continue
+        try:
+            text = p.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for i, line in enumerate(text.split("\n"), 1):
+            m = EMOJI_RE.search(line)
+            if m:
+                # 不回显上下文（可能落在密钥/长行里），只给位置与码位
+                problems.append(
+                    f"{rel}:{i}: 出现 emoji / 字符图标 U+{ord(m.group()):04X}（图标请用 Lucide）"
+                )
 
     if problems:
         print("pre-commit 卫生检查未通过：")

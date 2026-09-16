@@ -1,0 +1,780 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "endpoints": {
+    "health": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "app": "string",
+        "database": "bool",
+        "host": "string",
+        "metrics": {
+          "errors_total": "number",
+          "recent_errors": [],
+          "requests_total": "number",
+          "slow_threshold_ms": "number",
+          "slow_total": "number",
+          "slowest_endpoints": {
+            "avg_ms": "number",
+            "count": "number",
+            "endpoint": "string",
+            "errors": "number",
+            "max_ms": "number"
+          },
+          "slowest_requests": [],
+          "uptime_seconds": "number"
+        },
+        "python": "string",
+        "reviewDailyLimit": "number",
+        "status": "string",
+        "time": "string",
+        "version": "string"
+      },
+      "path": "/api/health",
+      "expect": "dict"
+    },
+    "dashboard": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "reviews": {
+          "accuracy_today": "number",
+          "avg_mastery": "number",
+          "by_subject": {
+            "accuracy": "number",
+            "correct_count": "number",
+            "mistake_count": "number",
+            "name": "string",
+            "review_count": "number",
+            "subject_id": "number",
+            "wrong_count": "number"
+          },
+          "due_today": "number",
+          "last_7_days": {
+            "correct": "number",
+            "count": "number",
+            "day": "string"
+          },
+          "mastery_distribution": {
+            "count": "number",
+            "mastery": "number"
+          },
+          "reviewed_today": "number",
+          "streak_days": "number",
+          "total_accuracy": "number",
+          "total_reviews": "number",
+          "weakest_tags": {
+            "mistake_count": "number",
+            "tag_name": "string",
+            "wrong_count": "number"
+          }
+        },
+        "stats": {
+          "by_question_type": {
+            "count": "number",
+            "name": "string",
+            "question_type": "string"
+          },
+          "by_source_type": {
+            "count": "number",
+            "name": "string",
+            "source_type": "string"
+          },
+          "by_sub_subject": {
+            "avg_difficulty": "number",
+            "count": "number",
+            "name": "string",
+            "sub_subject_id": "number",
+            "subject_id": "number",
+            "subject_name": "string"
+          },
+          "by_subject": {
+            "avg_difficulty": "number",
+            "count": "number",
+            "name": "string",
+            "subject_id": "number"
+          },
+          "today_new": "number",
+          "total_mistakes": "number"
+        }
+      },
+      "path": "/api/dashboard",
+      "expect": "dict"
+    },
+    "stats": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "by_question_type": {
+          "count": "number",
+          "name": "string",
+          "question_type": "string"
+        },
+        "by_source_type": {
+          "count": "number",
+          "name": "string",
+          "source_type": "string"
+        },
+        "by_sub_subject": {
+          "avg_difficulty": "number",
+          "count": "number",
+          "name": "string",
+          "sub_subject_id": "number",
+          "subject_id": "number",
+          "subject_name": "string"
+        },
+        "by_subject": {
+          "avg_difficulty": "number",
+          "count": "number",
+          "name": "string",
+          "subject_id": "number"
+        },
+        "today_new": "number",
+        "total_mistakes": "number"
+      },
+      "path": "/api/stats",
+      "expect": "dict"
+    },
+    "subjects": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "id": "number",
+        "kind": "string",
+        "name": "string"
+      },
+      "path": "/api/subjects",
+      "expect": "list"
+    },
+    "sub_subjects": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "id": "number",
+        "name": "string",
+        "subject_id": "number"
+      },
+      "path": "/api/sub_subjects",
+      "expect": "list"
+    },
+    "sub_subjects.filtered": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "id": "number",
+        "name": "string",
+        "subject_id": "number"
+      },
+      "path": "/api/sub_subjects?subject_id=1",
+      "expect": "list"
+    },
+    "subject_profile": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "focus_areas": "string",
+        "id": "number",
+        "review_tips": "string",
+        "subject_id": "number",
+        "updated_at": "string"
+      },
+      "path": "/api/subjects/1/profile",
+      "expect": "dict"
+    },
+    "mistakes.bare": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "analysis": "string",
+        "answer_aliases": [],
+        "approach": "string",
+        "correct_answer": "string",
+        "created_at": "string",
+        "difficulty": "number",
+        "difficulty_points": "string",
+        "id": "number",
+        "images": "string",
+        "knowledge_tags": "string",
+        "last_reviewed_at": "NoneType",
+        "mastery_level": "number",
+        "next_review_at": "NoneType",
+        "option_a": "string",
+        "option_b": "string",
+        "option_c": "string",
+        "option_d": "string",
+        "passage_text": "string",
+        "question": "string",
+        "question_type": "string",
+        "review_count": "number",
+        "review_paused": "number",
+        "source": "string",
+        "source_name": "string",
+        "source_type": "string",
+        "source_year": "string",
+        "sub_subject_id": "number",
+        "subject_id": "number",
+        "wrong_count": "number"
+      },
+      "path": "/api/mistakes",
+      "expect": "list"
+    },
+    "mistakes.paged": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "items": {
+          "analysis": "string",
+          "answer_aliases": [],
+          "approach": "string",
+          "correct_answer": "string",
+          "created_at": "string",
+          "difficulty": "number",
+          "difficulty_points": "string",
+          "id": "number",
+          "images": "string",
+          "knowledge_tags": "string",
+          "last_reviewed_at": "NoneType",
+          "mastery_level": "number",
+          "next_review_at": "NoneType",
+          "option_a": "string",
+          "option_b": "string",
+          "option_c": "string",
+          "option_d": "string",
+          "passage_text": "string",
+          "question": "string",
+          "question_type": "string",
+          "review_count": "number",
+          "review_paused": "number",
+          "source": "string",
+          "source_name": "string",
+          "source_type": "string",
+          "source_year": "string",
+          "sub_subject_id": "number",
+          "subject_id": "number",
+          "wrong_count": "number"
+        },
+        "page": "number",
+        "page_size": "number",
+        "total": "number"
+      },
+      "path": "/api/mistakes?page=1&page_size=5",
+      "expect": "dict"
+    },
+    "mistakes.search": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "items": [],
+        "page": "number",
+        "page_size": "number",
+        "total": "number"
+      },
+      "path": "/api/mistakes?search=%E6%B5%8B%E8%AF%95&page=1",
+      "expect": "dict"
+    },
+    "approaches": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": "string",
+      "path": "/api/mistakes/approaches",
+      "expect": "list"
+    },
+    "knowledge.paged": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "items": {
+          "created_at": "string",
+          "id": "number",
+          "related_tags": "string",
+          "sub_subject_id": "NoneType",
+          "sub_subject_name": "NoneType",
+          "subject_id": "NoneType",
+          "subject_name": "NoneType",
+          "summary": "string",
+          "tag_name": "string"
+        },
+        "page": "number",
+        "page_size": "number",
+        "total": "number"
+      },
+      "path": "/api/knowledge?page=1&page_size=5",
+      "expect": "dict"
+    },
+    "knowledge.tags": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "mistake_count": "number",
+        "tag": "string"
+      },
+      "path": "/api/knowledge/tags?limit=5",
+      "expect": "list"
+    },
+    "knowledge.by_tag": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "created_at": "string",
+        "id": "number",
+        "related_tags": [],
+        "sub_subject_id": "number",
+        "subject_id": "number",
+        "summary": "string",
+        "tag_name": "string"
+      },
+      "path": "/api/knowledge/by-tag?tag=%E5%AF%BC%E6%95%B0",
+      "expect": "dict"
+    },
+    "formulas": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "category": "string",
+        "content": "string",
+        "created_at": "string",
+        "id": "number",
+        "title": "string",
+        "updated_at": "string"
+      },
+      "path": "/api/formulas",
+      "expect": "list"
+    },
+    "vocab.paged": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "items": {
+          "created_at": "string",
+          "example": "string",
+          "id": "number",
+          "kind": "string",
+          "last_result": "string",
+          "last_reviewed_at": "NoneType",
+          "mastery_level": "number",
+          "meaning": "string",
+          "next_review_at": "NoneType",
+          "note": "string",
+          "phonetic": "string",
+          "review_count": "number",
+          "source": "string",
+          "word": "string",
+          "wrong_count": "number"
+        },
+        "page": "number",
+        "page_size": "number",
+        "total": "number"
+      },
+      "path": "/api/vocab?page=1&page_size=5",
+      "expect": "dict"
+    },
+    "vocab.stats": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "distribution": {
+          "count": "number",
+          "mastery": "number"
+        },
+        "due": "number",
+        "mastered": "number",
+        "total": "number"
+      },
+      "path": "/api/vocab/stats",
+      "expect": "dict"
+    },
+    "vocab.due": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "created_at": "string",
+        "example": "string",
+        "id": "number",
+        "kind": "string",
+        "last_result": "string",
+        "last_reviewed_at": "NoneType",
+        "mastery_level": "number",
+        "meaning": "string",
+        "next_review_at": "NoneType",
+        "note": "string",
+        "phonetic": "string",
+        "review_count": "number",
+        "source": "string",
+        "word": "string",
+        "wrong_count": "number"
+      },
+      "path": "/api/vocab/due?limit=5",
+      "expect": "list"
+    },
+    "reviews.today": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "dailyLimit": "number",
+        "dueTotal": "number",
+        "items": {
+          "analysis": "string",
+          "answer_aliases": [],
+          "approach": "string",
+          "correct_answer": "string",
+          "created_at": "string",
+          "difficulty": "number",
+          "difficulty_points": "string",
+          "ease_factor": "number",
+          "english_phrases": [],
+          "english_questions": [],
+          "english_sentences": [],
+          "english_words": [],
+          "id": "number",
+          "images": "string",
+          "knowledge_tags": "string",
+          "last_interval": "number",
+          "last_reviewed_at": "NoneType",
+          "mastery_level": "number",
+          "next_review_at": "NoneType",
+          "option_a": "string",
+          "option_b": "string",
+          "option_c": "string",
+          "option_d": "string",
+          "passage_text": "string",
+          "passage_translation": "string",
+          "question": "string",
+          "question_type": "string",
+          "review_count": "number",
+          "review_paused": "number",
+          "source": "string",
+          "source_name": "string",
+          "source_type": "string",
+          "source_year": "string",
+          "sub_subject_id": "number",
+          "subject_id": "number",
+          "wrong_count": "number"
+        },
+        "remaining": "number",
+        "returned": "number",
+        "reviewedToday": "number"
+      },
+      "path": "/api/reviews/today",
+      "expect": "dict"
+    },
+    "reviews.stats": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "accuracy_today": "number",
+        "avg_mastery": "number",
+        "by_subject": {
+          "accuracy": "number",
+          "correct_count": "number",
+          "mistake_count": "number",
+          "name": "string",
+          "review_count": "number",
+          "subject_id": "number",
+          "wrong_count": "number"
+        },
+        "due_today": "number",
+        "last_7_days": {
+          "correct": "number",
+          "count": "number",
+          "day": "string"
+        },
+        "mastery_distribution": {
+          "count": "number",
+          "mastery": "number"
+        },
+        "reviewed_today": "number",
+        "streak_days": "number",
+        "total_accuracy": "number",
+        "total_reviews": "number",
+        "weakest_tags": {
+          "mistake_count": "number",
+          "tag_name": "string",
+          "wrong_count": "number"
+        }
+      },
+      "path": "/api/reviews/stats",
+      "expect": "dict"
+    },
+    "reviews.forecast": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "items": {
+          "count": "number",
+          "day": "string"
+        },
+        "overdue": "number"
+      },
+      "path": "/api/reviews/forecast?days=14",
+      "expect": "dict"
+    },
+    "reviews.calendar": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "correct": "number",
+        "day": "string",
+        "total": "number"
+      },
+      "path": "/api/reviews/calendar?days=30",
+      "expect": "list"
+    },
+    "reviews.practice": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "analysis": "string",
+        "answer_aliases": [],
+        "approach": "string",
+        "correct_answer": "string",
+        "created_at": "string",
+        "days_since_review": "NoneType",
+        "days_since_wrong": "number",
+        "difficulty": "number",
+        "difficulty_points": "string",
+        "ease_factor": "number",
+        "english_phrases": [],
+        "english_questions": [],
+        "english_sentences": [],
+        "english_words": [],
+        "id": "number",
+        "images": "string",
+        "knowledge_tags": "string",
+        "last_interval": "number",
+        "last_reviewed_at": "NoneType",
+        "last_wrong_at": "string",
+        "mastery_level": "number",
+        "next_review_at": "NoneType",
+        "option_a": "string",
+        "option_b": "string",
+        "option_c": "string",
+        "option_d": "string",
+        "passage_text": "string",
+        "passage_translation": "string",
+        "question": "string",
+        "question_type": "string",
+        "review_count": "number",
+        "review_paused": "number",
+        "source": "string",
+        "source_name": "string",
+        "source_type": "string",
+        "source_year": "string",
+        "sub_subject_id": "number",
+        "subject_id": "number",
+        "wrong_count": "number"
+      },
+      "path": "/api/reviews/practice?count=3",
+      "expect": "list"
+    },
+    "reviews.practice.mock": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "analysis": "string",
+        "answer_aliases": [],
+        "approach": "string",
+        "correct_answer": "string",
+        "created_at": "string",
+        "days_since_review": "NoneType",
+        "days_since_wrong": "number",
+        "difficulty": "number",
+        "difficulty_points": "string",
+        "ease_factor": "number",
+        "english_phrases": [],
+        "english_questions": [],
+        "english_sentences": [],
+        "english_words": [],
+        "id": "number",
+        "images": "string",
+        "knowledge_tags": "string",
+        "last_interval": "number",
+        "last_reviewed_at": "NoneType",
+        "last_wrong_at": "string",
+        "mastery_level": "number",
+        "next_review_at": "NoneType",
+        "option_a": "string",
+        "option_b": "string",
+        "option_c": "string",
+        "option_d": "string",
+        "passage_text": "string",
+        "passage_translation": "string",
+        "question": "string",
+        "question_type": "string",
+        "review_count": "number",
+        "review_paused": "number",
+        "source": "string",
+        "source_name": "string",
+        "source_type": "string",
+        "source_year": "string",
+        "sub_subject_id": "number",
+        "subject_id": "number",
+        "wrong_count": "number"
+      },
+      "path": "/api/reviews/practice?mode=mock&count=3",
+      "expect": "list"
+    },
+    "mocks": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "correct": "number",
+        "created_at": "string",
+        "duration_min": "number",
+        "exam_year": "string",
+        "id": "number",
+        "score": "number",
+        "total": "number",
+        "used_seconds": "number"
+      },
+      "path": "/api/mocks?limit=3",
+      "expect": "list"
+    },
+    "papers": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "answer_path": "string",
+        "answered_count": "number",
+        "created_at": "string",
+        "id": "number",
+        "question_count": "number",
+        "source_path": "string",
+        "status": "string",
+        "status_note": "string",
+        "subject": "string",
+        "title": "string",
+        "year": "string"
+      },
+      "path": "/api/papers",
+      "expect": "list"
+    },
+    "papers.scan": {
+      "status": 200,
+      "code": 200,
+      "data_type": "list",
+      "shape": {
+        "answer_kind": "string",
+        "answer_path": "string",
+        "imported": "bool",
+        "kind": "string",
+        "mixed": "bool",
+        "name": "string",
+        "rel_path": "string",
+        "size_kb": "number",
+        "sources": {
+          "kind": "string",
+          "rel_path": "string",
+          "size_kb": "number"
+        },
+        "subject": "string",
+        "year": "string"
+      },
+      "path": "/api/papers/scan",
+      "expect": "list"
+    },
+    "export": {
+      "status": 200,
+      "code": 200,
+      "data_type": "dict",
+      "shape": {
+        "exported_at": "string",
+        "knowledge": [
+          {
+            "created_at": "string",
+            "id": "number",
+            "related_tags": "NoneType",
+            "sub_subject_id": "number",
+            "subject_id": "number",
+            "summary": "string",
+            "tag_name": "string"
+          },
+          {
+            "created_at": "string",
+            "id": "number",
+            "related_tags": "string",
+            "sub_subject_id": "number",
+            "subject_id": "number",
+            "summary": "string",
+            "tag_name": "string"
+          }
+        ],
+        "mistakes": {
+          "analysis": "string",
+          "answer_aliases": "string",
+          "approach": "string",
+          "correct_answer": "string",
+          "created_at": "string",
+          "difficulty": "number",
+          "difficulty_points": "string",
+          "ease_factor": "number",
+          "english_phrases": [],
+          "english_questions": [],
+          "english_sentences": [],
+          "english_words": [],
+          "id": "number",
+          "images": [],
+          "knowledge_tags": "string",
+          "last_interval": "number",
+          "last_reviewed_at": "string",
+          "mastery_level": "number",
+          "next_review_at": "string",
+          "option_a": "string",
+          "option_b": "string",
+          "option_c": "string",
+          "option_d": "string",
+          "passage_text": "NoneType",
+          "passage_translation": "NoneType",
+          "question": "string",
+          "question_type": "string",
+          "review_count": "number",
+          "review_paused": "number",
+          "source": "string",
+          "source_name": "string",
+          "source_type": "string",
+          "source_year": "string",
+          "sub_subject_id": "number",
+          "subject_id": "number",
+          "wrong_count": "number"
+        },
+        "sub_subjects": {
+          "id": "number",
+          "name": "string",
+          "subject_id": "number"
+        },
+        "subjects": {
+          "id": "number",
+          "kind": "string",
+          "name": "string"
+        }
+      },
+      "path": "/api/export",
+      "expect": "dict"
+    }
+  }
+}

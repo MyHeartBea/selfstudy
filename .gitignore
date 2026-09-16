@@ -1,6 +1,7 @@
 # Node
 node_modules/
 frontend/dist/
+frontend-v3/dist/
 
 # Python
 __pycache__/

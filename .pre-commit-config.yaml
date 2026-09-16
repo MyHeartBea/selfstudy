@@ -29,11 +29,19 @@ repos:
         files: ^frontend/(src|tests|e2e)/.*\.(js|vue|css)$|^frontend/(playwright|vite)\.config\.js$
         pass_filenames: false
 
-      # 通用卫生：大文件 / 行尾空白 / 文件末尾换行
+      # 通用卫生：大文件 / 行尾空白 / 文件末尾换行 / emoji（前端源码与样张禁止）
       - id: preflight
-        name: preflight hygiene (size / whitespace / EOF)
+        name: preflight hygiene (size / whitespace / EOF / emoji)
         entry: python scripts/preflight_check.py
         language: system
+        pass_filenames: false
+
+      # v3 前端：ESLint + Prettier（独立配置与依赖；阶段 2 起纳入）
+      - id: frontend-v3-lint
+        name: eslint + prettier (frontend-v3)
+        entry: node scripts/frontend_lint.mjs check --dir frontend-v3
+        language: system
+        files: ^frontend-v3/(src|tests)/.*\.(js|vue|css)$|^frontend-v3/vite\.config\.js$
         pass_filenames: false
 
       # 密钥泄漏：只扫「暂存的新增行」，命中即拦截且不回显密钥

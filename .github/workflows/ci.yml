@@ -68,6 +68,29 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+  # v3 沉浸式前端（frontend-v3）：与 v2 完全独立的一套依赖与配置。
+  # 并行期间后端仍服务 v2 的 dist，v3 这里只做质量门禁。
+  frontend-v3-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend-v3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - name: Lint (eslint + prettier)
+        run: |
+          npx eslint src tests vite.config.js
+          npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js" "vite.config.js"
+      - name: Run tests
+        run: npm test
+      # v3 的 Vue 模板编译错误同样只有 build 能发现
+      - name: Build v3
+        run: npm run build
+
   # 真浏览器 E2E：命中测试（整块可点）与真实 paste 事件只有这里能覆盖。
   # 自己起 vite dev（Playwright webServer），所有 /api 在浏览器层打桩，不需要后端。
   frontend-e2e:
