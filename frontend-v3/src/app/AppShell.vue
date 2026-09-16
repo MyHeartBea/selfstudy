@@ -23,7 +23,8 @@ const LINKS = [
   { to: '/review', label: '复习', code: '02' },
   { to: '/capture', label: '录入', code: '03' },
   { to: '/mistakes', label: '错题', code: '04' },
-  { to: '/design', label: '规格', code: '05' },
+  { to: '/knowledge', label: '知识', code: '05' },
+  { to: '/design', label: '规格', code: '06' },
 ]
 
 let stops = []

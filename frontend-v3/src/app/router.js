@@ -38,6 +38,12 @@ const routes = [
     name: 'mistakes',
     component: () => import('../views/MistakeListView.vue'),
   },
+  {
+    // 知识点库（知识笺墙 + 关联错题）
+    path: '/knowledge',
+    name: 'knowledge',
+    component: () => import('../views/KnowledgeView.vue'),
+  },
   // 兜底：未实现的路由回首页，避免开发期白屏
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -58,6 +64,7 @@ const TITLES = {
   review: '今日复习',
   capture: '智能录入',
   mistakes: '错题星表',
+  knowledge: '知识点库',
 }
 
 router.afterEach((to) => {

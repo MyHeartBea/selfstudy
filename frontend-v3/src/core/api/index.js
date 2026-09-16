@@ -144,3 +144,29 @@ export const mistakesApi = {
   /** 批量删除：POST /api/mistakes/batch { ids, action } */
   batch: (ids, action = 'delete') => unwrap(client.post('/mistakes/batch', { ids, action })),
 }
+
+/* ────────────────────────────── 知识点 ────────────────────────────── */
+export const knowledgeApi = {
+  /**
+   * 列表（服务端分页）。
+   * 契约：GET /api/knowledge?page&page_size&tag&subject_id - { items, total, page, page_size }
+   * 注意：与 mistakes 不同，knowledge **一直** 返回分页对象（不传 page 也是对象）
+   */
+  list: (params = { page: 1, page_size: 24 }) => unwrap(client.get('/knowledge', { params })),
+
+  /**
+   * 标签联想。
+   * 契约：GET /api/knowledge/tags - **[{ tag, mistake_count }]**
+   * （是对象数组，不是字符串数组 —— 写成字符串数组会让消费方 .map 拿到 undefined）
+   */
+  tags: (limit = 60) => unwrap(client.get('/knowledge/tags', { params: { limit } })),
+
+  /** 自动总结：POST /api/knowledge/{id}/auto-summarize */
+  summarize: (id) => unwrap(client.post(`/knowledge/${id}/auto-summarize`)),
+
+  /**
+   * 该知识点关联的错题。
+   * 契约：GET /api/knowledge/linked-mistakes?tag=...&subject_id=... - { items, total, ... }
+   */
+  linkedMistakes: (params = {}) => unwrap(client.get('/knowledge/linked-mistakes', { params })),
+}
