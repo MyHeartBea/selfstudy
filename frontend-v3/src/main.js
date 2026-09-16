@@ -8,6 +8,7 @@ import { createApp } from 'vue'
 
 import './design/tokens.css'
 import './design/base.css'
+import './design/materials.css'
 
 import App from './app/App.vue'
 import { router } from './app/router'

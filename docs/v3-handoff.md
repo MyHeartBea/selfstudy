@@ -8,12 +8,21 @@
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | **0** | 脚手架 / 设计令牌 / 基础层 / 启动页 / 星点场 / 光标 / 并行切换基建 | **已完成** |
-| 1 | 设计系统补全（材质层、10 条动效原语、设计画廊页） | 未开始 |
+| **1** | 材质层 / 六条动效原语 / 章节外壳（滚动隐藏·磁吸）/ 规格页 | **已完成** |
 | 2 | 原子与复合组件库 | 未开始 |
 | 3 | 核心场景（复习 / 录入 / 错题 / 知识点） | 未开始 |
 | 4 | 剩余页面（统计 / 真题 / 模考 / 生词 / 公式 / 科目 / 练习 / 设置） | 未开始 |
 | 5 | 移动端重排 + 可访问性 + 性能预算 | 未开始 |
 | 6 | 切换（FRONTEND_DIST）+ 契约对照 + v2 归档 | 未开始 |
+
+### 阶段 1 追加决策：GSAP 推迟到阶段 3
+
+原计划阶段 1 引入 GSAP + ScrollTrigger。实际执行时**推迟**，理由：
+1. 阶段 1 的动效（沉降 / 红移 / 描绘 / 扫描 / 聚焦 / 漂移）用 CSS + rAF 已完整覆盖，
+   引入 GSAP 只会增加 chunk 与构建复杂度；
+2. 真正的收益点出现在阶段 3（复习流程与录入过程需要**时间线编排与可中断的序列**），
+   那时再按需引入，并作为独立 `motion` chunk 懒加载（`vite.config.js` 里已预留分包规则）。
+
 
 ## 一、v2 保护机制（**改动前必读**）
 
@@ -94,9 +103,12 @@ frontend-v3/
 |----|------|------|
 | `vertexAttribPointer` 绑定的是"当前 ARRAY_BUFFER" | 星点场全黑（画布一个像素都没画） | 每帧 draw 前重新 `bindBuffer` + `vertexAttribPointer` |
 | GPU 合成下 `gl.readPixels` 返回全黑 | 误判"没渲染" | 渲染判据用**截图**：`python scripts/check_render.py <png>` |
-| Windows PowerShell 5.1 按 ANSI 读无 BOM 的 .ps1 | 中文被破坏 → 语法错误 | 脚本用 **ASCII-only** 且加 BOM（`Encoding('UTF8')`） |
-| PowerShell `Set-Content` 破坏 UTF-8 | 文件被写坏、测试假失败 | 不用它改源码；用 edit/write 工具或 `[IO.File]::WriteAllText` |
+| **原语入参没有守卫** | 传进非元素（组件实例代理）抛 `el.addEventListener is not a function`；异常在 `onMounted` 内，**同钩子后续原语全不执行** → 元素永不出现 + 加载页卡住 | `motion.isElement()` 入口守卫；已加 11 条单测钉死非法入参 |
+| 把 `matchMedia` 默认值当测试前提 | 单测误判（happy-dom 对任意查询都返回 `matches: true`） | 测试里显式 mock `matchMedia`，不依赖宿主默认值 |
+| Windows PowerShell 5.1 按 ANSI 读无 BOM 的 .ps1 | 中文被破坏 → 语法错误 | 脚本用 **ASCII-only** 且加 BOM |
+| PowerShell `Set-Content` / 内联 `-c` 破坏引号与 UTF-8 | 文件被写坏、提交信息被截断、测试假失败 | 不用它改源码或写多行提交信息；用 edit/write 工具与 `git commit -F <file>` |
 | GLSL 不允许在 `main()` 内定义函数 | 着色器编译失败，静默退到兜底 | 辅助函数写在全局作用域 |
+| 组件文件头注释被压成一行 | 可读性差（发生过两次：`InkLoader.vue`、`App.vue`） | 发现即整份重写；写完用 read 回读确认格式 |
 
 ## 六、阶段 0 验收证据
 
@@ -125,12 +137,17 @@ curl -s -H "User-Agent: Mozilla/5.0" \
 GitHub 静默拒绝"这一可能（4 个 job 结构合法）。**下次 CI 像没跑，先查 workflow 维度端点。**
 
 
-## 七、下一步（阶段 1）
+## 七、下一步（阶段 2）
 
-1. 材质层补全：扫描线 / 半调 / 色差 / 景深，全部低透明度叠加并进设计画廊页
-2. 10 条动效原语（`src/design/motion.js` + composables），每条含 reduced-motion 降级
-3. 章节骨架：`shell` 导航（滚动隐藏）+ 滚动叙事（逐词点亮）+ 磁吸按钮
-4. 设计画廊页（`/design`）：活体规范，一屏看清全部令牌与原语
-5. 接入 GSAP + ScrollTrigger（**仅这两个模块**，独立 chunk，懒加载）
+阶段 1 已完成：材质四件、六条动效原语（含 reduced-motion 降级与入参守卫）、
+AppShell（滚动隐藏导航 / 磁吸 / skip link / aria-current）、规格页 `/design`（活体规范）。
 
-验收：v3 构建通过 + 画廊页像素校验通过 + v2 仍可用 + CI 四个 job 全绿。
+阶段 2 计划：原子与复合组件库
+1. 原子：Button / Field / Select / Textarea / Tag / Checkbox / Toast / Modal / Empty / Skeleton / Icon
+2. 复合：InkCard（整块可点）/ SealTag（印章状态）/ PaperModal（翻折打开）/ BrushChart（滚动描绘）/
+   InkDot（掌握度墨点）/ StarRow（星等）
+3. 每个组件必须含：键盘可达、focus-visible、reduced-motion 降级、aria
+4. 组件层单测（happy-dom）+ 规格页追加组件分区
+5. 验收：v3 构建 + 规格页与组件像素校验通过 + v2 仍可用 + CI 四个 job 全绿
+
+**成本校准点**（阶段 0–2 做完后必须做）：用真实消耗推算剩余阶段，偏差超 50% 立即停下报告。

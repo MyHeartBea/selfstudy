@@ -14,6 +14,12 @@ const routes = [
     name: 'atlas',
     component: () => import('../views/AtlasHome.vue'),
   },
+  {
+    // 活体规范页：令牌 / 材质 / 动效原语的可交互规格表
+    path: '/design',
+    name: 'design',
+    component: () => import('../views/DesignView.vue'),
+  },
   // 兜底：未实现的路由回首页，避免开发期白屏
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -30,6 +36,7 @@ export const router = createRouter({
 
 const TITLES = {
   atlas: '夜航星图',
+  design: '设计规格',
 }
 
 router.afterEach((to) => {
