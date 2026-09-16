@@ -24,6 +24,7 @@ import UiButton from '../ui/UiButton.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
+import MathText from '../components/MathText.vue'
 
 const pageRoot = ref(null)
 usePageMotion(pageRoot, { stagger: 55 })
@@ -172,15 +173,15 @@ onMounted(async () => {
           ]"
           :key="i"
         >
-          <span class="mono l">{{ String.fromCharCode(65 + i) }}</span
-          >{{ text || '（空）' }}
+          <span class="mono l">{{ String.fromCharCode(65 + i) }}</span>
+          <MathText :text="text || '（空）'" />
         </li>
       </ul>
 
       <div class="ans" :class="{ shown: revealed }">
         <template v-if="revealed">
           <span class="mono lab">标准答案</span>
-          <p class="av">{{ current.correct_answer || '（未录入）' }}</p>
+          <p class="av"><MathText :text="current.correct_answer || '（未录入）'" /></p>
           <p v-if="current.analysis" class="an">{{ current.analysis }}</p>
         </template>
         <p v-else class="mono hint">按 空格 看答案 · Enter / 方向键 换题</p>

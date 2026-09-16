@@ -8,7 +8,7 @@
   交互：分类筛选 + 搜索 + 整卡可点看全文；背诵模式（过卡循环）留到后续。
 -->
 <script setup>
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import { usePageMotion } from '../design/usePageMotion'
 
@@ -19,9 +19,9 @@ import UiEmpty from '../ui/UiEmpty.vue'
 import UiField from '../ui/UiField.vue'
 import UiModal from '../ui/UiModal.vue'
 import UiTag from '../ui/UiTag.vue'
+import MathText from '../components/MathText.vue'
 
 /** 数学渲染按需加载：只有这一页用得到 KaTeX */
-const MathText = defineAsyncComponent(() => import('../components/MathText.vue'))
 
 const CATEGORIES = ['高等数学', '线性代数', '概率统计', '英语背诵', '政治背诵', '408背诵', '其他']
 

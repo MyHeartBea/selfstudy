@@ -25,6 +25,7 @@ import StarRow from '../ui/StarRow.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiTag from '../ui/UiTag.vue'
+import MathText from '../components/MathText.vue'
 
 const pageRoot = ref(null)
 const loading = ref(true)
@@ -218,7 +219,7 @@ usePageMotion(pageRoot, { stagger: 55 })
           <span class="mono idx">{{ doneCount + 1 }} / {{ total }}</span>
         </div>
 
-        <h1 class="q">{{ current.question }}</h1>
+        <h1 class="q"><MathText :text="current.question" /></h1>
 
         <ul v-if="current.question_type === 'choice'" class="opts">
           <li
@@ -238,7 +239,7 @@ usePageMotion(pageRoot, { stagger: 55 })
               @click="choose(String.fromCharCode(65 + i))"
             >
               <span class="letter mono">{{ String.fromCharCode(65 + i) }}</span>
-              <span class="otext">{{ text || '（空）' }}</span>
+              <span class="otext"><MathText :text="text || '（空）'" /></span>
             </button>
           </li>
         </ul>
@@ -247,7 +248,7 @@ usePageMotion(pageRoot, { stagger: 55 })
         <div class="ans" :class="{ shown: revealed }">
           <template v-if="revealed">
             <p class="mono alab">标准答案</p>
-            <p class="aval">{{ current.correct_answer || '（未录入）' }}</p>
+            <p class="aval"><MathText :text="current.correct_answer || '（未录入）'" /></p>
             <p v-if="current.analysis" class="anote">{{ current.analysis }}</p>
           </template>
           <p v-else class="mono hint">按 空格 看答案 · 1-4 选选项 · Enter 落笔 · 方向键换题</p>

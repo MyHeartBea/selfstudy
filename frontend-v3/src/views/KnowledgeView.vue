@@ -25,6 +25,7 @@ import UiField from '../ui/UiField.vue'
 import UiModal from '../ui/UiModal.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
+import MathText from '../components/MathText.vue'
 
 const PAGE_SIZE = 24
 
@@ -235,7 +236,7 @@ usePageMotion(pageRoot, { stagger: 55 })
 
         <div v-if="detail.summary" class="dblock">
           <span class="mono k">摘要</span>
-          <p class="dtext">{{ detail.summary }}</p>
+          <p class="dtext"><MathText :text="detail.summary" /></p>
         </div>
         <UiEmpty v-else title="还没有摘要" hint="点卡片上的「AI 总结」生成" />
 

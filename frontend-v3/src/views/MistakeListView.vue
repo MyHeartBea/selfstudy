@@ -25,6 +25,7 @@ import UiField from '../ui/UiField.vue'
 import UiModal from '../ui/UiModal.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
+import MathText from '../components/MathText.vue'
 
 const PAGE_SIZE = 20
 
@@ -207,9 +208,9 @@ usePageMotion(pageRoot, { stagger: 55 })
             <span class="mono subj">{{ subjectName(row.subject_id) }}</span>
             <span v-if="row.source" class="mono src">{{ row.source }}</span>
           </div>
-          <p class="q">{{ row.question }}</p>
+          <p class="q"><MathText :text="row.question" /></p>
           <div class="cfoot">
-            <InkDot :value="Math.round((row.mastery || 0) / 20)" label="掌握度" />
+            <InkDot :value="Math.round((row.mastery_level || 0) / 20)" label="掌握度" />
             <StarRow :value="row.review_count || 0" :max="7" label="复习遍数" />
             <span class="mono cnt">错 {{ row.wrong_count || 0 }} 次</span>
           </div>
@@ -237,7 +238,7 @@ usePageMotion(pageRoot, { stagger: 55 })
           <span class="mono">错 {{ detail.wrong_count || 0 }} 次</span>
         </div>
 
-        <p class="dq">{{ detail.question }}</p>
+        <p class="dq"><MathText :text="detail.question" /></p>
 
         <ul v-if="detail.question_type === 'choice'" class="dopts">
           <li
@@ -249,19 +250,19 @@ usePageMotion(pageRoot, { stagger: 55 })
             ]"
             :key="i"
           >
-            <span class="mono l">{{ String.fromCharCode(65 + i) }}</span
-            >{{ text || '（空）' }}
+            <span class="mono l">{{ String.fromCharCode(65 + i) }}</span>
+            <MathText :text="text || '（空）'" />
           </li>
         </ul>
 
         <div v-if="detail.correct_answer" class="ansblock">
           <span class="mono k">标准答案</span>
-          <p class="av">{{ detail.correct_answer }}</p>
+          <p class="av"><MathText :text="detail.correct_answer" /></p>
         </div>
 
         <div v-if="detail.analysis" class="ansblock">
           <span class="mono k">解析</span>
-          <p class="an">{{ detail.analysis }}</p>
+          <p class="an"><MathText :text="detail.analysis" /></p>
         </div>
 
         <!-- 关联信息由行内标签呈现，不另起一堆卡片 -->
@@ -340,6 +341,9 @@ usePageMotion(pageRoot, { stagger: 55 })
   margin-left: auto;
 }
 .q {
+  /* 长公式/长串必须断行，否则会把卡片撑破（用户截图里的溢出） */
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-size: var(--fs-h3, 1rem);
   line-height: 1.7;
   display: -webkit-box;
@@ -384,6 +388,7 @@ usePageMotion(pageRoot, { stagger: 55 })
   color: var(--ink-2);
 }
 .dq {
+  overflow-wrap: anywhere;
   font-size: var(--fs-h2);
   line-height: 1.7;
   font-weight: 500;
@@ -418,6 +423,7 @@ usePageMotion(pageRoot, { stagger: 55 })
   color: var(--redshift);
 }
 .an {
+  overflow-wrap: anywhere;
   line-height: 1.85;
   color: var(--ink-1);
 }
