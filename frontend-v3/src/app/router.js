@@ -62,6 +62,36 @@ const routes = [
     name: 'formulas',
     component: () => import('../views/FormulaView.vue'),
   },
+  {
+    // 真题库（套列表 + 巡天扫描）
+    path: '/papers',
+    name: 'papers',
+    component: () => import('../views/PapersView.vue'),
+  },
+  {
+    // 模考记录（得分走势）
+    path: '/mocks',
+    name: 'mocks',
+    component: () => import('../views/MocksView.vue'),
+  },
+  {
+    // 科目指南（学科志：科目列表 + 画像）
+    path: '/subjects',
+    name: 'subjects',
+    component: () => import('../views/SubjectsView.vue'),
+  },
+  {
+    // 自主练习（不写回复习进度）
+    path: '/practice',
+    name: 'practice',
+    component: () => import('../views/PracticeView.vue'),
+  },
+  {
+    // 设置与数据（版本自查 + 全量导出）
+    path: '/settings',
+    name: 'settings',
+    component: () => import('../views/SettingsView.vue'),
+  },
   // 兜底：未实现的路由回首页，避免开发期白屏
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
@@ -86,6 +116,11 @@ const TITLES = {
   stats: '学习统计',
   vocab: '生词本',
   formulas: '公式背诵',
+  papers: '真题库',
+  mocks: '模考记录',
+  subjects: '科目指南',
+  practice: '自主练习',
+  settings: '设置与数据',
 }
 
 router.afterEach((to) => {

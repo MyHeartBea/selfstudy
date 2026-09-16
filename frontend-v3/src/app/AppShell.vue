@@ -18,15 +18,26 @@ const navEl = ref(null)
 const brandEl = ref(null)
 const ctaEl = ref(null)
 
+/**
+ * 导航分两组：主区是每天要用的四件事，工具区是查阅类。
+ * 一行塞 11 个入口会让"当前在哪"失去意义，所以宁可分两行。
+ */
 const LINKS = [
   { to: '/stats', label: '成册', code: '01' },
   { to: '/review', label: '复习', code: '02' },
   { to: '/capture', label: '录入', code: '03' },
   { to: '/mistakes', label: '错题', code: '04' },
   { to: '/knowledge', label: '知识', code: '05' },
+]
+const LINKS_MORE = [
   { to: '/vocab', label: '生词', code: '06' },
   { to: '/formulas', label: '公式', code: '07' },
-  { to: '/design', label: '规格', code: '08' },
+  { to: '/papers', label: '真题', code: '08' },
+  { to: '/mocks', label: '模考', code: '09' },
+  { to: '/subjects', label: '科目', code: '10' },
+  { to: '/practice', label: '练习', code: '11' },
+  { to: '/settings', label: '设置', code: '12' },
+  { to: '/design', label: '规格', code: '13' },
 ]
 
 let stops = []
@@ -70,11 +81,23 @@ onBeforeUnmount(() => {
     </RouterLink>
 
     <nav class="links">
+      <!-- 两组入口：主区（每天用）+ 工具区（查阅用）。一行塞 13 个会让"当前在哪"失去意义。 -->
       <RouterLink
         v-for="l in LINKS"
         :key="l.to"
         :to="l.to"
         class="link mono"
+        :aria-current="route.path === l.to ? 'page' : undefined"
+      >
+        <span class="code">{{ l.code }}</span
+        >{{ l.label }}
+      </RouterLink>
+      <span class="sep" aria-hidden="true"></span>
+      <RouterLink
+        v-for="l in LINKS_MORE"
+        :key="l.to"
+        :to="l.to"
+        class="link mono more"
         :aria-current="route.path === l.to ? 'page' : undefined"
       >
         <span class="code">{{ l.code }}</span
@@ -176,7 +199,23 @@ onBeforeUnmount(() => {
 
 .links {
   display: flex;
-  gap: clamp(14px, 2.6vw, 34px);
+  align-items: center;
+  gap: clamp(11px, 1.6vw, 22px);
+  flex-wrap: wrap;
+}
+/* 分组分隔：一道细竖线，不抢视觉 */
+.sep {
+  width: 1px;
+  height: 13px;
+  background: var(--line-strong);
+}
+/* 工具区次级配色，与主区区分但不弱化成看不清 */
+.link.more {
+  color: var(--ink-3);
+}
+.link.more:hover,
+.link.more[aria-current='page'] {
+  color: var(--ink-0);
 }
 .link {
   position: relative;
@@ -244,8 +283,24 @@ onBeforeUnmount(() => {
   border-color: var(--redshift);
 }
 
+@media (max-width: 1100px) {
+  /* 窄屏不再隐藏导航（会丢功能），改为只留主区、其余进横向滚动容器 */
+  .links {
+    max-width: 58vw;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .links::-webkit-scrollbar {
+    display: none;
+  }
+}
 @media (max-width: 700px) {
   .links {
+    max-width: 46vw;
+  }
+  .sep,
+  .link.more .code {
     display: none;
   }
 }

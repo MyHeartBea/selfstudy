@@ -16,6 +16,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import { statsApi, reviewsApi } from '../core/api'
 import { traceOnScroll } from '../design/motion'
+import { usePageMotion } from '../design/usePageMotion'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiTag from '../ui/UiTag.vue'
 
@@ -24,6 +25,10 @@ const stats = ref(null)
 const reviews = ref(null)
 const errorText = ref('')
 const curveHost = ref(null)
+const pageRoot = ref(null)
+
+/** 页面级动效：错峰入场 + 视差（见 design/usePageMotion） */
+usePageMotion(pageRoot, { stagger: 55 })
 
 const mastery = computed(() => reviews.value?.mastery_distribution || [])
 const masteryTotal = computed(() => mastery.value.reduce((a, x) => a + (x.count || 0), 0))
@@ -81,7 +86,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main id="main" class="pad">
+  <main id="main" ref="pageRoot" class="pad">
     <header class="head">
       <span class="mono">[05] BINDER · 学习统计</span>
       <span class="mono"
@@ -93,9 +98,9 @@ onMounted(async () => {
     <UiEmpty v-else-if="errorText" title="统计载入失败" :hint="errorText" />
 
     <template v-else>
-      <div class="binder">
+      <div class="binder reveal" data-reveal>
         <!-- 英雄格：今日待复习（最重要，占两列） -->
-        <section class="leaf hero">
+        <section class="leaf hero fadeleaf" style="--d: 0ms">
           <span class="mono lab">Today · 今日待复习</span>
           <div class="big num">{{ reviews?.due_today ?? 0 }}</div>
           <p class="sub">
@@ -104,7 +109,7 @@ onMounted(async () => {
           </p>
         </section>
 
-        <section class="leaf">
+        <section class="leaf fadeleaf" style="--d: 210ms">
           <span class="mono lab">Accuracy · 正确率</span>
           <div class="big num">{{ Math.round(reviews?.total_accuracy ?? 0) }}<em>%</em></div>
           <p class="sub">近 30 天 · 今日 {{ Math.round(reviews?.accuracy_today ?? 0) }}%</p>
@@ -149,7 +154,7 @@ onMounted(async () => {
         </section>
 
         <!-- 科目分布 -->
-        <section class="leaf wide">
+        <section class="leaf wide fadeleaf" style="--d: 140ms">
           <span class="mono lab">By subject · 科目分布</span>
           <div v-if="subjects.length" class="rows">
             <div v-for="s in subjects" :key="s.subject_id" class="rrow">
@@ -263,6 +268,23 @@ onMounted(async () => {
 .sub b {
   color: var(--ink-0);
   font-weight: 500;
+}
+
+/* 叶子只淡入、不位移：父级 grid 是 1px 间隙的连续网格，
+   子元素做 translateY 会在格子之间露出背景缝（视觉破损，已避免）。
+   错峰由内联 --d 提供。 */
+.fadeleaf {
+  opacity: 0;
+  transition: opacity 0.9s var(--e-settle) var(--d, 0ms);
+}
+.binder.in .fadeleaf {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fadeleaf {
+    opacity: 1;
+    transition: none;
+  }
 }
 
 /* 曲线 */

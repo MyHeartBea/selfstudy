@@ -12,14 +12,20 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 const BASE = process.env.BASE_PATH || '/'
+/** 构建时间戳：设置页用它回答"我现在跑的是哪一版"（并行期自查用） */
+const BUILD_TIME = new Date().toISOString().slice(0, 16).replace('T', ' ')
 
 export default defineConfig({
   base: BASE,
   plugins: [vue()],
+  define: {
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
   test: {
     // DOM 级测试需要浏览器环境（与 v2 一致）
     environment: 'happy-dom',
     include: ['tests/**/*.test.js'],
+    globals: false,
   },
   server: {
     host: '127.0.0.1',

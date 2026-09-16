@@ -21,6 +21,8 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.es2021,
+        // 构建期由 vite define 注入的常量（见 vite.config.js 的 define）
+        __BUILD_TIME__: 'readonly',
       },
     },
     rules: {
