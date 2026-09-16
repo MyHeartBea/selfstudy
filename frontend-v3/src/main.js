@@ -9,6 +9,8 @@ import { createApp } from 'vue'
 import './design/tokens.css'
 import './design/base.css'
 import './design/materials.css'
+// toast 宿主挂在 body 上、不在任何组件作用域内，所以样式必须是全局的
+import './ui/toast.css'
 
 import App from './app/App.vue'
 import { router } from './app/router'

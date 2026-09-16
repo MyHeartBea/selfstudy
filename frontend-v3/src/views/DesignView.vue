@@ -14,13 +14,31 @@ import InkCard from '../ui/InkCard.vue'
 import InkDot from '../ui/InkDot.vue'
 import StarRow from '../ui/StarRow.vue'
 import UiButton from '../ui/UiButton.vue'
+import UiCheck from '../ui/UiCheck.vue'
+import UiEmpty from '../ui/UiEmpty.vue'
 import UiField from '../ui/UiField.vue'
+import UiModal from '../ui/UiModal.vue'
+import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
+import UiTextarea from '../ui/UiTextarea.vue'
+import { toast } from '../ui/toast'
 
 /** 组件分区用的受控状态 */
 const demoText = ref('泰勒公式的余项')
 const demoStar = ref(4)
 const demoDot = ref(3)
+const demoArea = ref('设函数 f(x) 在 x=0 处连续，则 f′(0) 等于（ ）')
+const demoSubject = ref('1')
+const demoCheck = ref(false)
+const demoMixed = ref(false)
+const modalOpen = ref(false)
+
+const SUBJECTS = [
+  { value: '1', label: '数学二' },
+  { value: '2', label: '英语二' },
+  { value: '3', label: '政治' },
+  { value: '4', label: '408' },
+]
 
 const root = ref(null)
 let stops = []
@@ -283,10 +301,83 @@ onBeforeUnmount(() => stops.forEach((fn) => typeof fn === 'function' && fn()))
       </div>
     </section>
 
+    <!-- ── 组件：表单与反馈层 ── -->
+    <section class="block">
+      <h2 class="reveal">组件 · 表单与反馈</h2>
+      <p class="lead reveal">
+        下拉刻意用<b>原生 select</b>（键盘导航、移动端选择器、屏幕阅读器语义浏览器已经做对了）；
+        反馈层不阻塞操作，弹层带<b>焦点陷阱与焦点归还</b>。
+      </p>
+
+      <div class="atoms reveal">
+        <div class="atom wide">
+          <span class="alab mono">ui-textarea（自动增高 + 字数）</span>
+          <UiTextarea
+            v-model="demoArea"
+            label="题干"
+            hint="输入越长框越高，超过上限才出现滚动条"
+            show-count
+            :max-length="200"
+          />
+        </div>
+
+        <div class="atom">
+          <span class="alab mono">ui-select / ui-check</span>
+          <UiSelect
+            v-model="demoSubject"
+            :options="SUBJECTS"
+            label="科目"
+            hint="原生控件 + 视觉接管"
+          />
+          <div class="arow">
+            <UiCheck v-model="demoCheck" label="已核对题干" />
+            <UiCheck v-model="demoMixed" :indeterminate="!demoMixed" label="半选（批量表头）" />
+          </div>
+        </div>
+
+        <div class="atom">
+          <span class="alab mono">toast（不阻塞 · aria-live）</span>
+          <div class="arow">
+            <UiButton size="sm" @click="toast.success('已点亮入库')">成功</UiButton>
+            <UiButton size="sm" @click="toast.info('今晚还有 38 题')">信息</UiButton>
+            <UiButton size="sm" variant="danger" @click="toast.error('入库失败：题干为空')">
+              错误
+            </UiButton>
+          </div>
+          <span class="alab mono">ui-modal（焦点陷阱 + 归还）</span>
+          <div class="arow">
+            <UiButton size="sm" @click="modalOpen = true">打开弹层</UiButton>
+          </div>
+        </div>
+
+        <div class="atom">
+          <span class="alab mono">ui-empty / ui-skeleton</span>
+          <UiEmpty title="今晚没有待复习" hint="可以先去录入一道题，或提前看明天的星表" />
+        </div>
+
+        <div class="atom wide">
+          <span class="alab mono">ui-skeleton（形状贴合真实卡片，减少跳版）</span>
+          <UiEmpty variant="skeleton" thumb :rows="3" />
+        </div>
+      </div>
+    </section>
+
     <footer class="foot">
       <span class="mono">SPEC · 令牌改动必须同步这一页</span>
       <span class="mono">NOCTURNAL ATLAS / v3</span>
     </footer>
+
+    <UiModal v-model="modalOpen" title="观测详情" size="md">
+      <p class="lead" style="margin-bottom: 10px">
+        打开时焦点会移入弹层，Tab 在弹层内循环，Esc 或点遮罩关闭，
+        关闭后焦点<b>归还到刚才那个按钮</b>。打开期间页面滚动被锁住，卸载时也会解锁。
+      </p>
+      <UiEmpty title="这里放详情内容" hint="阶段 3 会换成真实的错题详情" />
+      <template #foot>
+        <UiButton variant="quiet" @click="modalOpen = false">取消</UiButton>
+        <UiButton variant="solid" @click="modalOpen = false">确认</UiButton>
+      </template>
+    </UiModal>
   </main>
 </template>
 
@@ -643,6 +734,14 @@ h2 {
   gap: 13px;
   padding: 16px;
   background: var(--sky-1);
+}
+.atom.wide {
+  grid-column: span 2;
+}
+@media (max-width: 700px) {
+  .atom.wide {
+    grid-column: span 1;
+  }
 }
 .alab {
   color: var(--ink-3);
