@@ -8,12 +8,14 @@
    3. **可访问**：nav 有 aria-label、当前页 aria-current、跳转到主内容的 skip link。
 -->
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
+import { reviewsApi } from '../core/api'
 import { magnetic } from '../design/motion'
 
 const route = useRoute()
+const router = useRouter()
 const navEl = ref(null)
 const brandEl = ref(null)
 const ctaEl = ref(null)
@@ -23,7 +25,8 @@ const ctaEl = ref(null)
  * 一行塞 11 个入口会让"当前在哪"失去意义，所以宁可分两行。
  */
 const LINKS = [
-  { to: '/stats', label: '成册', code: '01' },
+  // 首页 = 成册（用户要求），标签直接叫「首页」
+  { to: '/', label: '首页', code: '01' },
   { to: '/review', label: '复习', code: '02' },
   { to: '/capture', label: '录入', code: '03' },
   { to: '/mistakes', label: '错题', code: '04' },
@@ -41,6 +44,32 @@ const LINKS_MORE = [
 ]
 
 let stops = []
+
+/**
+ * 右上角主按钮 —— 它此前是个**没有任何绑定的按钮**（只有样式），所以点击毫无反应。
+ * 现在做成"今晚观测"的真实入口：
+ *   · 有待复习 - 文案「今晚观测 · N」并直达复习页
+ *   · 没有待复习 - 文案「今晚无需观测」并回首页（成册）
+ * 待复习数来自 /api/reviews/stats（失败则退化为不带数字的文案，不阻塞导航）。
+ */
+const ctaDue = ref(null)
+const ctaText = computed(() => {
+  if (ctaDue.value === null) return '今晚观测'
+  return ctaDue.value > 0 ? `今晚观测 · ${ctaDue.value}` : '今晚无需观测'
+})
+function onCta() {
+  router.push(ctaDue.value ? '/review' : '/')
+}
+nextTick(() => {
+  reviewsApi
+    .stats()
+    .then((s) => {
+      ctaDue.value = s?.due_today ?? 0
+    })
+    .catch(() => {
+      ctaDue.value = 0
+    })
+})
 let ticking = false
 let lastY = 0
 
@@ -105,8 +134,8 @@ onBeforeUnmount(() => {
       </RouterLink>
     </nav>
 
-    <button ref="ctaEl" class="cta" type="button">
-      <span>今晚观测</span>
+    <button ref="ctaEl" class="cta" type="button" @click="onCta">
+      <span>{{ ctaText }}</span>
       <svg
         viewBox="0 0 24 24"
         width="15"

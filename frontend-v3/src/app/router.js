@@ -10,7 +10,16 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
+    // 首页 = 成册（用户要求：启动动画结束后直达成册，并把成册改名为首页）。
+    // 直接渲染 StatsView，**不额外跳一次路由** —— 少一跳就少一次闪烁，
+    // 也避免"启动页 + 旧首页 + 目标页"三者交替出现。
     path: '/',
+    name: 'home',
+    component: () => import('../views/StatsView.vue'),
+  },
+  {
+    // 观测台（原 AtlasHome）保留原地址，但它不再是首页。
+    path: '/atlas',
     name: 'atlas',
     component: () => import('../views/AtlasHome.vue'),
   },
@@ -45,10 +54,9 @@ const routes = [
     component: () => import('../views/KnowledgeView.vue'),
   },
   {
-    // 学习统计 · 成册（Bento 非对称网格）
+    // 成册现在是首页（/）。保留 /stats 作为别名，旧链接不失效。
     path: '/stats',
-    name: 'stats',
-    component: () => import('../views/StatsView.vue'),
+    redirect: '/',
   },
   {
     // 生词本（闪卡快刷 + 词表）
@@ -107,6 +115,7 @@ export const router = createRouter({
 })
 
 const TITLES = {
+  home: '首页 · 学习统计',
   atlas: '夜航星图',
   design: '设计规格',
   review: '今日复习',

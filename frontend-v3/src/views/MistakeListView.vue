@@ -126,13 +126,29 @@ function typeTone(t) {
   )
 }
 
-/** 取题图：后端 images 是数组（可能是相对路径或 dataURL），取第一张 */
-function firstImage(row) {
-  const list = Array.isArray(row?.images) ? row.images : []
-  const f = list.find((x) => x && typeof x === 'string')
-  if (!f) return ''
-  // 相对路径交给后端静态目录（vite 已代理 /images）
-  return f.startsWith('data:') || f.startsWith('http') ? f : `/images/${f.replace(/^\/+/, '')}`
+/**
+ * 题图 URL。
+ *
+ * 踩过的坑：后端 `images` 里的值**自带 `images/` 前缀**（如 `images/xxx.png`），
+ * 我又拼了一次 `/images/`，得到 `/images/images/xxx.png` - 404 - 用户看到裂图。
+ * 所以必须先把已有的 `images/` 前缀剥掉。
+ *
+ * 列表用 `/images/thumb/<file>`（后端懒生成 WebP，实测 334KB - 33.8KB），
+ * 详情用原图 —— 与 v2 的做法一致。
+ */
+function imageName(item) {
+  const v = String(item || '').trim()
+  if (!v) return ''
+  if (v.startsWith('data:') || v.startsWith('http')) return v
+  return v.replace(/^\/+/, '').replace(/^images\//, '')
+}
+
+function firstImage(row, { thumb = false } = {}) {
+  const list = Array.isArray(row && row.images) ? row.images : []
+  const first = list.find((x) => x && typeof x === 'string')
+  if (!first) return ''
+  if (first.startsWith('data:') || first.startsWith('http')) return first
+  return `/images/${thumb ? 'thumb/' : ''}${imageName(first)}`
 }
 
 function applyFilters() {
@@ -223,7 +239,7 @@ usePageMotion(pageRoot, { stagger: 55 })
           <img
             v-if="firstImage(row)"
             class="shot"
-            :src="firstImage(row)"
+            :src="firstImage(row, { thumb: true })"
             :alt="`第 ${row.id} 题的题目图像`"
             loading="lazy"
           />
@@ -309,6 +325,14 @@ usePageMotion(pageRoot, { stagger: 55 })
         </div>
 
         <!-- 英语题：中英对照 + 逐句拆解 + 短语/生词与词性（按 v2 的字段形状呈现） -->
+        <!-- 详情里的题图用原图（列表用缩略图） -->
+        <img
+          v-if="firstImage(detail)"
+          class="shot shot-full"
+          :src="firstImage(detail)"
+          :alt="`第 ${detail.id} 题的题目图像`"
+        />
+
         <EnglishPanel v-if="detail.passage_text" :data="detail" />
 
         <p class="mono dnote">编辑与复习入口在后续页面接入。</p>
@@ -381,6 +405,12 @@ usePageMotion(pageRoot, { stagger: 55 })
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.shot-full {
+  max-height: none;
+  margin: 4px 0 2px;
+  object-fit: contain;
+}
+
 .shot {
   display: block;
   width: 100%;
