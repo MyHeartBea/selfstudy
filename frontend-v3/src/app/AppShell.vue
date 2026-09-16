@@ -145,7 +145,7 @@ onBeforeUnmount(() => {
 .nav {
   position: fixed;
   inset: 0 0 auto 0;
-  z-index: var(--z-content);
+  z-index: var(--z-nav); /* 高于 --z-content，避免被页面内容覆盖（曾导致导航点不动） */
   display: flex;
   align-items: center;
   justify-content: space-between;
