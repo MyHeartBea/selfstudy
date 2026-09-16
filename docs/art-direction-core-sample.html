@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>研错本 · 岩心（Stratigraphic Core）— 沉浸式概念预览 v3</title>
+<meta name="color-scheme" content="dark" />
+<style>
+/* ============================================================================
+   研错本 · 概念预览 v3 —— 核心隐喻：地层学 / 岩心取样
+   ---------------------------------------------------------------------------
+   学习日志 = 一根从地表向下钻取的岩心（core sample）
+     一天   = 一段层理（stratum），厚度 = 当天复习量
+     反复错 = 标志层（marker bed），剖面上打横的醒目标记
+     掌握   = 成岩作用（diagenesis）：松散沉积 → 致密岩石
+     预警   = 断层应力（fault stress）：负荷将超载处
+   与既有前端无任何共同点：冷灰基色 + 石灰蓝标记色 + 氧化铁信号色；
+   等宽刻度、剖面显微镜、岩心曲率、半调网点。
+   零外部依赖（无字体/CDN/库），可直接 file:// 打开。
+   动效全部 transform / opacity / filter，尊重 prefers-reduced-motion。
+   ========================================================================== */
+
+/* ---------- 令牌：色相取自真实岩性标本 ---------- */
+:root {
+  --limestone: #c9c6bd;   /* 石灰岩：最浅，用于正文与浅层 */
+  --shale:     #6e7278;   /* 页岩：中性灰蓝，界面主体 */
+  --shale-02:  #4a4e54;   /* 页岩暗部 */
+  --slate:     #2b2f34;   /* 板岩：分割与凹陷 */
+  --basalt:    #16191c;   /* 玄武岩：基岩背景 */
+  --granite:   #0e1012;   /* 花岗岩：最深处 */
+  --marker:    #c0492b;   /* 标志层·氧化铁红：最高优先级信号 */
+  --marker-2:  #e0703f;
+  --vein:      #7fa8b8;   /* 矿脉·青蓝：数据与链接 */
+  --amber:     #c99a3f;   /* 琥珀：警示 / 负荷 */
+
+  --hair: #c9c6bd1f;
+  --hair-2: #c9c6bd3d;
+
+  /* 动效：压实（慢收）/ 落锤（带回弹）/ 沉积（匀速推进） */
+  --e-compact: cubic-bezier(0.2, 0.9, 0.2, 1);
+  --e-hammer: cubic-bezier(0.3, 1.5, 0.5, 1);
+  --e-settle: cubic-bezier(0.33, 1, 0.68, 1);
+
+  /* 字阶：极端对比 —— display 巨型，label 极小 */
+  --fs-giant: clamp(54px, 12.4vw, 178px);
+  --fs-huge: clamp(38px, 6.4vw, 96px);
+  --fs-h1: clamp(26px, 3.1vw, 44px);
+  --fs-h2: clamp(17px, 1.5vw, 21px);
+  --fs-body: clamp(13.5px, 1.02vw, 15px);
+  --fs-mono: 10.5px;
+  --fs-mono-lg: 12px;
+
+  --display: "Bebas Neue", "Oswald", "Arial Narrow", "Haettenschweiler", Impact, "PingFang SC", sans-serif;
+  --han: "Source Han Sans SC", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, "SFMono-Regular", ui-monospace, monospace;
+
+  --rail: clamp(46px, 4.6vw, 74px);   /* 左侧深度刻度栏 */
+  --pad: clamp(16px, 3.4vw, 58px);
+  --col: 1440px;
+}
+
+/* ---------- 基座 ---------- */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0; background: var(--basalt); color: var(--limestone);
+  font-family: var(--han); font-size: var(--fs-body); line-height: 1.62;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+::selection { background: var(--marker); color: var(--granite); }
+h1, h2, h3, h4, p { margin: 0; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+a { color: inherit; }
+
+/* 半调网点 + 细颗粒：材质层（不是装饰，用于统一所有表面质感） */
+.halftone {
+  position: fixed; inset: 0; z-index: 60; pointer-events: none;
+  opacity: 0.5; mix-blend-mode: overlay;
+  background-image: radial-gradient(#0000 0 1px, #ffffff14 1px 1.5px, #0000 1.5px);
+  background-size: 4px 4px;
+}
+.grain {
+  position: fixed; inset: 0; z-index: 59; pointer-events: none; opacity: 0.32;
+  background-image: repeating-linear-gradient(0deg, #ffffff09 0 1px, #0000 1px 2px);
+}
+
+/* ---------- 顶部仪器条 ---------- */
+.rig {
+  position: sticky; top: 0; z-index: 50;
+  border-bottom: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--granite) 86%, transparent);
+  backdrop-filter: blur(10px);
+}
+.rig-in {
+  max-width: var(--col); margin: 0 auto; padding: 0 var(--pad);
+  height: 46px; display: flex; align-items: center; gap: 20px;
+  font-family: var(--mono); font-size: var(--fs-mono); letter-spacing: 0.12em; text-transform: uppercase;
+}
+.rig-in .id { color: var(--limestone); letter-spacing: 0.2em; }
+.rig-in .id b { color: var(--marker); }
+.rig-in .sp { flex: 1; }
+.rig-in .kv { color: var(--shale); }
+.rig-in .kv b { color: var(--limestone); font-weight: 500; }
+.rig-in .live { display: inline-flex; align-items: center; gap: 6px; color: var(--vein); }
+.rig-in .live i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: pulse 2.4s var(--e-settle) infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* ---------- 壳：刻度栏 + 内容 ---------- */
+.shell { max-width: var(--col); margin: 0 auto; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); }
+.rail {
+  position: sticky; top: 46px; align-self: start; height: calc(100vh - 46px);
+  border-right: 1px solid var(--hair);
+  display: flex; flex-direction: column; align-items: center; padding: 10px 0;
+  font-family: var(--mono); font-size: var(--fs-mono); color: var(--shale);
+}
+.rail .depth-now { color: var(--marker); letter-spacing: 0.08em; }
+.rail .bar { position: relative; flex: 1; width: 1px; background: var(--hair-2); margin: 10px 0; }
+.rail .bar i {
+  position: absolute; left: -1.5px; width: 4px; background: var(--marker);
+  transition: height 0.28s linear;
+}
+.rail .bar span { position: absolute; left: -3px; width: 7px; height: 1px; background: var(--hair-2); }
+.rail .rot { writing-mode: vertical-rl; transform: rotate(180deg); color: var(--shale-02); letter-spacing: 0.34em; }
+.main { min-width: 0; padding: 0 var(--pad); }
+
+/* ---------- 巨字标题：逐字压入 ---------- */
+.hero { padding: clamp(40px, 9vh, 110px) 0 clamp(26px, 5vh, 64px); }
+.hero-kicker {
+  font-family: var(--mono); font-size: var(--fs-mono); letter-spacing: 0.4em;
+  text-transform: uppercase; color: var(--shale); display: flex; align-items: center; gap: 12px;
+}
+.hero-kicker::after { content: ""; flex: 1; height: 1px; background: var(--hair); }
+.giant {
+  font-family: var(--display); font-weight: 900; font-size: var(--fs-giant);
+  line-height: 0.84; letter-spacing: -0.005em; margin: clamp(14px, 2.4vh, 30px) 0 0;
+  color: var(--limestone); text-transform: none;
+}
+/* 每行 nowrap：字是 inline-block，断行点必须由我们指定，否则 6 字行会溢出到第三行
+   （实测 17vw 时「直到成为岩石」放不下，折成 3 行、节奏全乱） */
+.giant .ln { display: block; white-space: nowrap; }
+.giant .ch {
+  display: inline-block; opacity: 0; transform: translateY(0.42em) scaleY(1.28);
+  filter: blur(14px);
+  animation: press 1.15s var(--e-compact) forwards;
+  animation-delay: calc(var(--i) * 78ms + 120ms);
+}
+@keyframes press {
+  0%   { opacity: 0; transform: translateY(0.42em) scaleY(1.28); filter: blur(14px); }
+  60%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scaleY(1); filter: blur(0); }
+}
+.giant .thin { color: var(--shale-02); font-weight: 400; }
+.giant em { font-style: normal; color: var(--marker); }
+
+.hero-foot { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; margin-top: clamp(22px, 4vh, 46px); border-top: 1px solid var(--hair); }
+.hero-foot > div { padding: 16px 16px 16px 0; border-right: 1px solid var(--hair); }
+.hero-foot > div:last-child { border-right: 0; }
+.hero-foot .k { font-family: var(--mono); font-size: var(--fs-mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--shale); }
+.hero-foot .v { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 3.4vw, 50px); line-height: 1; margin-top: 8px; letter-spacing: -0.01em; }
+.hero-foot .v small { font-family: var(--han); font-size: 12px; font-weight: 400; color: var(--shale); letter-spacing: 0.06em; margin-left: 4px; }
+
+/* ---------- 段落头：剖面标签 ---------- */
+.band { padding: clamp(44px, 8vh, 104px) 0 0; }
+.band-head { display: flex; align-items: flex-end; gap: 18px; border-bottom: 1px solid var(--hair); padding-bottom: 12px; }
+.band-head .code { font-family: var(--mono); font-size: var(--fs-mono-lg); color: var(--marker); letter-spacing: 0.16em; }
+.band-head h2 { font-family: var(--han); font-weight: 800; font-size: var(--fs-h1); letter-spacing: -0.01em; line-height: 1; }
+.band-head .en { font-family: var(--mono); font-size: var(--fs-mono); letter-spacing: 0.24em; text-transform: uppercase; color: var(--shale); margin-left: auto; padding-bottom: 3px; }
+.band-lead { max-width: 62ch; color: var(--shale); margin-top: 16px; }
+.band-lead b { color: var(--limestone); font-weight: 600; }
+
+/* ---------- 场景一：岩心柱 ---------- */
+.core { display: grid; grid-template-columns: minmax(0, 108px) minmax(0, 1fr); gap: clamp(16px, 2.6vw, 40px); margin-top: clamp(24px, 4vh, 44px); }
+
+/* 岩心柱本体：用 conic-gradient 模拟圆柱曲率，不用 WebGL */
+.core-column {
+  position: relative; border-radius: 4px 4px 2px 2px; overflow: hidden;
+  background: linear-gradient(90deg, #0b0d0e, var(--shale-02) 42%, #0b0d0e);
+  box-shadow: inset -14px 0 26px -14px #000000d9, inset 14px 0 26px -14px #000000d9;
+  min-height: 560px;
+}
+.core-column .strata { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.stratum {
+  position: relative; width: 100%; border-bottom: 1px solid #00000059;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 9px; color: #000000c4; letter-spacing: 0.04em;
+  cursor: pointer; transform-origin: left center;
+  transition: transform 0.5s var(--e-compact), filter 0.4s;
+}
+.stratum:hover, .stratum:focus-visible { transform: translateX(10px) scale(1.03); filter: brightness(1.25); outline: none; }
+.stratum.marker { box-shadow: inset 0 0 0 2px #00000000, inset 0 -3px 0 var(--marker); }
+.stratum.marker::after {
+  content: ""; position: absolute; right: 6px; width: 12px; height: 1px; background: var(--marker);
+}
+.stratum:focus-visible { box-shadow: 0 0 0 2px var(--granite), 0 0 0 4px var(--marker); }
+/* 柱面高光：一条竖直亮带，让"圆柱"读得出来 */
+.core-column::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, #0000 30%, #ffffff1a 46%, #ffffff05 52%, #0000 70%);
+}
+.core-column .cap {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 34px;
+  background: linear-gradient(180deg, #0000, #000000b3 60%, #000000e6);
+  border-top: 1px solid var(--hair); display: grid; place-items: end center; padding-bottom: 6px;
+  font-family: var(--mono); font-size: 9px; color: var(--shale); letter-spacing: 0.16em;
+}
+
+/* 岩心读数 */
+.core-side { display: flex; flex-direction: column; gap: 14px; }
+/* 读数面板：深底上必须比正文更亮一档，否则 13px 的小字会糊掉（截图里实测几乎看不见） */
+.readout { border: 1px solid var(--hair); border-left: 2px solid var(--hair-2); padding: 16px 18px; background: #ffffff08; }
+.readout .k { font-family: var(--mono); font-size: var(--fs-mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--limestone); opacity: 0.82; }
+.readout .v { font-family: var(--display); font-size: clamp(34px, 4.6vw, 62px); line-height: 0.95; margin-top: 8px; }
+.readout .v span { font-size: 0.42em; color: var(--shale); margin-left: 6px; letter-spacing: 0.04em; }
+.readout .n { color: var(--limestone); opacity: 0.86; font-size: 13.5px; line-height: 1.85; margin-top: 10px; }
+.readout .n b { color: var(--marker); font-weight: 600; }
+.readout.hot .v { color: var(--marker); }
+
+/* 图例 */
+.legend { display: flex; flex-direction: column; gap: 7px; font-family: var(--mono); font-size: var(--fs-mono); color: var(--shale); letter-spacing: 0.06em; }
+.legend span { display: flex; align-items: center; gap: 8px; }
+.legend i { width: 22px; height: 8px; flex: none; }
+.legend i.m { background: var(--marker); }
+.legend i.s { background: var(--slate); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.legend i.c { background: var(--vein); }
+.legend i.a { background: var(--amber); }
+
+/* ---------- 标本卡：悬停变"显微镜剖面" ---------- */
+.specimens { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 1px; background: var(--hair); border: 1px solid var(--hair); }
+.specimen {
+  position: relative; background: var(--basalt); padding: 18px 20px 20px; text-align: left;
+  min-height: 178px; display: flex; flex-direction: column; gap: 10px;
+  transition: background 0.45s var(--e-compact), transform 0.5s var(--e-hammer);
+  transform-origin: center bottom;
+}
+.specimen:hover, .specimen:focus-visible { background: var(--slate); transform: translateY(-3px); outline: none; }
+.specimen:focus-visible { box-shadow: inset 0 0 0 2px var(--marker); }
+.specimen .no {
+  font-family: var(--mono); font-size: var(--fs-mono); color: var(--shale); letter-spacing: 0.16em;
+  display: flex; align-items: center; gap: 8px;
+}
+.specimen .no b { color: var(--marker); font-weight: 500; }
+.specimen h3 { font-family: var(--han); font-size: 16.5px; font-weight: 700; line-height: 1.45; }
+.specimen .body { color: var(--limestone); opacity: 0.8; font-size: 13.5px; line-height: 1.78; flex: 1; }
+.specimen .no { color: var(--limestone); opacity: 0.7; }
+.specimen .foot { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: var(--fs-mono); color: var(--shale-02); letter-spacing: 0.1em; }
+.specimen .foot .b { color: var(--vein); }
+.specimen .foot .m { color: var(--marker); }
+/* 剖面网格：悬停时淡入，像把标本切成薄片放在偏光镜下 */
+.specimen::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background-image:
+    repeating-linear-gradient(0deg, var(--vein-14, #7fa8b81f) 0 1px, #0000 1px 9px),
+    repeating-linear-gradient(90deg, var(--vein-14, #7fa8b81f) 0 1px, #0000 1px 9px);
+  transition: opacity 0.5s var(--e-compact);
+}
+.specimen:hover::before { opacity: 1; }
+/* 反复错的题：一条标志层横线 */
+.specimen[data-fault="1"] { box-shadow: inset 3px 0 0 var(--marker); }
+
+/* ---------- 文字与工具类 ---------- */
+.mono { font-family: var(--mono); font-size: var(--fs-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--shale); }
+.hint { font-size: 12.5px; color: var(--shale-02); }
+
+/* 按钮：落锤回弹 + 磁吸微移 */
+.chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: var(--fs-mono-lg); letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 10px 16px; border: 1px solid var(--hair-2); color: var(--limestone);
+  transition: transform 0.4s var(--e-hammer), border-color 0.3s, background 0.3s, color 0.3s;
+}
+.chip:hover { border-color: var(--limestone); transform: translateY(-2px); }
+.chip:active { transform: translateY(1px) scale(0.985); transition-duration: 0.08s; }
+.chip:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--granite), 0 0 0 4px var(--marker); }
+.chip.solid { background: var(--marker); border-color: var(--marker); color: var(--granite); }
+.chip.solid:hover { background: var(--marker-2); border-color: var(--marker-2); }
+.chip.ghost { border-color: transparent; color: var(--shale); }
+.chip.ghost:hover { color: var(--limestone); border-color: var(--hair-2); }
+
+/* ---------- 钻探台（录入） ---------- */
+.rig-zone { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: clamp(18px, 3vw, 46px); margin-top: clamp(24px, 4vh, 44px); }
+.bore {
+  border: 1px dashed var(--hair-2); padding: clamp(22px, 3vw, 42px); text-align: center;
+  background: repeating-linear-gradient(135deg, #ffffff05 0 8px, #0000 8px 16px);
+  transition: border-color 0.35s, background 0.35s;
+}
+.bore:hover { border-color: var(--marker); background: #c0492b0d; }
+.bore .big { font-family: var(--display); font-size: clamp(26px, 3.2vw, 42px); line-height: 1; letter-spacing: 0.01em; }
+.bore p { color: var(--shale); margin-top: 10px; }
+.samples { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; margin-top: 14px; }
+.sample {
+  position: relative; aspect-ratio: 3 / 4; border: 1px solid var(--hair-2);
+  display: grid; place-items: center; font-family: var(--mono); font-size: 9px; color: var(--shale);
+  background: linear-gradient(160deg, var(--slate), var(--shale-02));
+  animation: drop 0.6s var(--e-hammer) backwards;
+}
+@keyframes drop { from { opacity: 0; transform: translateY(-14px) rotate(1.4deg); } to { opacity: 1; transform: none; } }
+.sample b { position: absolute; top: 4px; left: 6px; color: var(--marker); font-weight: 500; }
+.sample .rm { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; display: grid; place-items: center; color: var(--limestone); background: #0000006b; }
+.sample .rm:hover { background: var(--marker); }
+
+/* 钻进进度：等宽分段 + 扫描 */
+.drill { margin-top: 20px; }
+.drill-seg { display: flex; gap: 3px; }
+.drill-seg i { flex: 1; height: 6px; background: var(--slate); }
+.drill-seg i.on { background: var(--vein); animation: seg 2s var(--e-settle) infinite; }
+.drill-seg i.done { background: var(--limestone); }
+@keyframes seg { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+.drill-log { margin-top: 12px; font-family: var(--mono); font-size: var(--fs-mono); color: var(--shale); line-height: 2.1; letter-spacing: 0.06em; }
+.drill-log b { color: var(--vein); }
+.drill-log .warn { color: var(--amber); }
+
+/* ---------- 断面图（统计） ---------- */
+.section-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 1px; background: var(--hair); border: 1px solid var(--hair); margin-top: clamp(24px, 4vh, 44px); }
+.panel { background: var(--basalt); padding: 18px 20px 20px; }
+.panel.p3 { grid-column: span 3; } .panel.p4 { grid-column: span 4; }
+.panel.p5 { grid-column: span 5; } .panel.p7 { grid-column: span 7; } .panel.p12 { grid-column: span 12; }
+.panel .k { font-family: var(--mono); font-size: var(--fs-mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--shale); }
+.panel .big { font-family: var(--display); font-weight: 700; font-size: clamp(32px, 4vw, 56px); line-height: 0.95; margin-top: 10px; letter-spacing: -0.01em; }
+.panel .big small { font-family: var(--han); font-size: 12px; font-weight: 400; color: var(--shale); margin-left: 6px; letter-spacing: 0.06em; }
+.panel .sub { color: var(--shale); font-size: 13px; margin-top: 6px; }
+.panel .sub b { color: var(--marker); font-weight: 500; }
+
+/* 测井曲线：SVG 描边 + 填充 */
+.log-svg { width: 100%; height: 128px; display: block; overflow: visible; }
+.log-svg .ln { fill: none; stroke: var(--vein); stroke-width: 1.4; stroke-linecap: round; stroke-dasharray: var(--len); stroke-dashoffset: var(--len); transition: stroke-dashoffset 1.8s var(--e-compact); }
+.is-in .log-svg .ln { stroke-dashoffset: 0; }
+.log-svg .fill { fill: var(--vein); opacity: 0; transition: opacity 1s var(--e-settle) 0.7s; }
+.is-in .log-svg .fill { opacity: 0.14; }
+.log-svg .mk { fill: var(--marker); }
+.log-grid line { stroke: var(--hair); stroke-width: 1; }
+
+/* 负荷柱：等宽岩柱 */
+.load { display: flex; align-items: flex-end; gap: 4px; height: 104px; margin-top: 14px; }
+.load span { flex: 1; background: var(--shale-02); height: 0; transition: height 1.2s var(--e-compact); }
+.load span.hot { background: var(--marker); }
+.load span.warm { background: var(--amber); }
+.load-x { display: flex; gap: 4px; margin-top: 6px; font-family: var(--mono); font-size: 9px; color: var(--shale-02); }
+.load-x span { flex: 1; text-align: center; }
+
+/* 钻进密度网格 */
+.density { display: grid; grid-template-columns: repeat(auto-fill, 12px); gap: 3px; margin-top: 14px; }
+.density i { width: 12px; height: 12px; background: var(--slate); }
+.density i[data-v="1"] { background: color-mix(in srgb, var(--vein) 26%, var(--slate)); }
+.density i[data-v="2"] { background: color-mix(in srgb, var(--vein) 52%, var(--slate)); }
+.density i[data-v="3"] { background: color-mix(in srgb, var(--vein) 78%, var(--slate)); }
+.density i[data-v="4"] { background: var(--vein); }
+
+/* ---------- 触感规格 ---------- */
+.tactile { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1px; background: var(--hair); border: 1px solid var(--hair); margin-top: 18px; }
+.tac { background: var(--basalt); padding: 16px; cursor: pointer; transition: background 0.3s; }
+.tac:hover { background: var(--slate); }
+.tac:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--marker); }
+.tac h4 { font-family: var(--han); font-size: 14.5px; font-weight: 700; }
+.tac .en { font-family: var(--mono); font-size: var(--fs-mono); color: var(--shale-02); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 3px; }
+.tac .stage { height: 66px; margin: 12px 0 10px; position: relative; overflow: hidden; border: 1px solid var(--hair); background: #ffffff04; }
+.tac .stage i.base { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; background: var(--limestone); }
+.tac p { font-size: 12.5px; color: var(--shale); }
+
+.tac.run .t-compact .base { animation: k-compact 1.1s var(--e-compact); }
+@keyframes k-compact { 0% { transform: scaleY(1.9) translateY(-8px); opacity: 0.3; filter: blur(8px); } 100% { transform: none; opacity: 1; filter: none; } }
+.tac.run .t-hammer .base { background: var(--marker); animation: k-hammer 0.72s var(--e-hammer); }
+@keyframes k-hammer { 0% { transform: scale(0.5) rotate(-14deg); } 60% { transform: scale(1.16) rotate(3deg); } 100% { transform: none; } }
+.tac.run .t-drill .base { width: 78%; left: 11%; height: 3px; margin: -1.5px 0 0 0; animation: k-drill 1.1s var(--e-compact); transform-origin: left center; }
+@keyframes k-drill { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+.tac.run .t-scan .base { width: 26%; height: 200%; top: -50%; margin: 0; background: linear-gradient(90deg, #0000, var(--amber), #0000); animation: k-scan 1.1s var(--e-settle); }
+@keyframes k-scan { 0% { transform: translateX(-170%); } 100% { transform: translateX(440%); } }
+.tac.run .t-shear .base { background: none; box-shadow: inset 0 0 0 2px var(--marker); animation: k-shear 1.1s var(--e-hammer); }
+@keyframes k-shear { 0% { transform: scale(1.7) skewX(-14deg); opacity: 0.2; } 100% { transform: none; opacity: 1; } }
+.tac.run .t-focus .base { width: 18px; height: 18px; margin: -9px 0 0 -9px; background: none; box-shadow: 0 0 0 2px var(--limestone), 0 0 0 6px var(--granite), 0 0 0 8px var(--marker); animation: k-focus 1.1s var(--e-hammer); }
+@keyframes k-focus { 0% { transform: scale(2.4); opacity: 0; } 100% { transform: none; opacity: 1; } }
+.tac.run .t-magnet .base { animation: k-magnet 1.1s var(--e-hammer); }
+@keyframes k-magnet { 0%,100% { transform: none; } 35% { transform: translateY(-9px) scale(1.06); } 62% { transform: translateY(2px) scale(0.98); } }
+
+/* 色卡 */
+.rock-chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 1px; background: var(--hair); border: 1px solid var(--hair); margin-top: 18px; }
+.rock { background: var(--basalt); }
+.rock .sw { height: 74px; box-shadow: inset 0 0 0 1px #00000059; }
+.rock .m { padding: 10px 12px; font-family: var(--mono); font-size: var(--fs-mono); color: var(--shale); line-height: 1.9; letter-spacing: 0.04em; }
+.rock .m b { display: block; font-family: var(--han); font-size: 13px; color: var(--limestone); letter-spacing: 0; }
+
+/* ---------- 页脚 ---------- */
+.trench { border-top: 1px solid var(--hair); margin-top: clamp(44px, 8vh, 110px); padding: 22px 0 70px; display: flex; gap: 18px; align-items: center; font-family: var(--mono); font-size: var(--fs-mono); color: var(--shale-02); letter-spacing: 0.12em; text-transform: uppercase; }
+.trench .sp { flex: 1; }
+
+/* ---------- 响应式：窄屏重排（岩心柱移到顶部横置） ---------- */
+@media (max-width: 1000px) {
+  .core { grid-template-columns: 1fr; }
+  .core-column { min-height: 240px; }
+  .core-column .strata { flex-direction: row; }
+  .stratum { border-bottom: 0; border-right: 1px solid #00000059; writing-mode: vertical-rl; }
+  .stratum.marker { box-shadow: inset -3px 0 0 var(--marker); }
+  .stratum.marker::after { right: auto; bottom: 6px; left: 50%; width: 1px; height: 12px; }
+  .stratum:hover, .stratum:focus-visible { transform: translateY(8px) scale(1.02); }
+  .rig-zone { grid-template-columns: 1fr; }
+  .panel.p3, .panel.p4, .panel.p5, .panel.p7 { grid-column: span 12; }
+}
+@media (max-width: 640px) {
+  .rig-in .hide-s { display: none; }
+  .hero-foot { grid-template-columns: 1fr 1fr; }
+  .rail { display: none; }
+  .shell { grid-template-columns: 1fr; }
+}
+
+/* ---------- 减弱动效：瞬时到位，信息不丢 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  .giant .ch { opacity: 1; transform: none; filter: none; }
+  .stratum { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="halftone" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ================= 仪器条 ================= -->
+<header class="rig">
+  <div class="rig-in">
+    <span class="id"><b>CORE</b> KM-02</span>
+    <span class="kv hide-s">LAT <b>34.26N</b></span>
+    <span class="kv hide-s">DEPTH <b id="rigDepth">0.0 m</b></span>
+    <span class="sp"></span>
+    <span class="live"><i></i>DRILLING</span>
+    <span class="kv hide-s">SAMPLE <b>1,284</b></span>
+  </div>
+</header>
+
+<div class="shell">
+  <!-- ================= 深度刻度栏 ================= -->
+  <nav class="rail" aria-label="深度刻度">
+    <span class="depth-now" id="railDepth">0.0</span>
+    <span class="bar" id="railBar" aria-hidden="true"><i style="height:0"></i>
+      <span style="top:0%"></span><span style="top:25%"></span><span style="top:50%"></span><span style="top:75%"></span><span style="top:100%"></span>
+    </span>
+    <span class="rot">STRATIGRAPHY · 2026</span>
+  </nav>
+
+  <main class="main">
+
+    <!-- ================= 巨字标题 ================= -->
+    <section class="hero">
+      <div class="hero-kicker">core sample 001 — 概念预览（非最终界面）</div>
+      <h1 class="giant" aria-label="向下钻取，直到成为岩石">
+        <span class="ln"><span class="ch" style="--i:0">向</span><span class="ch" style="--i:1">下</span><span class="ch" style="--i:2">钻</span><span class="ch" style="--i:3">取</span><span class="ch thin" style="--i:4">，</span></span>
+        <span class="ln"><span class="ch" style="--i:5">直</span><span class="ch" style="--i:6">到</span><span class="ch" style="--i:7">成</span><span class="ch" style="--i:8">为</span><em><span class="ch" style="--i:9">岩</span><span class="ch" style="--i:10">石</span></em></span>
+      </h1>
+      <div class="hero-foot">
+        <div><div class="k">Total depth</div><div class="v" data-count="99" data-suffix=" m">0</div></div>
+        <div><div class="k">Strata logged</div><div class="v" data-count="27" data-suffix=" 层">0</div></div>
+        <div><div class="k">Marker beds</div><div class="v" data-count="12" data-suffix=" 处" style="color:var(--marker)">0</div></div>
+        <div><div class="k">Porosity</div><div class="v" data-count="62" data-suffix="%">0</div></div>
+      </div>
+    </section>
+
+    <!-- ================= 01 岩心柱 ================= -->
+    <section class="band" id="core">
+      <div class="band-head">
+        <span class="code">01</span>
+        <h2>岩心柱</h2>
+        <span class="en">Core column</span>
+      </div>
+      <p class="band-lead">
+        每一段层理是一次复习记录，<b>厚度代表当天完成的题量</b>；横向贯穿的红线是<b>标志层</b>——同一道题反复出错，它会在地层里留下可追踪的记号。柱子从上往下读，是时间向深处的沉积。
+      </p>
+
+      <div class="core">
+        <!-- 岩心柱：层理由 JS 生成，保证厚度与数据一致 -->
+        <div class="core-column" id="coreColumn" role="img" aria-label="近 27 天复习记录岩心柱，含 4 处标志层">
+          <div class="strata" id="strata"></div>
+          <div class="cap">27 STRATA</div>
+        </div>
+
+        <div class="core-side">
+          <div class="readout">
+            <div class="k">Present depth</div>
+            <div class="v" data-count="99" data-suffix=" m">0</div>
+            <div class="n">自 2026-08-20 开始记录 · 平均 3.7 层/日</div>
+          </div>
+          <div class="readout hot">
+            <div class="k">Marker beds · 反复错</div>
+            <div class="v" data-count="12" data-suffix=" 处">0</div>
+            <div class="n">同一题错 ≥ 3 次即打标；这些是<b>最该优先处理</b>的层位。</div>
+          </div>
+          <div class="legend" aria-hidden="true">
+            <span><i class="s"></i>普通层理 · 单次复习</span>
+            <span><i class="m"></i>标志层 · 反复出错</span>
+            <span><i class="c"></i>矿脉 · 知识点关联</span>
+            <span><i class="a"></i>断层 · 负荷超载</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 02 钻探台 ================= -->
+    <section class="band" id="drill">
+      <div class="band-head">
+        <span class="code">02</span>
+        <h2>钻探台</h2>
+        <span class="en">Borehole intake</span>
+      </div>
+      <p class="band-lead">
+        录入就是<b>取芯</b>：先把整段岩屑一次性取上来（<b>可以一次选多张图，最多 5 张</b>），再统一送进分析；而不是每贴一张就跑一次。下面这台机器正在钻进——进度按<b>真实阶段</b>推进，不编造百分比。
+      </p>
+
+      <div class="rig-zone">
+        <div>
+          <div class="bore">
+            <div class="big">DRILL CORE</div>
+            <p>拖入或粘贴题目截图：原文 / 题干 / 选项可分屏，<b>全部取齐后再启动分析</b>。</p>
+            <div style="margin-top:18px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+              <button class="chip solid" type="button">取芯（选择图片）</button>
+              <button class="chip" type="button">手动记录</button>
+            </div>
+          </div>
+
+          <div class="samples" id="samples">
+            <button class="sample" type="button"><b>01</b>原文</button>
+            <button class="sample" type="button" style="animation-delay:.07s"><b>02</b>题干</button>
+            <button class="sample" type="button" style="animation-delay:.14s"><b>03</b>选项</button>
+            <button class="sample" type="button" style="animation-delay:.21s"><b>04</b>参考</button>
+          </div>
+
+          <div class="drill">
+            <div class="drill-seg" aria-hidden="true">
+              <i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i>
+              <i class="on"></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <div class="drill-log">
+              <div>PGM 01 · 取芯完成 · 4 张样本已入库 <b>OK</b></div>
+              <div>PGM 02 · 视觉解译 · 提取原文与题干 <b>OK</b></div>
+              <div>PGM 03 · 分段翻译 12 句 <b>RUNNING</b></div>
+              <div>PGM 04 · 生词与短语抽提 <span class="warn">PENDING</span></div>
+              <div>PGM 05 · 写入岩心柱 <span class="warn">PENDING</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="readout">
+          <div class="k">Preliminary assay · 初测</div>
+          <div style="font-family:var(--han);font-size:17.5px;font-weight:700;margin-top:12px;color:var(--limestone)">Digital archives</div>
+          <p style="color:var(--limestone);opacity:.86;margin-top:8px;font-size:13.5px;line-height:1.85">
+            数字档案正在改变研究者获取史料的方式，但作者提醒：<b style="color:var(--marker)">可得性不等于可靠性</b>。
+          </p>
+          <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap" class="mono">
+            <span style="border:1px solid var(--hair-2);padding:4px 8px;color:var(--vein)">archive</span>
+            <span style="border:1px solid var(--hair-2);padding:4px 8px;color:var(--vein)">accessibility</span>
+            <span style="border:1px solid var(--hair-2);padding:4px 8px;color:var(--amber)">长难句 ×3</span>
+          </div>
+          <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+            <button class="chip solid" type="button">沉积入册</button>
+            <button class="chip" type="button">生词全部入本</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 03 标本 ================= -->
+    <section class="band" id="specimen">
+      <div class="band-head">
+        <span class="code">03</span>
+        <h2>标本陈列</h2>
+        <span class="en">Specimen tray</span>
+      </div>
+      <p class="band-lead">
+        每个知识点是一块<b>标本</b>。左侧竖线是<b>标志层</b>——标记反复出错；把指针停在标本上，会显示出<b>剖面网格</b>，像放进偏光显微镜下看它的纹理。整块可点。
+      </p>
+
+      <div class="specimens">
+        <button class="specimen" type="button" data-fault="1">
+          <div class="no"><b>SP-118</b> · 数学二 · 高等数学</div>
+          <h3>泰勒公式的余项</h3>
+          <p class="body">展开点与余项形式要一起记：拉格朗日余项适合估阶，佩亚诺余项只给局部信息。</p>
+          <div class="foot"><span class="m">错 5 次</span><span>·</span><span>深度 62 m</span><span>·</span><span class="b">关联 2 条</span></div>
+        </button>
+        <button class="specimen" type="button">
+          <div class="no"><b>SP-092</b> · 英语二 · 阅读理解</div>
+          <h3>长难句：先找主谓</h3>
+          <p class="body">切出主句主干，再挂从句与插入语。最常见干扰项是代词指代错位。</p>
+          <div class="foot"><span class="m">错 3 次</span><span>·</span><span>深度 44 m</span><span>·</span><span class="b">关联 1 条</span></div>
+        </button>
+        <button class="specimen" type="button" data-fault="1">
+          <div class="no"><b>SP-076</b> · 408 · 数据结构</div>
+          <h3>二叉排序树 vs 堆</h3>
+          <p class="body">前者中序遍历有序，后者只保证局部父子关系——插入删除的复杂度差异是常考点。</p>
+          <div class="foot"><span class="m">错 4 次</span><span>·</span><span>深度 37 m</span><span>·</span><span class="b">关联 3 条</span></div>
+        </button>
+        <button class="specimen" type="button">
+          <div class="no"><b>SP-061</b> · 政治 · 马原</div>
+          <h3>矛盾的对立统一</h3>
+          <p class="body">同一性与斗争性、普遍性与特殊性是两对关系，别混。分析题按「原理—材料—结论」写。</p>
+          <div class="foot"><span class="m">错 2 次</span><span>·</span><span>深度 26 m</span><span>·</span><span class="b">关联 1 条</span></div>
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= 04 断面 ================= -->
+    <section class="band" id="section">
+      <div class="band-head">
+        <span class="code">04</span>
+        <h2>断面分析</h2>
+        <span class="en">Cross section</span>
+      </div>
+      <p class="band-lead">
+        统计不是仪表盘，是<b>取一根横切面来看</b>：曲线是测井记录，柱状是负荷预报，网格是钻进密度。所有图形用同一套等宽刻度，读起来像仪器输出。
+      </p>
+
+      <div class="section-grid">
+        <div class="panel p4">
+          <div class="k">Compaction · 成岩度</div>
+          <div class="big" data-count="62" data-suffix="%">0</div>
+          <div class="sub">平均掌握度 · 松散沉积正在压实</div>
+        </div>
+        <div class="panel p4">
+          <div class="k">Assay · 正确率</div>
+          <div class="big" data-count="78" data-suffix="%">0</div>
+          <div class="sub">近 30 天 · 上期 74%</div>
+        </div>
+        <div class="panel p4">
+          <div class="k">Marker hits · 触标次数</div>
+          <div class="big" style="color:var(--marker)" data-count="12" data-suffix=" 处">0</div>
+          <div class="sub">反复错层位 · <b>优先处理</b></div>
+        </div>
+
+        <div class="panel p7">
+          <div class="k">Well log · 28 天钻进记录</div>
+          <svg class="log-svg" viewBox="0 0 560 128" preserveAspectRatio="none" role="img" aria-label="近 28 天复习量测井曲线">
+            <g class="log-grid" aria-hidden="true">
+              <line x1="0" y1="32" x2="560" y2="32" /><line x1="0" y1="64" x2="560" y2="64" />
+              <line x1="0" y1="96" x2="560" y2="96" />
+            </g>
+            <path class="fill" d="M0,96 C44,88 66,58 110,64 C154,70 176,36 220,42 C264,48 300,20 342,28 C384,36 424,14 468,22 C512,30 536,18 560,15 L560,128 L0,128 Z" />
+            <path class="ln" d="M0,96 C44,88 66,58 110,64 C154,70 176,36 220,42 C264,48 300,20 342,28 C384,36 424,14 468,22 C512,30 536,18 560,15" style="--len:900" />
+            <circle class="mk" cx="220" cy="42" r="3" />
+            <circle class="mk" cx="468" cy="22" r="3" />
+          </svg>
+          <div class="mono" style="margin-top:8px">红点 = 出现标志层的日子</div>
+        </div>
+
+        <div class="panel p5">
+          <div class="k">Load forecast · 负荷预报</div>
+          <div class="load" id="load" data-vals="62,38,84,26,52,71,44,18,33,58,24,12">
+            <span></span><span></span><span class="hot"></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="load-x" aria-hidden="true"><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+          <div class="sub" style="margin-top:12px">周五 84 题属<b>过载层</b>，建议前移到周四分摊。</div>
+        </div>
+
+        <div class="panel p12">
+          <div class="k">Drilling density · 钻进密度（18 周）</div>
+          <div class="density" id="density" aria-hidden="true"></div>
+          <div class="mono" style="margin-top:10px">格 = 一周 · 亮度 = 该周复习量</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 05 触感规格 ================= -->
+    <section class="band" id="tactile">
+      <div class="band-head">
+        <span class="code">05</span>
+        <h2>触感规格</h2>
+        <span class="en">Tactile spec</span>
+      </div>
+      <p class="band-lead">全站只有这六种动作，每一种都对应一个物理过程。点任意一张卡片重播。</p>
+
+      <div class="tactile">
+        <div class="tac" data-tac><h4>压实</h4><div class="en">Compact</div><div class="stage t-compact"><i class="base"></i></div><p>内容出现：纵向压缩到位，模拟沉积物被压密。</p></div>
+        <div class="tac" data-tac><h4>落锤</h4><div class="en">Hammer</div><div class="stage t-hammer"><i class="base"></i></div><p>确认与错误反馈：过冲回弹，一锤定音。</p></div>
+        <div class="tac" data-tac><h4>钻进</h4><div class="en">Drill</div><div class="stage t-drill"><i class="base"></i></div><p>数据呈现：从左至右写出，像钻头推进。</p></div>
+        <div class="tac" data-tac><h4>测井</h4><div class="en">Scan</div><div class="stage t-scan"><i class="base"></i></div><p>等待上游：说明正在分析，而不是虚构进度条。</p></div>
+        <div class="tac" data-tac><h4>剪切</h4><div class="en">Shear</div><div class="stage t-shear"><i class="base"></i></div><p>删除与撤销：斜切错动，动作不可逆的暗示。</p></div>
+        <div class="tac" data-tac><h4>对焦</h4><div class="en">Focus</div><div class="stage t-focus"><i class="base"></i></div><p>键盘焦点：三道同心环，任何背景下都看得见。</p></div>
+      </div>
+
+      <h3 style="font-family:var(--han);font-size:var(--fs-h2);font-weight:800;margin:42px 0 0">岩性色板</h3>
+      <div class="rock-chips">
+        <div class="rock"><div class="sw" style="background:var(--limestone)"></div><div class="m"><b>石灰岩</b>#c9c6bd · 正文 / 浅层</div></div>
+        <div class="rock"><div class="sw" style="background:var(--slate)"></div><div class="m"><b>板岩</b>#2b2f34 · 分割 / 凹陷</div></div>
+        <div class="rock"><div class="sw" style="background:var(--basalt)"></div><div class="m"><b>玄武岩</b>#16191c · 基岩背景</div></div>
+        <div class="rock"><div class="sw" style="background:var(--marker)"></div><div class="m"><b>氧化铁红</b>#c0492b · 标志层 / 主操作</div></div>
+        <div class="rock"><div class="sw" style="background:var(--vein)"></div><div class="m"><b>矿脉青</b>#7fa8b8 · 数据 / 关联</div></div>
+        <div class="rock"><div class="sw" style="background:var(--amber)"></div><div class="m"><b>琥珀</b>#c99a3f · 警示 / 负荷</div></div>
+      </div>
+
+      <h3 style="font-family:var(--han);font-size:var(--fs-h2);font-weight:800;margin:42px 0 0">排版：仪器刻度 + 巨型中文</h3>
+      <div style="border:1px solid var(--hair);padding:20px;margin-top:14px;background:#ffffff04">
+        <div class="mono">Bebas / Oswald · latin display · 巨型字</div>
+        <div style="font-family:var(--display);font-size:clamp(46px,9vw,124px);line-height:0.86;letter-spacing:-0.01em;margin:6px 0 14px">STRATIGRAPHY 2026</div>
+        <div class="mono" style="color:var(--vein)">等宽 · 所有读数、编号、深度、单位都用等宽字，保证纵向对齐</div>
+        <div style="font-family:var(--mono);font-size:12px;margin:6px 0 16px">DEPTH 099.0 m · SAMPLE 1,284 · POROSITY 62% · MARKER 12</div>
+        <div class="mono">汉字 · 只有标题与正文用可变字重黑体，极端对比：800 vs 300</div>
+        <div style="font-family:var(--han);font-weight:800;font-size:clamp(22px,3vw,38px);line-height:1.4;margin-top:6px">把错的地方，一层一层压成岩石</div>
+        <div style="font-family:var(--han);font-weight:300;font-size:15px;color:var(--shale);margin-top:8px;max-width:64ch">
+          正文用 300 字重保证长时间阅读不累；小号等宽字承担所有元信息，制造「仪器读数」与「人的笔记」之间的张力。
+        </div>
+      </div>
+    </section>
+
+    <footer class="trench">
+      <span>CORE KM-02 · 概念预览 · 仅用于确认方向</span>
+      <span class="sp"></span>
+      <span>向下钻取，直到成为岩石</span>
+      <span>STRATIGRAPHY / DIAGENESIS</span>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict'
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  /* ---------- 岩心柱：按数据生成层理 ----------
+     每天一段，厚度 ∝ 当天题量；连续答错 ≥3 次的记为标志层（marker）。
+     颜色取真实岩性：浅层偏石灰岩、深层偏页岩/板岩，深处更冷更暗 = 更久远、更压实。 */
+  var DAYS = [
+    { d: '08-20', n: 12, marker: false }, { d: '08-21', n: 24, marker: false },
+    { d: '08-22', n: 8,  marker: false }, { d: '08-23', n: 31, marker: true  },
+    { d: '08-24', n: 17, marker: false }, { d: '08-25', n: 26, marker: false },
+    { d: '08-26', n: 9,  marker: false }, { d: '08-27', n: 34, marker: true  },
+    { d: '08-28', n: 21, marker: false }, { d: '08-29', n: 6,  marker: false },
+    { d: '08-30', n: 28, marker: false }, { d: '08-31', n: 40, marker: false },
+    { d: '09-01', n: 18, marker: false }, { d: '09-02', n: 23, marker: true  },
+    { d: '09-03', n: 11, marker: false }, { d: '09-04', n: 30, marker: false },
+    { d: '09-05', n: 15, marker: false }, { d: '09-06', n: 27, marker: false },
+    { d: '09-07', n: 7,  marker: false }, { d: '09-08', n: 33, marker: true  },
+    { d: '09-09', n: 19, marker: false }, { d: '09-10', n: 25, marker: false },
+    { d: '09-11', n: 13, marker: false }, { d: '09-12', n: 29, marker: false },
+    { d: '09-13', n: 16, marker: false }, { d: '09-14', n: 22, marker: false },
+    { d: '09-15', n: 20, marker: false }
+  ]
+  var strata = document.getElementById('strata')
+  var total = DAYS.reduce(function (a, x) { return a + x.n }, 0)
+  DAYS.forEach(function (day, i) {
+    var el = document.createElement('button')
+    el.type = 'button'
+    el.className = 'stratum' + (day.marker ? ' marker' : '')
+    el.style.flexGrow = String(day.n)
+    el.style.flexBasis = '0'
+    // 越深越冷越暗：层理色按日照与深度渐变（浅层石灰岩 → 深层板岩）
+    var t = i / (DAYS.length - 1)
+    var l = Math.round(58 - t * 34)
+    el.style.background = 'linear-gradient(90deg, hsl(210 6% ' + (l - 6) + '%), hsl(210 5% ' + l + '%), hsl(210 6% ' + (l - 8) + '%))'
+    el.title = day.d + ' · ' + day.n + ' 题' + (day.marker ? ' · 标志层（反复错）' : '')
+    el.setAttribute('aria-label', day.d + ' 复习 ' + day.n + ' 题' + (day.marker ? '，反复出错' : ''))
+    el.dataset.n = String(day.n)
+    strata.appendChild(el)
+  })
+
+  /* ---------- 深度计：随滚动实时更新（右侧数字 + 刻度栏） ---------- */
+  var rigDepth = document.getElementById('rigDepth')
+  var railDepth = document.getElementById('railDepth')
+  var railFill = document.querySelector('#railBar i')
+  var ticking = false
+  function onScroll() {
+    if (ticking) return
+    ticking = true
+    requestAnimationFrame(function () {
+      var max = document.documentElement.scrollHeight - window.innerHeight
+      var p = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0
+      var depth = (p * 99).toFixed(1)
+      rigDepth.textContent = depth + ' m'
+      railDepth.textContent = depth
+      railFill.style.height = (p * 100).toFixed(2) + '%'
+      ticking = false
+    })
+  }
+  addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
+
+  /* ---------- 数字滚动：只在进入视口时跑一次 ---------- */
+  function countUp(el) {
+    var target = Number(el.dataset.count || 0)
+    var suffix = el.dataset.suffix || ''
+    if (reduce) { el.textContent = target + suffix; return }
+    new IntersectionObserver(function (es, io) {
+      if (!es[0].isIntersecting) return
+      io.disconnect()
+      var t0 = performance.now(), dur = 1200
+      requestAnimationFrame(function step(now) {
+        var p = Math.min(1, (now - t0) / dur)
+        var eased = 1 - Math.pow(1 - p, 3)
+        el.textContent = Math.round(target * eased) + suffix
+        if (p < 1) requestAnimationFrame(step)
+      })
+    }, { threshold: 0.4 }).observe(el)
+  }
+  document.querySelectorAll('[data-count]').forEach(countUp)
+
+  /* ---------- 磁吸按钮：指针靠近时轻微位移（transform only，不触发布局） ---------- */
+  if (!reduce && matchMedia('(hover: hover)').matches) {
+    document.querySelectorAll('.chip').forEach(function (b) {
+      b.addEventListener('mousemove', function (e) {
+        var r = b.getBoundingClientRect()
+        var dx = (e.clientX - (r.left + r.width / 2)) / r.width
+        var dy = (e.clientY - (r.top + r.height / 2)) / r.height
+        b.style.transform = 'translate(' + (dx * 5).toFixed(1) + 'px,' + (dy * 3 - 2).toFixed(1) + 'px)'
+      })
+      b.addEventListener('mouseleave', function () { b.style.transform = '' })
+    })
+  }
+
+  /* ---------- 触感卡片：点击重播 ---------- */
+  document.querySelectorAll('.tac').forEach(function (card) {
+    card.tabIndex = 0
+    card.setAttribute('role', 'button')
+    function play() {
+      card.classList.remove('run')
+      void card.offsetWidth
+      card.classList.add('run')
+    }
+    card.addEventListener('click', play)
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play() }
+    })
+  })
+
+  /* ---------- 钻进密度网格：确定性伪随机，刷新不变 ---------- */
+  var den = document.getElementById('density')
+  if (den) {
+    var seed = 20260916
+    for (var i = 0; i < 18 * 7; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      var r = seed / 0x7fffffff
+      var cell = document.createElement('i')
+      var v = r > 0.9 ? 4 : r > 0.72 ? 3 : r > 0.5 ? 2 : r > 0.3 ? 1 : 0
+      if (v) cell.dataset.v = String(v)
+      den.appendChild(cell)
+    }
+  }
+
+  /* ---------- 负荷柱：进入视口后升长 ---------- */
+  var load = document.getElementById('load')
+  if (load) {
+    var vals = (load.dataset.vals || '').split(',').map(Number)
+    var bars = load.querySelectorAll('span')
+    function grow() {
+      bars.forEach(function (b, i) { b.style.height = Math.max(5, Math.min(100, vals[i] || 0)) + '%' })
+    }
+    if (reduce) grow()
+    else new IntersectionObserver(function (es, io) {
+      if (es[0].isIntersecting) { grow(); io.disconnect() }
+    }, { threshold: 0.35 }).observe(load)
+  }
+
+  /* ---------- 断面面板：进入视口时触发测井曲线描边 ---------- */
+  document.querySelectorAll('.panel').forEach(function (p) {
+    new IntersectionObserver(function (es, io) {
+      if (es[0].isIntersecting) { p.classList.add('is-in'); io.disconnect() }
+    }, { threshold: 0.3 }).observe(p)
+  })
+
+  /* ---------- 标本卡：指针跟随的斜向光带（剖面反射） ---------- */
+  if (!reduce && matchMedia('(hover: hover)').matches) {
+    document.querySelectorAll('.specimen').forEach(function (c) {
+      c.addEventListener('mousemove', function (e) {
+        var r = c.getBoundingClientRect()
+        c.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100).toFixed(1) + '%')
+        c.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100).toFixed(1) + '%')
+      })
+    })
+  }
+})()
+</script>
+</body>
+</html>

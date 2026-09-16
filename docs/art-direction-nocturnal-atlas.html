@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>研错本 · 夜航星图（Nocturnal Atlas）— 沉浸式概念预览 v4</title>
+<meta name="description" content="研错本沉浸式前端概念：未掌握是暗，已掌握是光。每题一颗星。" />
+<meta name="color-scheme" content="dark" />
+<style>
+/* ============================================================================
+   研错本 · 夜航星图 v4
+   ---------------------------------------------------------------------------
+   核心隐喻：未掌握的是暗，已掌握的是光。
+     一道错题 = 一颗星；亮度 = 复习遍数；颜色 = 科目；反复错的 = 红星（红移）
+     复习队列 = 当晚可观测星表（observing list）
+     解析中   = 天文台校准（calibrating）
+     统计     = 星图断面 / 光变曲线
+   机制（对齐 SOLARIS 那六条）：
+     1 WebGL shader 星云，随滚动与指针缓慢漂移（本文件手写着色器，零库）
+     2 自定义光标：lerp 跟随 + 命中交互元素放大变色（并保留原生光标兜底）
+     3 镜头式入场：校准台 00→100，再揭开四行标题
+     4 滚动叙事：宣言逐词点亮
+     5 整行悬停：clip-path 从下往上填满强调色
+     6 磁吸按钮 + 全站 rAF/lerp 惯性
+   全部动效仅用 transform / opacity / filter；尊重 prefers-reduced-motion。
+   ========================================================================== */
+
+:root{
+  --bg:#05060a;
+  --ink:#e7e6fb;
+  --dim:rgba(231,230,251,.5);
+  --faint:rgba(231,230,251,.13);
+  --line:rgba(231,230,251,.09);
+  --accent:#ff5a3c;          /* 主强调：红移星 */
+  --vein:#57c8d8;            /* 矿脉青：数据 */
+  --gold:#e0b25a;            /* 琥珀：警示 */
+  --violet:#8e7bf0;          /* 紫：408 */
+  --ease:cubic-bezier(.19,1,.22,1);
+  --ease2:cubic-bezier(.76,0,.24,1);
+  --pad:clamp(18px,4vw,58px);
+  --sans:'Inter Tight',ui-sans-serif,system-ui,-apple-system,'PingFang SC','Microsoft YaHei UI',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--sans);font-weight:400;
+  line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+a{color:inherit;text-decoration:none;}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;}
+svg{display:block;}
+::selection{background:var(--accent);color:#0a0a0c;}
+
+.mono{font-family:var(--mono);font-size:11px;font-weight:300;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);}
+.num{font-variant-numeric:tabular-nums;}
+
+/* ── 层：画布 / 颗粒 / 光标 ───────────────────────────────── */
+#gl{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;display:block;}
+/* 画布失败时的兜底背景（无 WebGL 也不能是纯黑一块） */
+#gl.fallback{
+  background:
+    radial-gradient(75% 55% at 22% 24%, rgba(255,90,60,.22), transparent 62%),
+    radial-gradient(65% 55% at 78% 74%, rgba(110,90,240,.16), transparent 62%),
+    var(--bg);
+}
+.grain{
+  position:fixed;inset:0;z-index:60;pointer-events:none;opacity:.055;
+  background-image:repeating-linear-gradient(0deg,#ffffff12 0 1px,transparent 1px 3px);
+}
+/* 氛围雾气：CSS 多层 radial-gradient（天生软边、零 GPU 成本、可呼吸）。
+   这里替代了原先用着色器画的星云 —— 见脚本里 WebGL 段的踩坑注释。 */
+.aurora{
+  position:fixed;inset:-12%;z-index:1;pointer-events:none;
+  background:
+    radial-gradient(46% 40% at 26% 30%, rgba(255,90,60,.20), transparent 68%),
+    radial-gradient(42% 38% at 74% 68%, rgba(60,180,200,.14), transparent 68%),
+    radial-gradient(38% 34% at 58% 22%, rgba(120,100,240,.11), transparent 70%);
+  filter:blur(46px) saturate(1.05);
+  animation:breathe 26s var(--ease) infinite alternate;
+  will-change:transform,opacity;
+}
+@keyframes breathe{
+  0%  {transform:translate3d(-1.6%,-1.2%,0) scale(1.02);opacity:.85;}
+  50% {transform:translate3d(1.4%,1.8%,0) scale(1.06);opacity:1;}
+  100%{transform:translate3d(2.2%,-0.8%,0) scale(1.03);opacity:.9;}
+}
+/* 自定义光标；**不隐藏原生光标**（JS 失败时不能让用户失去指针） */
+.cursor{
+  position:fixed;top:0;left:0;width:9px;height:9px;border-radius:50%;
+  background:var(--ink);z-index:70;pointer-events:none;opacity:0;
+  transform:translate3d(-100px,-100px,0);
+  transition:width .45s var(--ease),height .45s var(--ease),background .45s var(--ease),opacity .3s;
+  will-change:transform;
+}
+.cursor.on{opacity:1;}
+.cursor.hot{width:54px;height:54px;background:var(--accent);}
+
+/* ── 校准台（入场）────────────────────────────────────────── */
+.loader{
+  position:fixed;inset:0;z-index:80;background:var(--bg);
+  display:flex;align-items:flex-end;justify-content:space-between;gap:20px;
+  padding:var(--pad);transition:transform 1s var(--ease2);
+}
+.loader.done{transform:translateY(-101%);}
+.loader__num{font-weight:300;font-size:clamp(2.6rem,8vw,7rem);line-height:.85;letter-spacing:-.05em;}
+.loader__steps{display:grid;gap:6px;text-align:right;}
+
+/* ── 导航 ─────────────────────────────────────────────────── */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+  padding:20px var(--pad);transition:transform .7s var(--ease),opacity .5s var(--ease);
+}
+.nav.up{transform:translateY(-115%);opacity:0;}
+.nav__brand{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;}
+.nav__mark{width:8px;height:8px;background:var(--accent);border-radius:1px;animation:mark 5.5s var(--ease) infinite;}
+@keyframes mark{0%,70%{transform:rotate(0) scale(1);}85%{transform:rotate(180deg) scale(.68);}100%{transform:rotate(360deg) scale(1);}}
+.nav__links{display:flex;gap:clamp(14px,2.6vw,36px);}
+.nav__links a{position:relative;color:var(--dim);transition:color .4s var(--ease);}
+.nav__links a::after{content:'';position:absolute;left:0;bottom:-4px;width:100%;height:1px;background:var(--accent);transform:scaleX(0);transform-origin:right;transition:transform .6s var(--ease);}
+.nav__links a:hover{color:var(--ink);}
+.nav__links a:hover::after{transform:scaleX(1);transform-origin:left;}
+.nav__live{display:flex;align-items:center;gap:8px;}
+.nav__dot{width:6px;height:6px;border-radius:50%;background:var(--vein);animation:ping 2.4s infinite;}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(87,200,216,.5);}70%{box-shadow:0 0 0 10px rgba(87,200,216,0);}100%{box-shadow:0 0 0 0 rgba(87,200,216,0);}}
+
+main{position:relative;z-index:10;}
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:18px;padding:0 var(--pad) 24px;border-bottom:1px solid var(--line);margin-bottom:clamp(24px,3.6vw,52px);}
+
+/* ── 首屏 ─────────────────────────────────────────────────── */
+.hero{min-height:100svh;display:flex;flex-direction:column;justify-content:space-between;padding:clamp(88px,13vh,142px) var(--pad) clamp(26px,4.5vh,44px);}
+.hero__eyebrow{display:flex;gap:14px;align-items:center;opacity:0;transform:translateY(14px);transition:opacity 1s var(--ease) .45s,transform 1s var(--ease) .45s;}
+body.ready .hero__eyebrow{opacity:1;transform:none;}
+.hero__eyebrow span:first-child{color:var(--accent);}
+.hero__title{
+  font-weight:500;font-size:clamp(2.4rem,9.2vw,10rem);line-height:.88;letter-spacing:-.045em;
+  text-transform:uppercase;margin:auto 0;padding:clamp(22px,4.6vh,56px) 0;
+}
+.line{display:block;overflow:hidden;padding-bottom:.06em;}
+.line__i{display:block;transform:translateY(115%);transition:transform 1.25s var(--ease);}
+body.ready .line:nth-child(1) .line__i{transition-delay:.08s;}
+body.ready .line:nth-child(2) .line__i{transition-delay:.16s;}
+body.ready .line:nth-child(3) .line__i{transition-delay:.24s;}
+body.ready .line:nth-child(4) .line__i{transition-delay:.32s;}
+body.ready .line__i{transform:translateY(0);}
+.hero__title em{font-style:normal;color:var(--accent);}
+.hero__title .thin{color:var(--dim);font-weight:300;}
+.hero__foot{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;opacity:0;transform:translateY(16px);transition:opacity 1.1s var(--ease) .85s,transform 1.1s var(--ease) .85s;}
+body.ready .hero__foot{opacity:1;transform:none;}
+.hero__scroll{display:flex;align-items:center;gap:9px;}
+.hero__scroll i{width:15px;height:15px;color:var(--accent);animation:bob 2.2s var(--ease) infinite;}
+@keyframes bob{0%,100%{transform:translateY(-2px);}50%{transform:translateY(4px);}}
+.hero__read{display:flex;gap:clamp(16px,3vw,44px);flex-wrap:wrap;}
+.hero__read div .k{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);}
+.hero__read div .v{font-size:clamp(1.5rem,3vw,2.6rem);font-weight:300;line-height:1;margin-top:6px;letter-spacing:-.03em;}
+
+/* ── 宣言：逐词点亮 ───────────────────────────────────────── */
+.manifesto{padding:clamp(90px,17vh,210px) var(--pad);max-width:1460px;margin:0 auto;}
+.manifesto__text{font-size:clamp(1.35rem,4vw,4rem);font-weight:400;line-height:1.16;letter-spacing:-.035em;max-width:22ch;}
+.manifesto__text .w{display:inline-block;opacity:.09;transition:opacity .28s linear,color .4s var(--ease);will-change:opacity;}
+.manifesto__text .w.on{opacity:1;}
+.manifesto__text .w.acc{color:var(--accent);}
+
+/* ── 星表：整行悬停 ───────────────────────────────────────── */
+.list{padding:clamp(40px,7vh,90px) 0 clamp(70px,10vh,140px);}
+.rows{padding:0 var(--pad);}
+.row{
+  position:relative;display:grid;grid-template-columns:56px minmax(0,1fr) 200px 92px 24px;
+  align-items:center;gap:clamp(10px,2vw,26px);
+  padding:clamp(18px,2.6vw,32px) clamp(8px,1.2vw,20px);
+  border-top:1px solid var(--line);overflow:hidden;isolation:isolate;text-align:left;width:100%;
+}
+.row:last-child{border-bottom:1px solid var(--line);}
+.row::before{content:'';position:absolute;inset:0;z-index:0;background:var(--accent);clip-path:inset(0 0 100% 0);transition:clip-path .8s var(--ease2);}
+.row:hover::before,.row:focus-visible::before{clip-path:inset(0 0 0 0);}
+.row>*{position:relative;z-index:1;transition:color .45s var(--ease),transform .7s var(--ease);}
+.row:hover .row__name,.row:hover .row__idx,.row:hover .row__sub,.row:hover .row__meta,.row:hover .row__arrow{color:#0b0b0d;}
+.row:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--accent);}
+.row__idx{color:var(--dim);}
+.row__name{font-size:clamp(1.25rem,3.4vw,2.9rem);font-weight:400;letter-spacing:-.04em;line-height:1.06;}
+.row:hover .row__name{transform:translateX(14px);}
+.row__sub{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);}
+.row__meta{color:var(--dim);}
+.row__arrow{width:19px;height:19px;color:var(--dim);transition:transform .7s var(--ease),color .45s var(--ease);}
+.row:hover .row__arrow{transform:translate(5px,-5px);}
+.row__star{position:absolute;right:14px;top:50%;width:7px;height:7px;margin-top:-3.5px;border-radius:50%;background:var(--vein);opacity:.85;}
+.row[data-hot="1"] .row__star{background:var(--accent);box-shadow:0 0 12px var(--accent);}
+
+/* ── 天文台（录入）：校准过程 ─────────────────────────────── */
+.calib{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:clamp(16px,3vw,46px);margin-top:clamp(20px,3.4vw,42px);}
+.dish{
+  border:1px dashed var(--faint);padding:clamp(20px,3vw,42px);text-align:center;
+  background:repeating-linear-gradient(135deg,#ffffff06 0 9px,transparent 9px 18px);
+  transition:border-color .4s,background .4s;
+}
+.dish:hover{border-color:var(--accent);background:#ff5a3c0d;}
+.dish .big{font-size:clamp(1.5rem,3.4vw,2.6rem);font-weight:300;letter-spacing:-.03em;}
+.frames{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:8px;margin-top:14px;}
+.frame{
+  position:relative;aspect-ratio:3/4;border:1px solid var(--faint);display:grid;place-items:center;
+  font-family:var(--mono);font-size:9px;color:var(--dim);
+  background:linear-gradient(160deg,#141621,#0b0d15);animation:drop .6s var(--ease) backwards;
+}
+@keyframes drop{from{opacity:0;transform:translateY(-14px) rotate(1.4deg);}to{opacity:1;transform:none;}}
+.frame b{position:absolute;top:4px;left:6px;color:var(--accent);font-weight:400;}
+.frame .rm{position:absolute;top:2px;right:2px;width:17px;height:17px;display:grid;place-items:center;background:#00000070;color:var(--ink);}
+.frame .rm:hover{background:var(--accent);color:#0b0b0d;}
+.segs{display:flex;gap:3px;margin-top:18px;}
+.segs i{flex:1;height:5px;background:#1a1c28;}
+.segs i.done{background:var(--ink);}
+.segs i.on{background:var(--vein);animation:seg 2s var(--ease) infinite;}
+@keyframes seg{0%,100%{opacity:1;}50%{opacity:.32;}}
+.trace{margin-top:12px;font-family:var(--mono);font-size:10.5px;color:var(--dim);line-height:2.1;letter-spacing:.06em;}
+.trace b{color:var(--vein);font-weight:400;}
+.trace .w{color:var(--gold);}
+
+/* ── 星图 / 断面 ──────────────────────────────────────────── */
+.grid12{display:grid;grid-template-columns:repeat(12,1fr);gap:1px;background:var(--line);border:1px solid var(--line);margin-top:clamp(20px,3.4vw,42px);}
+.panel{background:rgba(5,6,10,.62);padding:18px 20px 20px;}
+.p3{grid-column:span 3;}.p4{grid-column:span 4;}.p5{grid-column:span 5;}.p7{grid-column:span 7;}.p12{grid-column:span 12;}
+.panel .k{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);}
+.panel .big{font-weight:300;font-size:clamp(2rem,3.8vw,3.4rem);line-height:.98;margin-top:10px;letter-spacing:-.035em;}
+.panel .big small{font-size:12px;color:var(--dim);margin-left:6px;letter-spacing:.06em;}
+.panel .sub{color:var(--dim);font-size:13px;margin-top:8px;}
+.panel .sub b{color:var(--accent);font-weight:400;}
+
+/* 光变曲线：滚动驱动描边 */
+.curve{width:100%;height:132px;display:block;overflow:visible;}
+.curve .ln{fill:none;stroke:var(--vein);stroke-width:1.4;stroke-linecap:round;stroke-dasharray:var(--len);stroke-dashoffset:var(--len);transition:stroke-dashoffset 1.9s var(--ease);}
+.in .curve .ln{stroke-dashoffset:0;}
+.curve .fill{fill:var(--vein);opacity:0;transition:opacity 1s var(--ease) .8s;}
+.in .curve .fill{opacity:.13;}
+.curve .star{fill:var(--accent);}
+.curve .gl{stroke:var(--line);stroke-width:1;}
+
+/* 负荷谱：等宽柱 */
+.spec{display:flex;align-items:flex-end;gap:4px;height:106px;margin-top:14px;}
+.spec span{flex:1;background:#232637;height:0;transition:height 1.2s var(--ease);}
+.spec span.hot{background:var(--accent);}
+.spec span.warm{background:var(--gold);}
+.spec-x{display:flex;gap:4px;margin-top:6px;font-family:var(--mono);font-size:9px;color:var(--dim);}
+.spec-x span{flex:1;text-align:center;}
+
+/* 观测密度网格：固定格子尺寸（等分列 + max-width 会把格子拉高） */
+.atlas{display:grid;grid-template-columns:repeat(auto-fill,11px);gap:3px;margin-top:14px;}
+.atlas i{width:11px;height:11px;background:#171a26;}
+.atlas i[data-v="1"]{background:color-mix(in srgb,var(--vein) 28%,#171a26);}
+.atlas i[data-v="2"]{background:color-mix(in srgb,var(--vein) 54%,#171a26);}
+.atlas i[data-v="3"]{background:color-mix(in srgb,var(--vein) 78%,#171a26);}
+.atlas i[data-v="4"]{background:var(--vein);}
+
+/* ── 科目星群：可点星点 ───────────────────────────────────── */
+.clusters{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:1px;background:var(--line);border:1px solid var(--line);}
+.cluster{
+  position:relative;background:rgba(5,6,10,.55);padding:18px 20px 20px;text-align:left;min-height:190px;
+  display:flex;flex-direction:column;gap:10px;transition:background .5s var(--ease);overflow:hidden;
+}
+.cluster:hover,.cluster:focus-visible{background:rgba(255,90,60,.05);outline:none;}
+.cluster:focus-visible{box-shadow:inset 0 0 0 2px var(--accent);}
+.cluster .sky{position:absolute;inset:0;pointer-events:none;opacity:.55;}
+.cluster .sky i{position:absolute;border-radius:50%;background:var(--ink);}
+.cluster h3{position:relative;font-size:17px;font-weight:500;letter-spacing:-.02em;margin-top:auto;}
+.cluster .k{position:relative;}
+.cluster p{position:relative;color:var(--dim);font-size:13px;max-width:34ch;}
+.cluster .row2{position:relative;display:flex;gap:10px;font-family:var(--mono);font-size:10px;color:var(--dim);}
+
+/* ── 磁吸按钮 ─────────────────────────────────────────────── */
+.btn{
+  align-self:flex-start;display:inline-flex;align-items:center;gap:12px;
+  padding:16px 30px;border:1px solid var(--faint);border-radius:999px;font-size:14px;
+  position:relative;overflow:hidden;isolation:isolate;
+  transition:border-color .6s var(--ease),color .5s var(--ease),transform .25s ease-out;
+  will-change:transform;
+}
+.btn::before{content:'';position:absolute;inset:0;z-index:0;background:var(--accent);clip-path:inset(0 0 100% 0);transition:clip-path .7s var(--ease2);}
+.btn:hover::before{clip-path:inset(0 0 0 0);}
+.btn:hover{color:#0b0b0d;border-color:var(--accent);}
+.btn:focus-visible{outline:none;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent);}
+.btn span,.btn i{position:relative;z-index:1;}
+.btn i{width:16px;height:16px;}
+
+/* ── 收束 ─────────────────────────────────────────────────── */
+.close{padding:clamp(70px,12vh,160px) var(--pad) clamp(60px,9vh,110px);display:flex;flex-direction:column;gap:clamp(26px,4.4vh,54px);}
+.close__title{font-size:clamp(2rem,7.6vw,8rem);font-weight:500;line-height:.9;letter-spacing:-.045em;text-transform:uppercase;}
+.close__title em{font-style:normal;color:var(--accent);}
+.foot{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;padding:24px var(--pad);border-top:1px solid var(--line);}
+
+[data-reveal]{opacity:0;transform:translateY(26px);transition:opacity 1s var(--ease),transform 1.1s var(--ease);}
+[data-reveal].in{opacity:1;transform:none;}
+
+@media (max-width:900px){
+  .nav__links{display:none;}
+  .row{grid-template-columns:40px minmax(0,1fr) 24px;row-gap:5px;}
+  .row__sub{grid-column:2;grid-row:2;font-size:10px;}
+  .row__meta{display:none;}
+  .row__arrow{grid-column:3;grid-row:1/span 2;}
+  .calib{grid-template-columns:1fr;}
+  .p3,.p4,.p5,.p7{grid-column:span 12;}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;}
+  .line__i{transform:none !important;}
+  .loader{display:none;}
+  .cursor{display:none;}
+}
+</style>
+</head>
+<body>
+
+<canvas id="gl" aria-hidden="true"></canvas>
+<div class="aurora" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+<div class="cursor" id="cursor" aria-hidden="true"></div>
+
+<!-- 校准台 -->
+<div class="loader" id="loader">
+  <div>
+    <div class="mono">研错本 · 夜航星图</div>
+    <div class="loader__num num" id="loaderNum">00</div>
+  </div>
+  <div class="loader__steps mono" id="loaderSteps">
+    <span>观测站上线</span>
+    <span>装载星表</span>
+    <span>校准完成</span>
+  </div>
+</div>
+
+<header class="nav" id="nav">
+  <a class="nav__brand" href="#top"><span class="nav__mark"></span>研错本
+    <span class="mono" style="font-size:8px;vertical-align:super">v4</span>
+  </a>
+  <nav class="nav__links mono">
+    <a href="#list">观测星表</a>
+    <a href="#calib">天文台</a>
+    <a href="#atlas-section">星图断面</a>
+    <a href="#close">收束</a>
+  </nav>
+  <div class="nav__live mono"><span class="nav__dot"></span>今晚可观测</div>
+</header>
+
+<main id="top">
+
+  <!-- ============ 首屏 ============ -->
+  <section class="hero">
+    <div class="hero__eyebrow mono">
+      <span>[01]</span><span>Nocturnal Atlas · 夜航星图</span>
+    </div>
+
+    <h1 class="hero__title">
+      <span class="line"><span class="line__i">未掌握的是暗</span></span>
+      <span class="line"><span class="line__i">已掌握的是<span class="thin">光</span></span></span>
+      <span class="line"><span class="line__i">每题一颗<em>星</em></span></span>
+    </h1>
+
+    <div class="hero__foot">
+      <div class="hero__scroll">
+        <i data-ic="arrow-down"></i><span class="mono">向下滚动 · 进入今晚的星表</span>
+      </div>
+      <div class="hero__read">
+        <div><div class="k">Observing list</div><div class="v num" data-count="38" data-suffix="">0</div></div>
+        <div><div class="k">Stars logged</div><div class="v num" data-count="1284">0</div></div>
+        <div><div class="k">Redshifted</div><div class="v num" data-count="12" style="color:var(--accent)">0</div></div>
+        <div><div class="k">Luminosity</div><div class="v num" data-count="62" data-suffix="%">0</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 宣言 ============ -->
+  <section class="manifesto">
+    <p class="manifesto__text" data-split>
+      每道错题都是天上一颗星。你复习一次，它就亮一分；反复错的会红移。星图不会替你记住，但它会让遗忘变得可见。
+    </p>
+  </section>
+
+  <!-- ============ 观测星表 ============ -->
+  <section class="list" id="list">
+    <div class="sec-head">
+      <span class="mono">[02] — 今晚可观测星表</span>
+      <span class="mono">38 / 50 副配额</span>
+    </div>
+    <div class="rows" id="rows"></div>
+  </section>
+
+  <!-- ============ 天文台（录入）============ -->
+  <section class="list" id="calib">
+    <div class="sec-head">
+      <span class="mono">[03] — 天文台 · 校准与入库</span>
+      <span class="mono">多帧叠加观测</span>
+    </div>
+
+    <div class="calib">
+      <div>
+        <div class="dish">
+          <div class="big">STACK FRAMES</div>
+          <p class="mono" style="margin-top:10px;letter-spacing:.04em;text-transform:none;font-size:12px;line-height:1.8">
+            一次投入多张观测帧（原文 / 题干 / 选项分屏，最多 5 帧），全部对齐后再统一校准——不是每贴一张就跑一次。
+          </p>
+          <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <button class="btn" data-magnetic><span>投入观测帧</span><i data-ic="layers"></i></button>
+            <button class="btn" data-magnetic><span>手动登记</span><i data-ic="pencil"></i></button>
+          </div>
+        </div>
+
+        <div class="frames" id="frames">
+          <button class="frame" type="button"><b>01</b>原文</button>
+          <button class="frame" type="button" style="animation-delay:.07s"><b>02</b>题干</button>
+          <button class="frame" type="button" style="animation-delay:.14s"><b>03</b>选项</button>
+          <button class="frame" type="button" style="animation-delay:.21s"><b>04</b>参考</button>
+        </div>
+
+        <div class="segs" aria-hidden="true">
+          <i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i>
+          <i class="on"></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="trace">
+          <div>CAL 01 · 帧对齐 · 4 帧入库 <b>OK</b></div>
+          <div>CAL 02 · 视觉解译 · 提取原文与题干 <b>OK</b></div>
+          <div>CAL 03 · 分段翻译 12 句 <b>RUNNING</b></div>
+          <div>CAL 04 · 生词与短语抽提 <span class="w">PENDING</span></div>
+          <div>CAL 05 · 写入星表 <span class="w">PENDING</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="k">Preliminary assay · 初测</div>
+        <div style="font-size:17.5px;font-weight:500;margin-top:12px">Digital archives</div>
+        <p style="color:var(--ink);opacity:.86;margin-top:8px;font-size:13.5px;line-height:1.85">
+          数字档案正在改变研究者获取史料的方式，但作者提醒：<b style="color:var(--accent);font-weight:400">可得性不等于可靠性</b>。
+        </p>
+        <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap" class="mono">
+          <span style="border:1px solid var(--faint);padding:4px 8px;color:var(--vein);text-transform:none">archive</span>
+          <span style="border:1px solid var(--faint);padding:4px 8px;color:var(--vein);text-transform:none">accessibility</span>
+          <span style="border:1px solid var(--faint);padding:4px 8px;color:var(--gold);text-transform:none">长难句 ×3</span>
+        </div>
+        <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" data-magnetic><span>点亮入库</span><i data-ic="star"></i></button>
+          <button class="btn" data-magnetic><span>生词全部入本</span><i data-ic="book"></i></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 星群 ============ -->
+  <section class="list" id="clusters">
+    <div class="sec-head">
+      <span class="mono">[04] — 科目星群</span>
+      <span class="mono">悬停查看星等分布</span>
+    </div>
+    <div class="clusters" id="clusterHost"></div>
+  </section>
+
+  <!-- ============ 星图断面 ============ -->
+  <section class="list" id="atlas-section">
+    <div class="sec-head">
+      <span class="mono">[05] — 星图断面</span>
+      <span class="mono">光变曲线 / 负荷谱 / 密度</span>
+    </div>
+
+    <div class="grid12">
+      <div class="panel p4"><div class="k">Luminosity · 亮度和</div><div class="big num" data-count="62" data-suffix="%">0</div><div class="sub">平均掌握度 · 星光累积中</div></div>
+      <div class="panel p4"><div class="k">Assay · 正确率</div><div class="big num" data-count="78" data-suffix="%">0</div><div class="sub">近 30 天 · 上期 74%</div></div>
+      <div class="panel p4"><div class="k">Redshift · 红移星</div><div class="big num" style="color:var(--accent)" data-count="12" data-suffix=" 颗">0</div><div class="sub">反复错 · <b>优先观测</b></div></div>
+
+      <div class="panel p7" data-panel>
+        <div class="k">Light curve · 28 天光变曲线</div>
+        <svg class="curve" viewBox="0 0 560 132" preserveAspectRatio="none" role="img" aria-label="近 28 天复习量光变曲线">
+          <g class="gl" aria-hidden="true"><line x1="0" y1="33" x2="560" y2="33"/><line x1="0" y1="66" x2="560" y2="66"/><line x1="0" y1="99" x2="560" y2="99"/></g>
+          <path class="fill" d="M0,100 C44,92 66,60 110,66 C154,72 176,38 220,44 C264,50 300,21 342,29 C384,37 424,15 468,23 C512,31 536,19 560,16 L560,132 L0,132 Z"/>
+          <path class="ln" d="M0,100 C44,92 66,60 110,66 C154,72 176,38 220,44 C264,50 300,21 342,29 C384,37 424,15 468,23 C512,31 536,19 560,16" style="--len:900"/>
+          <circle class="star" cx="220" cy="44" r="3.2"/><circle class="star" cx="468" cy="23" r="3.2"/>
+        </svg>
+        <div class="mono" style="margin-top:8px">红点 = 出现红移星的日子</div>
+      </div>
+
+      <div class="panel p5">
+        <div class="k">Load spectrum · 负荷谱</div>
+        <div class="spec" id="spec" data-vals="62,38,84,26,52,71,44,18,33,58,24,12">
+          <span></span><span></span><span class="hot"></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="spec-x" aria-hidden="true"><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+        <div class="sub" style="margin-top:12px">周五 84 题属<b>过载星等</b>，建议前移分摊。</div>
+      </div>
+
+      <div class="panel p12">
+        <div class="k">Sky density · 观测密度（18 周）</div>
+        <div class="atlas" id="atlas" aria-hidden="true"></div>
+        <div class="mono" style="margin-top:10px">格 = 一周 · 亮度 = 该周观测次数</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 收束 ============ -->
+  <section class="close" id="close">
+    <span class="mono">[06] — 收束</span>
+    <h2 class="close__title" data-reveal>让遗忘<br /><em>可见</em></h2>
+    <button class="btn" data-magnetic data-reveal><span>开始今晚的观测</span><i data-ic="arrow-up-right"></i></button>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <span class="mono">研错本 · 夜航星图 · 概念预览</span>
+  <span class="mono">未掌握是暗，已掌握是光</span>
+  <span class="mono">NOCTURNAL ATLAS / v4</span>
+</footer>
+
+<script>
+(function () {
+  'use strict'
+
+  var $ = function (s, c) { return (c || document).querySelector(s) }
+  var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)) }
+  var lerp = function (a, b, t) { return a + (b - a) * t }
+  var clamp = function (v, a, b) { return Math.min(Math.max(v, a), b) }
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  /* =======================================================================
+     内联图标（对齐 Lucide 的路径与 24×24 / stroke 2 / round 规范）
+     不引 CDN：本机常常离线，外链脚本会让整页失去图标。
+     正式实现改为本地按需打包 lucide-vue-next，路径与这里一致。
+     ===================================================================== */
+  var ICONS = {
+    'arrow-down': '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+    'arrow-up-right': '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
+    'layers': '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m6.08 10.37-3.5 1.6a1 1 0 0 0 0 1.81l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 0-1.83l-3.5-1.6"/>',
+    'pencil': '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+    'star': '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+    'book': '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/>'
+  }
+  $$('[data-ic]').forEach(function (el) {
+    var d = ICONS[el.getAttribute('data-ic')]
+    el.outerHTML = '<svg class="' + (el.className || '') + '" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+      'width="1em" height="1em" aria-hidden="true">' + (d || '') + '</svg>'
+  })
+
+  /* =======================================================================
+     1. WebGL 星云 + 星点场
+        手写着色器（simplex 噪声），不引 three.js：单文件即可离线运行。
+        两层：① 背景星云（fragment，随滚动与指针漂移）② 星点（POINTS，各自闪烁）
+     ===================================================================== */
+  ;(function initGL () {
+    var canvas = $('#gl')
+    var gl = canvas.getContext('webgl', { antialias: false, alpha: false, depth: false, powerPreference: 'high-performance' })
+    if (!gl) { canvas.classList.add('fallback'); return }
+
+    var VERT = 'attribute vec2 a_pos; void main(){ gl_Position = vec4(a_pos,0.0,1.0); }'
+    var FRAG = [
+      'precision highp float;',
+      'uniform vec2 u_res; uniform float u_time; uniform float u_scroll; uniform vec2 u_mouse;',
+      'vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}',
+      'vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}',
+      'vec4 permute(vec4 x){return mod289(((x*34.0)+1.0)*x);}',
+      'vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}',
+      'float snoise(vec3 v){',
+      '  const vec2 C=vec2(1.0/6.0,1.0/3.0); const vec4 D=vec4(0.0,0.5,1.0,2.0);',
+      '  vec3 i=floor(v+dot(v,C.yyy)); vec3 x0=v-i+dot(i,C.xxx);',
+      '  vec3 g=step(x0.yzx,x0.xyz); vec3 l=1.0-g;',
+      '  vec3 i1=min(g.xyz,l.zxy); vec3 i2=max(g.xyz,l.zxy);',
+      '  vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;',
+      '  i=mod289(i);',
+      '  vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));',
+      '  float n_=0.142857142857; vec3 ns=n_*D.wyz-D.xzx;',
+      '  vec4 j=p-49.0*floor(p*ns.z*ns.z);',
+      '  vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.0*x_);',
+      '  vec4 x=x_*ns.x+ns.yyyy; vec4 y=y_*ns.x+ns.yyyy; vec4 h=1.0-abs(x)-abs(y);',
+      '  vec4 b0=vec4(x.xy,y.xy); vec4 b1=vec4(x.zw,y.zw);',
+      '  vec4 s0=floor(b0)*2.0+1.0; vec4 s1=floor(b1)*2.0+1.0; vec4 sh=-step(h,vec4(0.0));',
+      '  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy; vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;',
+      '  vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y); vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);',
+      '  vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));',
+      '  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;',
+      '  vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;',
+      '  return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));',
+      '}',
+      'void main(){',
+      '  vec2 uv=(gl_FragCoord.xy-0.5*u_res)/min(u_res.x,u_res.y);',
+      '  float t=u_time*0.06;',
+      /* 极细颗粒：只保留高频一层，且幅值压到"若隐若现"（0.012）。
+         为什么不再画星云：实测四轮方案（exp 衰减 / 只抖中心 / 域扭曲 / 解析梯度雾团）
+         都会留下**可见硬边**；而且去掉三团叠加后，右侧仍有一块大尺度噪声造成的
+         **菱形面片**（simplex 等值线在低幅值下依然可辨）。
+         结论：柔和的背景雾气交给 CSS 的多层 radial-gradient（天生软边、零成本），
+         WebGL 只负责它擅长的事——大量星点的闪烁与视差。 */
+      '  vec3 col=vec3(0.015,0.016,0.024);',
+      '  col+=vec3(0.012,0.012,0.018)*snoise(vec3(uv*3.6,t*0.8));',
+      '  col*=mix(0.72,1.0,smoothstep(1.9,0.35,length(uv)));',
+      '  gl_FragColor=vec4(col,1.0);',
+      '}'
+    ].join('\n')
+
+    function compile (type, src) {
+      var sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh)
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) { console.warn(gl.getShaderInfoLog(sh)); return null }
+      return sh
+    }
+    var vs = compile(gl.VERTEX_SHADER, VERT)
+    var fs = compile(gl.FRAGMENT_SHADER, FRAG)
+    if (!vs || !fs) { canvas.classList.add('fallback'); return }
+    var prog = gl.createProgram()
+    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog)
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { canvas.classList.add('fallback'); return }
+    gl.useProgram(prog)
+
+    var quad = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW)
+    var loc = gl.getAttribLocation(prog, 'a_pos')
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0)
+
+    /* ---- 星点：与星云同一张画布，POINTS + 加法混合，各自相位闪烁 ---- */
+    var STAR_N = reduce ? 0 : (window.innerWidth < 900 ? 260 : 620)
+    var starProg = null, starBuf = null
+    if (STAR_N > 0) {
+      var SV = [
+        'attribute vec2 a_p; attribute float a_s; attribute float a_ph; attribute vec3 a_c;',
+        'uniform vec2 u_res; uniform float u_time; uniform vec2 u_mouse;',
+        'varying float v_a; varying vec3 v_c;',
+        'void main(){',
+        '  vec2 p=a_p;',
+        '  p+=u_mouse*0.012*(0.4+a_s);',            /* 视差：亮度越高越近 */
+        '  gl_Position=vec4(p,0.0,1.0);',
+        '  float tw=0.62+0.38*sin(u_time*(0.5+a_ph*1.7)+a_ph*30.0);',
+        '  v_a=tw*(0.35+a_s*0.65); v_c=a_c;',
+        '  gl_PointSize=max(1.0,a_s*2.6+1.0);',
+        '}'
+      ].join('\n')
+      var SF = [
+        'precision mediump float; varying float v_a; varying vec3 v_c;',
+        'void main(){',
+        '  vec2 d=gl_PointCoord-0.5; float r=length(d);',
+        '  float a=smoothstep(0.5,0.0,r)*v_a;',
+        '  gl_FragColor=vec4(v_c*a,a);',
+        '}'
+      ].join('\n')
+      var svs = compile(gl.VERTEX_SHADER, SV), sfs = compile(gl.FRAGMENT_SHADER, SF)
+      if (svs && sfs) {
+        starProg = gl.createProgram()
+        gl.attachShader(starProg, svs); gl.attachShader(starProg, sfs); gl.linkProgram(starProg)
+        if (gl.getProgramParameter(starProg, gl.LINK_STATUS)) {
+          var P = new Float32Array(STAR_N * 2), S = new Float32Array(STAR_N)
+          var PH = new Float32Array(STAR_N), C = new Float32Array(STAR_N * 3)
+          var PAL = [[1.0, 0.78, 0.62], [0.62, 0.86, 0.94], [0.88, 0.78, 0.55], [0.72, 0.68, 0.98]]
+          for (var i = 0; i < STAR_N; i++) {
+            P[i * 2] = Math.random() * 2 - 1
+            P[i * 2 + 1] = Math.random() * 2 - 1
+            var r = Math.random()
+            S[i] = r > 0.96 ? 1.0 : r > 0.82 ? 0.62 : r > 0.5 ? 0.32 : 0.16
+            PH[i] = Math.random()
+            var c = PAL[(Math.random() * PAL.length) | 0]
+            C[i * 3] = c[0]; C[i * 3 + 1] = c[1]; C[i * 3 + 2] = c[2]
+          }
+          starBuf = {
+            p: gl.createBuffer(), s: gl.createBuffer(), ph: gl.createBuffer(), c: gl.createBuffer()
+          }
+          var bind = function (buf, data, name, size) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+            gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
+            var l = gl.getAttribLocation(starProg, name)
+            if (l >= 0) { gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, gl.FLOAT, false, 0, 0) }
+          }
+          gl.useProgram(starProg)
+          bind(starBuf.p, P, 'a_p', 2); bind(starBuf.s, S, 'a_s', 1)
+          bind(starBuf.ph, PH, 'a_ph', 1); bind(starBuf.c, C, 'a_c', 3)
+          gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE)
+        } else { starProg = null }
+      }
+    }
+
+    gl.useProgram(prog)
+    var uRes = gl.getUniformLocation(prog, 'u_res')
+    var uTime = gl.getUniformLocation(prog, 'u_time')
+    var uScroll = gl.getUniformLocation(prog, 'u_scroll')
+    var uMouse = gl.getUniformLocation(prog, 'u_mouse')
+    var suRes = starProg && gl.getUniformLocation(starProg, 'u_res')
+    var suTime = starProg && gl.getUniformLocation(starProg, 'u_time')
+    var suMouse = starProg && gl.getUniformLocation(starProg, 'u_mouse')
+
+    var st = { dpr: 1, w: 0, h: 0, sc: 0, mx: 0, my: 0, tmx: 0, tmy: 0 }
+    function resize () {
+      st.dpr = Math.min(window.devicePixelRatio || 1, window.innerWidth < 900 ? 1.5 : 1.75)
+      st.w = Math.floor(window.innerWidth * st.dpr)
+      st.h = Math.floor(window.innerHeight * st.dpr)
+      canvas.width = st.w; canvas.height = st.h
+      gl.viewport(0, 0, st.w, st.h)
+      gl.useProgram(prog); gl.uniform2f(uRes, st.w, st.h)
+      if (starProg) { gl.useProgram(starProg); gl.uniform2f(suRes, st.w, st.h) }
+    }
+    addEventListener('resize', resize, { passive: true })
+    addEventListener('mousemove', function (e) {
+      st.tmx = (e.clientX / window.innerWidth - 0.5) * 2
+      st.tmy = -(e.clientY / window.innerHeight - 0.5) * 2
+    }, { passive: true })
+    resize()
+
+    var t0 = performance.now()
+    ;(function frame () {
+      var now = performance.now()
+      var max = Math.max(1, document.body.scrollHeight - window.innerHeight)
+      st.sc = clamp(scrollY / max, 0, 1)
+      st.mx = lerp(st.mx, st.tmx, 0.045); st.my = lerp(st.my, st.tmy, 0.045)
+      var tt = (now - t0) / 1000
+
+      gl.useProgram(prog)
+      gl.disable(gl.BLEND)
+      gl.uniform1f(uTime, tt); gl.uniform1f(uScroll, st.sc); gl.uniform2f(uMouse, st.mx, st.my)
+      gl.drawArrays(gl.TRIANGLES, 0, 6)
+
+      if (starProg) {
+        gl.useProgram(starProg)
+        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE)
+        gl.uniform1f(suTime, tt); gl.uniform2f(suMouse, st.mx, st.my)
+        gl.drawArrays(gl.POINTS, 0, STAR_N)
+      }
+      requestAnimationFrame(frame)
+    })()
+  })()
+
+  /* =======================================================================
+     2. 校准台：00 → 100，完成后揭开标题
+     ===================================================================== */
+  ;(function initLoader () {
+    var loader = $('#loader'), num = $('#loaderNum'), steps = $('#loaderSteps')
+    if (!loader) return
+    if (reduce) { loader.classList.add('done'); document.body.classList.add('ready'); return }
+
+    document.body.style.overflow = 'hidden'
+    var DUR = 1250, t0 = performance.now(), done = false
+    var labels = ['观测站上线', '装载星表', '校准完成']
+    function finish () {
+      if (done) return
+      done = true
+      loader.classList.add('done')
+      document.body.style.overflow = ''
+      document.body.classList.add('ready')
+      setTimeout(function () { loader.style.display = 'none' }, 1200)
+    }
+    ;(function step (now) {
+      var p = clamp((now - t0) / DUR, 0, 1)
+      var e = 1 - Math.pow(1 - p, 3)
+      num.textContent = String(Math.round(e * 100)).padStart(2, '0')
+      if (steps) {
+        var idx = p < 0.34 ? 0 : p < 0.72 ? 1 : 2
+        $$('span', steps).forEach(function (s, i) { s.style.color = i === idx ? 'var(--ink)' : '' })
+      }
+      if (p < 1) requestAnimationFrame(step); else setTimeout(finish, 160)
+    })(t0)
+    setTimeout(finish, 3400)   /* 安全网：任何异常都不能把用户锁在加载页 */
+  })()
+
+  /* =======================================================================
+     3. 自定义光标（lerp 跟随 + 命中放大）；不隐藏原生光标
+     ===================================================================== */
+  ;(function initCursor () {
+    var cur = $('#cursor')
+    if (!cur || reduce) return
+    if (!matchMedia('(hover:hover) and (pointer:fine)').matches) return
+    var mx = innerWidth / 2, my = innerHeight / 2, cx = mx, cy = my, shown = false
+    addEventListener('mousemove', function (e) {
+      mx = e.clientX; my = e.clientY
+      if (!shown) { shown = true; cur.classList.add('on') }
+    }, { passive: true })
+    var HOT = 'a,button,[data-magnetic],.row,.cluster,.frame,.btn'
+    document.addEventListener('mouseover', function (e) {
+      if (e.target.closest && e.target.closest(HOT)) cur.classList.add('hot')
+    })
+    document.addEventListener('mouseout', function (e) {
+      if (e.target.closest && e.target.closest(HOT)) cur.classList.remove('hot')
+    })
+    document.addEventListener('mouseleave', function () { cur.classList.remove('on') })
+    ;(function loop () {
+      cx = lerp(cx, mx, 0.19); cy = lerp(cy, my, 0.19)
+      cur.style.transform = 'translate3d(' + cx.toFixed(2) + 'px,' + cy.toFixed(2) + 'px,0) translate(-50%,-50%)'
+      requestAnimationFrame(loop)
+    })()
+  })()
+
+  /* =======================================================================
+     4. 观测星表：由数据生成，整行可点（行内动态注入）
+     ===================================================================== */
+  var ROWS = [
+    { n: '泰勒公式的余项', s: '数学二 · 高等数学', m: '第 7 题 · 2019', hot: true, d: '展开点与余项形式要一起记；拉格朗日余项适合估阶，佩亚诺余项只给局部信息。' },
+    { n: '长难句：先找主谓', s: '英语二 · 阅读理解', m: 'Text 2 · 2021', hot: false, d: '切出主句主干，再挂从句与插入语；最常见干扰项是代词指代错位。' },
+    { n: '二叉排序树 vs 堆', s: '408 · 数据结构', m: '第 12 题 · 2020', hot: true, d: '前者中序遍历有序，后者只保证局部父子关系。' },
+    { n: '矛盾的对立统一', s: '政治 · 马原', m: '分析题 · 2018', hot: false, d: '同一性与斗争性、普遍性与特殊性是两对关系，别混。' },
+    { n: '夹逼准则的放缩', s: '数学二 · 高等数学', m: '第 3 题 · 2017', hot: false, d: '放缩要两头都收得住；只放一边会导致极限夹不住。' },
+    { n: '虚拟语气三种时态', s: '英语二 · 完形', m: '第 9 题 · 2022', hot: true, d: '与现在/过去/将来事实相反，从句与主句形式各不相同。' }
+  ]
+  ;(function buildRows () {
+    var host = $('#rows')
+    if (!host) return
+    host.innerHTML = ROWS.map(function (r, i) {
+      return '<button class="row" type="button" data-reveal data-hot="' + (r.hot ? 1 : 0) + '">' +
+        '<span class="row__idx mono">' + String(i + 1).padStart(2, '0') + '</span>' +
+        '<span class="row__name">' + r.n + '</span>' +
+        '<span class="row__sub">' + r.s + '</span>' +
+        '<span class="row__meta mono">' + r.m + '</span>' +
+        '<svg class="row__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="19" height="19" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>' +
+        '</button>'
+    }).join('')
+  })()
+
+  /* =======================================================================
+     5. 科目星群：每张卡内随机星点（确定性伪随机，刷新不变）
+     ===================================================================== */
+  ;(function clusters () {
+    var host = $('#clusterHost')
+    if (!host) return
+    var DATA = [
+      { k: '数学二', n: 412, lum: 58, color: '#ff5a3c', sub: '高等数学 · 线性代数 · 概率统计', note: '薄弱：级数、偏导' },
+      { k: '英语二', n: 386, lum: 71, color: '#57c8d8', sub: '阅读理解 · 完形 · 翻译', note: '薄弱：长难句定位' },
+      { k: '政治', n: 254, lum: 66, color: '#e0b25a', sub: '马原 · 毛中特 · 史纲', note: '薄弱：多选题漏选' },
+      { k: '408', n: 232, lum: 49, color: '#8e7bf0', sub: '数据结构 · 组成原理 · 网络', note: '薄弱：树与图' }
+    ]
+    var seed = 20260916
+    var rnd = function () { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+    host.innerHTML = DATA.map(function (d) {
+      var stars = ''
+      for (var i = 0; i < 26; i++) {
+        var sz = (1 + rnd() * 2.2).toFixed(1)
+        stars += '<i style="left:' + (rnd() * 100).toFixed(1) + '%;top:' + (rnd() * 100).toFixed(1) +
+          '%;width:' + sz + 'px;height:' + sz + 'px;opacity:' + (0.25 + rnd() * 0.6).toFixed(2) +
+          ';background:' + d.color + '"></i>'
+      }
+      return '<button class="cluster" type="button" data-reveal>' +
+        '<span class="sky" aria-hidden="true">' + stars + '</span>' +
+        '<span class="k mono">' + d.sub + '</span>' +
+        '<h3>' + d.k + '</h3>' +
+        '<p>' + d.note + '</p>' +
+        '<span class="row2"><span>' + d.n + ' 颗星</span><span>亮度 ' + d.lum + '%</span></span>' +
+        '</button>'
+    }).join('')
+  })()
+
+  /* =======================================================================
+     6. 滚动叙事：宣言逐词点亮
+     ===================================================================== */
+  ;(function manifest () {
+    var el = $('[data-split]')
+    if (!el) return
+    var raw = el.textContent.trim().replace(/\s+/g, '')
+    /* 中文没有空格：按「词块」切分（标点与常见词组边界），保证点亮有节奏 */
+    var ACC = ['星', '光', '红移', '可见']
+    var chunks = raw.match(/[^，。；、]{1,4}[，。；、]?/g) || [raw]
+    el.innerHTML = chunks.map(function (c) {
+      var bare = c.replace(/[，。；、]/g, '')
+      var acc = ACC.some(function (a) { return bare.indexOf(a) >= 0 })
+      return '<span class="w' + (acc ? ' acc' : '') + '">' + c + '</span>'
+    }).join('')
+    var ws = $$('.w', el)
+    if (!ws.length) return
+    if (reduce) { ws.forEach(function (w) { w.classList.add('on') }); return }
+    var ticking = false
+    function update () {
+      var r = el.getBoundingClientRect(), vh = innerHeight
+      var total = r.height + vh * 0.55
+      var p = clamp((vh * 0.88 - r.top) / total, 0, 1)
+      for (var i = 0; i < ws.length; i++) {
+        var start = (i / ws.length) * 0.78
+        var local = clamp((p - start) / ((1 / ws.length) * 2.6), 0, 1)
+        ws[i].style.opacity = (0.09 + local * 0.91).toFixed(3)
+      }
+      ticking = false
+    }
+    update()
+    addEventListener('scroll', function () { if (!ticking) { requestAnimationFrame(update); ticking = true } }, { passive: true })
+    addEventListener('resize', update, { passive: true })
+  })()
+
+  /* =======================================================================
+     7. 进场揭示 + 数字计数 + 光变曲线 / 负荷谱
+     ===================================================================== */
+  ;(function observe () {
+    var io = 'IntersectionObserver' in window ? new IntersectionObserver(function (es, o) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return
+        e.target.classList.add('in')
+        o.unobserve(e.target)
+      })
+    }, { threshold: 0.14, rootMargin: '0px 0px -6% 0px' }) : null
+    $$('[data-reveal],[data-panel]').forEach(function (el) {
+      if (io) io.observe(el); else el.classList.add('in')
+    })
+
+    function countUp (el) {
+      var target = Number(el.dataset.count || 0), suffix = el.dataset.suffix || ''
+      if (reduce) { el.textContent = target + suffix; return }
+      new IntersectionObserver(function (es, o) {
+        if (!es[0].isIntersecting) return
+        o.disconnect()
+        var t0 = performance.now(), dur = 1200
+        requestAnimationFrame(function step (now) {
+          var p = Math.min(1, (now - t0) / dur)
+          el.textContent = Math.round(target * (1 - Math.pow(1 - p, 3))) + suffix
+          if (p < 1) requestAnimationFrame(step)
+        })
+      }, { threshold: 0.4 }).observe(el)
+    }
+    $$('[data-count]').forEach(countUp)
+
+    var spec = $('#spec')
+    if (spec) {
+      var vals = (spec.dataset.vals || '').split(',').map(Number)
+      var bars = $$('span', spec)
+      var grow = function () { bars.forEach(function (b, i) { b.style.height = Math.max(5, Math.min(100, vals[i] || 0)) + '%' }) }
+      if (reduce) grow()
+      else new IntersectionObserver(function (es, o) { if (es[0].isIntersecting) { grow(); o.disconnect() } }, { threshold: 0.35 }).observe(spec)
+    }
+
+    var atlas = $('#atlas')
+    if (atlas) {
+      /* 直接生成：这批格子是静态纹理，不需要等进入视口（早先放在观察器里，
+         结果没进视口就一片空白，实测抓到 atlasCells=0） */
+      var s = 20260916
+      for (var i = 0; i < 18 * 7; i++) {
+        s = (s * 1103515245 + 12345) & 0x7fffffff
+        var r = s / 0x7fffffff
+        var cell = document.createElement('i')
+        var v = r > 0.9 ? 4 : r > 0.72 ? 3 : r > 0.5 ? 2 : r > 0.3 ? 1 : 0
+        if (v) cell.dataset.v = String(v)
+        atlas.appendChild(cell)
+      }
+    }
+  })()
+
+  /* =======================================================================
+     8. 磁吸按钮（指针偏移的 28%/42% 位移）+ 导航隐藏
+     ===================================================================== */
+  ;(function magnetic () {
+    if (reduce || !matchMedia('(hover:hover) and (pointer:fine)').matches) return
+    $$('[data-magnetic]').forEach(function (el) {
+      el.addEventListener('mousemove', function (e) {
+        var r = el.getBoundingClientRect()
+        el.style.transform = 'translate(' + ((e.clientX - r.left - r.width / 2) * 0.28).toFixed(1) +
+          'px,' + ((e.clientY - r.top - r.height / 2) * 0.42).toFixed(1) + 'px)'
+      })
+      el.addEventListener('mouseleave', function () { el.style.transform = '' })
+    })
+  })()
+
+  ;(function nav () {
+    var nav = $('#nav')
+    if (!nav) return
+    var last = scrollY, ticking = false
+    addEventListener('scroll', function () {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(function () {
+        var y = scrollY
+        if (Math.abs(y - last) > 6) { nav.classList.toggle('up', y > last && y > 260); last = y }
+        ticking = false
+      })
+    }, { passive: true })
+  })()
+
+  /* =======================================================================
+     9. 观测帧：点 × 可移除
+     ===================================================================== */
+  $$('#frames .frame').forEach(function (f) {
+    var x = document.createElement('button')
+    x.className = 'rm'; x.type = 'button'; x.textContent = '×'
+    x.setAttribute('aria-label', '移除这一帧')
+    x.addEventListener('click', function (e) { e.stopPropagation(); f.remove() })
+    f.appendChild(x)
+  })
+})()
+</script>
+</body>
+</html>

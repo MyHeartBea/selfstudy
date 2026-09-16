@@ -1,0 +1,919 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>研错本 · 视觉概念样张 v2（研墨 · 落笔 · 成册）</title>
+<meta name="color-scheme" content="light dark" />
+<style>
+/* ============================================================================
+   研错本 v2 · 视觉概念样张（单文件，零外部依赖，可直接双击打开）
+   核心隐喻：研墨（AI 解析）→ 落笔（复习作答）→ 成册（统计沉淀）
+   色彩：OKLCH 阶梯。--d* 为 OKLCH 定义（现代浏览器），--k* 为十六进制回退。
+   动效七原语：墨晕揭示 / 纸张翻折 / 印章落定 / 笔锋描绘 / 扫描线 / 纸纹噪点 / 焦点墨圈
+   全部动效尊重 prefers-reduced-motion。
+   ========================================================================== */
+
+/* ---------- 1. 设计令牌 ---------- */
+:root {
+  /* 纸：由浅到深的四层，OKLCH 亮度等距（0.97 / 0.94 / 0.90 / 0.86） */
+  --d-paper-0: #fbf8f1;
+  --d-paper-1: #f4efe3;
+  --d-paper-2: #ebe4d4;
+  --d-paper-3: #ded5c1;
+
+  /* 墨：四阶，亮度 0.28 / 0.45 / 0.62 / 0.78 */
+  --d-ink-0: #221f1a;
+  --d-ink-1: #4a4438;
+  --d-ink-2: #7d7565;
+  --d-ink-3: #a9a192;
+
+  /* 朱砂：唯一强调色（印章）。色相 30，彩度克制 */
+  --d-seal: #b8402c;
+  --d-seal-deep: #8f2d1d;
+  --d-seal-soft: #b8402c1a;
+
+  /* 语义色（青/金）：仅用于图表与标签，不做装饰 */
+  --d-teal: #2f6b63;
+  --d-gold: #9a7620;
+  --d-green: #3f7050;
+  --d-violet: #5c4ebb;
+
+  --line: #221f1a14;
+  --line-2: #221f1a29;
+
+  /* 动效三曲线：研墨（慢入） / 落笔（快出带回弹） / 成册（平稳收束） */
+  --e-grind: cubic-bezier(0.16, 0.84, 0.24, 1);
+  --e-stroke: cubic-bezier(0.34, 1.32, 0.42, 1);
+  --e-bind: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /* 字阶：流体，桌面 1x / 手机 0.62x */
+  --fs-display: clamp(46px, 11.6vw, 152px);
+  --fs-h1: clamp(30px, 4.2vw, 58px);
+  --fs-h2: clamp(21px, 2.3vw, 31px);
+  --fs-h3: clamp(16px, 1.35vw, 19px);
+  --fs-body: clamp(14px, 1.05vw, 15.5px);
+  --fs-sm: 12.5px;
+  --fs-xs: 11px;
+
+  --serif: "Songti SC", "STSong", "SimSun", "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+  --sans: "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
+  --latin: "Inter", "Segoe UI", system-ui, sans-serif;
+
+  --gutter: clamp(18px, 4.4vw, 76px);
+  --maxw: 1360px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --d-paper-0: #191612;
+    --d-paper-1: #211d18;
+    --d-paper-2: #2a251d;
+    --d-paper-3: #383226;
+    --d-ink-0: #eee7d7;
+    --d-ink-1: #c2b9a5;
+    --d-ink-2: #8d8472;
+    --d-ink-3: #625b4d;
+    --d-seal: #e05a3c;
+    --d-seal-deep: #c8432a;
+    --d-seal-soft: #e05a3c1f;
+    --d-teal: #6aa59b;
+    --d-gold: #cfa63c;
+    --d-green: #7cab8a;
+    --d-violet: #9d8ff0;
+    --line: #eee7d714;
+    --line-2: #eee7d729;
+  }
+}
+
+/* ---------- 2. 重置与基底 ---------- */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--d-paper-1);
+  color: var(--d-ink-0);
+  font-family: var(--sans);
+  font-size: var(--fs-body);
+  line-height: 1.72;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+::selection { background: var(--d-seal); color: var(--d-paper-0); }
+
+/* 纸纹：细颗粒 + 极淡纤维。纯 CSS 生成，不用图片 */
+.grain {
+  position: fixed; inset: 0; z-index: 90; pointer-events: none;
+  opacity: 0.5; mix-blend-mode: multiply;
+  background-image:
+    repeating-linear-gradient(0deg, #00000008 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, #00000006 0 1px, transparent 1px 4px);
+}
+@media (prefers-color-scheme: dark) { .grain { mix-blend-mode: screen; opacity: 0.32; } }
+
+/* 暗角：把视线收进纸张中央 */
+.vignette {
+  position: fixed; inset: 0; z-index: 89; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 40%, transparent 55%, #221f1a1f 100%);
+}
+@media (prefers-color-scheme: dark) {
+  .vignette { background: radial-gradient(120% 90% at 50% 40%, transparent 50%, #0000007a 100%); }
+}
+
+/* 版心：编辑式网格 —— 12 列，内容允许跨列 */
+.sheet { position: relative; z-index: 2; max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter); }
+.rule { height: 1px; background: var(--line); border: 0; margin: 0; }
+
+/* ---------- 3. 页眉：极细横线 + 等宽小字，像书刊页眉 ---------- */
+.masthead {
+  position: sticky; top: 0; z-index: 40;
+  backdrop-filter: blur(14px) saturate(1.1);
+  background: color-mix(in srgb, var(--d-paper-1) 82%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+.masthead-in {
+  max-width: var(--maxw); margin: 0 auto; padding: 11px var(--gutter);
+  display: flex; align-items: center; gap: 22px;
+  font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--d-ink-2);
+}
+.masthead .brand {
+  font-family: var(--serif); font-size: 19px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--d-ink-0); text-transform: none;
+}
+.masthead .spacer { flex: 1; }
+.masthead nav { display: flex; gap: 18px; }
+.masthead nav a { color: var(--d-ink-2); text-decoration: none; transition: color 0.2s var(--e-bind); }
+.masthead nav a:hover, .masthead nav a[aria-current] { color: var(--d-seal); }
+
+/* ---------- 4. 封面：超大竖排标题 + 印章 ---------- */
+.cover { padding: clamp(52px, 11vh, 132px) 0 clamp(34px, 7vh, 84px); position: relative; }
+.cover-kicker {
+  font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: 0.34em;
+  text-transform: uppercase; color: var(--d-ink-2); display: flex; align-items: center; gap: 14px;
+}
+.cover-kicker::before { content: ""; width: 46px; height: 1px; background: var(--d-ink-3); }
+
+.cover-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) clamp(180px, 24vw, 320px);
+  gap: clamp(22px, 4vw, 64px); align-items: end; margin-top: clamp(22px, 4vh, 46px);
+}
+.display {
+  font-family: var(--serif); font-weight: 900; font-size: var(--fs-display);
+  line-height: 0.86; letter-spacing: -0.028em; margin: 0;
+  /* 逐字揭示：每个字一个 span，靠 --i 错峰 */
+  --n: 1;
+}
+.display .ch {
+  display: inline-block; opacity: 0; transform: translateY(0.34em) scaleY(1.16);
+  animation: ink-drop 1.05s var(--e-grind) forwards;
+  animation-delay: calc(var(--i) * 105ms + 180ms);
+}
+/* 分隔点与前字黏在一起：否则 190px 字号下会出现「·」独占行首这种难看断行 */
+.display .grp { display: inline-block; white-space: nowrap; }
+@keyframes ink-drop {
+  0%   { opacity: 0; transform: translateY(0.34em) scaleY(1.16); filter: blur(9px); }
+  55%  { opacity: 1; filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scaleY(1); filter: blur(0); }
+}
+
+.cover-side { display: flex; flex-direction: column; gap: 18px; }
+.cover-claim {
+  font-family: var(--serif); font-size: var(--fs-h3); line-height: 1.85;
+  color: var(--d-ink-1); text-wrap: pretty;
+}
+.cover-claim b { color: var(--d-ink-0); font-weight: 700; box-shadow: inset 0 -0.5em var(--d-seal-soft); }
+
+/* 印章：可点击，落定时有回弹与轻微旋转 */
+.seal {
+  --sz: 88px;
+  width: var(--sz); height: var(--sz); border: 0; padding: 0; cursor: pointer;
+  background: var(--d-seal); color: var(--d-paper-0);
+  font-family: var(--serif); font-weight: 700; letter-spacing: 0.1em;
+  display: grid; place-items: center; text-align: center; line-height: 1.1;
+  border-radius: 7px; font-size: calc(var(--sz) * 0.2);
+  box-shadow: 0 10px 26px -12px var(--d-seal-deep), inset 0 0 0 1.5px #ffffff2e;
+  transition: transform 0.45s var(--e-stroke), box-shadow 0.35s var(--e-bind), background 0.25s;
+  position: relative; isolation: isolate;
+}
+.seal::after {
+  content: ""; position: absolute; inset: 5px; border: 1.5px solid #ffffff5c; border-radius: 4px;
+  pointer-events: none;
+}
+.seal:hover { transform: translateY(-3px) rotate(-1.6deg) scale(1.03); }
+.seal:active { transform: translateY(0) scale(0.965); }
+.seal:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--d-paper-1), 0 0 0 6px var(--d-seal); }
+
+.cover-meta {
+  display: flex; flex-wrap: wrap; gap: 10px 30px; margin-top: 30px;
+  font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: 0.1em; color: var(--d-ink-2);
+}
+.cover-meta b { color: var(--d-ink-0); font-family: var(--latin); font-size: 15px; letter-spacing: 0; }
+
+/* ---------- 5. 段落标题：编号 + 中文标题 + 一句英文说明 ---------- */
+.sec { padding: clamp(46px, 8vh, 104px) 0; }
+.sec-head {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--line-2); padding-bottom: 14px; margin-bottom: clamp(22px, 3vh, 40px);
+}
+.sec-no {
+  font-family: var(--mono); font-size: var(--fs-xs); color: var(--d-seal);
+  letter-spacing: 0.2em; padding-top: 0.5em;
+}
+.sec-title { font-family: var(--serif); font-size: var(--fs-h1); font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.sec-note { margin-left: auto; font-family: var(--mono); font-size: var(--fs-xs); color: var(--d-ink-2); letter-spacing: 0.08em; }
+
+/* ---------- 6. 场景一：砚台 ---------- */
+.verse { display: grid; grid-template-columns: clamp(200px, 25vw, 300px) minmax(0, 1fr); gap: clamp(20px, 3.4vw, 54px); }
+
+.inkstone {
+  border: 1px solid var(--line-2); border-radius: 3px; padding: 22px 20px 26px;
+  background:
+    radial-gradient(120% 70% at 50% 0%, var(--d-seal-soft), transparent 70%),
+    var(--d-paper-0);
+  display: flex; flex-direction: column; gap: 16px;
+}
+.inkstone-lab {
+  font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--d-ink-2);
+}
+/* 墨量：竖向墨柱，高度 = 待复习比例 */
+.well { height: 168px; border: 1px solid var(--line-2); border-radius: 2px; position: relative; overflow: hidden; background: var(--d-paper-2); }
+.well-fill {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 0;
+  background: linear-gradient(180deg, var(--d-ink-1), var(--d-ink-0));
+  transition: height 1.35s var(--e-grind);
+}
+.well-fill::after { /* 墨面反光：一条极淡高光，暗示液面 */
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: #ffffff3d;
+}
+.well-ticks { position: absolute; inset: 0; pointer-events: none; }
+.well-ticks i { position: absolute; left: 0; right: 0; height: 1px; background: var(--line); }
+.ink-figure { display: flex; align-items: flex-end; gap: 10px; }
+.ink-figure .n {
+  font-family: var(--latin); font-weight: 700; font-size: clamp(38px, 5vw, 60px);
+  line-height: 0.9; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+}
+.ink-figure .u { font-family: var(--mono); font-size: var(--fs-xs); color: var(--d-ink-2); padding-bottom: 0.4em; letter-spacing: 0.1em; }
+.ink-hint { font-size: var(--fs-sm); color: var(--d-ink-2); line-height: 1.65; }
+
+/* 复习卡：一张纸，可整块点击 */
+.paper {
+  position: relative; border: 1px solid var(--line-2); border-radius: 3px;
+  background: var(--d-paper-0); padding: clamp(20px, 2.6vw, 34px);
+  cursor: pointer;
+  transition: transform 0.5s var(--e-stroke), box-shadow 0.45s var(--e-bind), border-color 0.3s;
+  box-shadow: 0 1px 0 var(--line), 0 18px 40px -30px #221f1a66;
+}
+.paper:hover { transform: translateY(-4px); box-shadow: 0 1px 0 var(--line), 0 30px 60px -34px #221f1a80; border-color: var(--line-2); }
+/* 折角：右下角一道极淡的斜切，暗示"这张纸是起的"。纯装饰、不参与命中 */
+.paper::after {
+  content: ""; position: absolute; right: -1px; bottom: -1px;
+  width: 22px; height: 22px; pointer-events: none;
+  background: linear-gradient(315deg, var(--d-paper-2) 0 50%, transparent 50%);
+  border-left: 1px solid var(--line-2); border-top: 1px solid var(--line-2);
+  opacity: 0; transition: opacity 0.4s var(--e-bind);
+}
+.paper:hover::after { opacity: 1; }
+.paper:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--d-paper-1), 0 0 0 6px var(--d-seal); }
+.paper + .paper { margin-top: 18px; }
+.paper-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.paper-q { font-family: var(--serif); font-size: clamp(17px, 1.6vw, 22px); line-height: 1.8; margin: 0 0 14px; text-wrap: pretty; }
+.paper-src { font-family: var(--mono); font-size: var(--fs-xs); color: var(--d-ink-2); letter-spacing: 0.08em; }
+.paper-ops { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+
+/* ---------- 7. 组件：印章标签 / 墨点 / 按钮 ---------- */
+.stamp {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--serif); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.09em;
+  padding: 3px 9px; border-radius: 3px; border: 1px solid currentColor;
+  color: var(--d-seal); background: var(--d-seal-soft);
+}
+.stamp.t-teal { color: var(--d-teal); background: #2f6b631a; }
+.stamp.t-gold { color: var(--d-gold); background: #9a76201a; }
+.stamp.t-ink { color: var(--d-ink-2); background: transparent; }
+
+.inkdot { display: inline-flex; align-items: center; gap: 5px; }
+.inkdot i {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--d-ink-0);
+  box-shadow: inset 0 0 0 1px #ffffff1f;
+}
+.inkdot i.off { background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); }
+/* 掌握度墨点：五档浓淡 */
+.inkdot i.l1 { opacity: 0.22; } .inkdot i.l2 { opacity: 0.42; }
+.inkdot i.l3 { opacity: 0.62; } .inkdot i.l4 { opacity: 0.82; } .inkdot i.l5 { opacity: 1; }
+
+.btn {
+  font-family: var(--sans); font-size: var(--fs-sm); font-weight: 600;
+  padding: 9px 18px; border-radius: 3px; border: 1px solid var(--line-2);
+  background: var(--d-paper-0); color: var(--d-ink-0); cursor: pointer;
+  transition: transform 0.32s var(--e-stroke), background 0.22s, border-color 0.22s, color 0.22s;
+  position: relative; overflow: hidden;
+}
+.btn:hover { border-color: var(--d-ink-3); transform: translateY(-1.5px); }
+.btn:active { transform: translateY(0.5px) scale(0.99); }
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--d-paper-1), 0 0 0 5px var(--d-seal); }
+.btn-primary { background: var(--d-seal); border-color: var(--d-seal); color: var(--d-paper-0); }
+.btn-primary:hover { background: var(--d-seal-deep); border-color: var(--d-seal-deep); }
+.btn-ghost { background: transparent; border-color: transparent; color: var(--d-ink-1); }
+.btn-ghost:hover { background: var(--d-paper-2); border-color: transparent; }
+/* 点击墨渍：从落点扩散 */
+.btn .rip { position: absolute; border-radius: 50%; background: #ffffff3d; transform: scale(0); pointer-events: none; }
+.btn-primary .rip { background: #ffffff40; }
+
+/* ---------- 8. 场景二：蘸墨台（录入） ---------- */
+.tray { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: clamp(18px, 3vw, 44px); align-items: start; }
+.drop {
+  border: 1.5px dashed var(--line-2); border-radius: 3px; padding: clamp(20px, 3vw, 40px);
+  text-align: center; background: var(--d-paper-0);
+  transition: border-color 0.3s, background 0.3s;
+}
+.drop:hover { border-color: var(--d-seal); background: var(--d-seal-soft); }
+.tray-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.thumb {
+  width: 84px; height: 106px; border-radius: 2px; border: 1px solid var(--line-2);
+  background: linear-gradient(150deg, var(--d-paper-2), var(--d-paper-3));
+  position: relative; overflow: hidden; display: grid; place-items: center;
+  font-family: var(--mono); font-size: 10px; color: var(--d-ink-2); letter-spacing: 0.08em;
+  animation: slip-in 0.6s var(--e-stroke) backwards;
+}
+@keyframes slip-in { from { opacity: 0; transform: translateY(10px) rotate(-2deg); } to { opacity: 1; transform: none; } }
+.thumb b { position: absolute; top: 5px; left: 7px; font-family: var(--latin); font-weight: 700; color: var(--d-seal); font-size: 11px; }
+.thumb .x {
+  position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border: 0; border-radius: 2px;
+  background: #221f1a5c; color: #fff; cursor: pointer; font-size: 11px; line-height: 1; display: grid; place-items: center;
+}
+/* 研墨进度：一条笔锋笔触 + 扫描线 */
+.grind { margin-top: 20px; }
+.grind-track { height: 3px; background: var(--d-paper-2); position: relative; overflow: hidden; border-radius: 2px; }
+.grind-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--d-ink-0); transition: width 0.6s var(--e-grind); }
+.grind-scan {
+  position: absolute; top: 0; bottom: 0; width: 34%;
+  background: linear-gradient(90deg, transparent, var(--d-seal), transparent);
+  animation: scan 2.1s var(--e-bind) infinite;
+}
+@keyframes scan { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+.grind-log { margin-top: 12px; font-family: var(--mono); font-size: var(--fs-xs); color: var(--d-ink-2); line-height: 2; }
+.grind-log b { color: var(--d-seal); }
+
+/* ---------- 9. 场景三：宣纸墙（卡片） ---------- */
+.wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); gap: clamp(14px, 1.7vw, 24px); }
+.tile {
+  position: relative; border: 1px solid var(--line-2); border-radius: 3px; background: var(--d-paper-0);
+  padding: 20px 19px 18px; cursor: pointer; text-align: left;
+  transition: transform 0.5s var(--e-stroke), box-shadow 0.45s var(--e-bind);
+  box-shadow: 0 1px 0 var(--line), 0 14px 30px -26px #221f1a5c;
+}
+.tile:nth-child(3n + 2) { transform: translateY(9px); }
+.tile:hover { transform: translateY(-5px) rotate(-0.4deg); box-shadow: 0 1px 0 var(--line), 0 26px 52px -30px #221f1a80; }
+.tile:nth-child(3n + 2):hover { transform: translateY(4px) rotate(-0.4deg); }
+.tile:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--d-paper-1), 0 0 0 6px var(--d-seal); }
+/* 书脊：一条左侧色条，颜色随科目 */
+.tile-spine { position: absolute; left: 0; top: 14px; bottom: 14px; width: 2px; background: var(--spine, var(--d-seal)); }
+.tile h4 { font-family: var(--serif); font-size: 17px; font-weight: 700; margin: 0 0 8px; letter-spacing: 0.01em; }
+.tile p { margin: 0; font-size: var(--fs-sm); color: var(--d-ink-2); line-height: 1.72; }
+.tile-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-family: var(--mono); font-size: 10.5px; color: var(--d-ink-3); letter-spacing: 0.08em; }
+
+/* ---------- 10. 场景四：成册（数据） ---------- */
+.binder { display: grid; grid-template-columns: repeat(12, 1fr); gap: clamp(14px, 1.8vw, 26px); }
+.leaf { border: 1px solid var(--line-2); border-radius: 3px; background: var(--d-paper-0); padding: 20px 22px; }
+.leaf.span4 { grid-column: span 4; } .leaf.span5 { grid-column: span 5; }
+.leaf.span7 { grid-column: span 7; } .leaf.span8 { grid-column: span 8; } .leaf.span12 { grid-column: span 12; }
+.leaf-lab { font-family: var(--mono); font-size: var(--fs-xs); letter-spacing: 0.16em; text-transform: uppercase; color: var(--d-ink-2); }
+.leaf-big { font-family: var(--latin); font-weight: 700; font-size: clamp(30px, 3.6vw, 46px); line-height: 1; letter-spacing: -0.03em; margin: 12px 0 4px; font-variant-numeric: tabular-nums; }
+.leaf-sub { font-size: var(--fs-sm); color: var(--d-ink-2); }
+
+/* 笔锋折线：SVG path 描边动画 */
+.stroke-svg { width: 100%; height: 118px; display: block; overflow: visible; }
+.stroke-svg path.line {
+  fill: none; stroke: var(--d-ink-0); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: var(--len); stroke-dashoffset: var(--len);
+  transition: stroke-dashoffset 1.6s var(--e-grind);
+}
+.stroke-svg path.area { fill: var(--d-seal-soft); opacity: 0; transition: opacity 1.1s var(--e-bind) 0.5s; }
+.is-drawn .stroke-svg path.area { opacity: 1; }
+.stroke-svg .dot { fill: var(--d-seal); }
+
+/* 墨条：横向条形的负荷预报 */
+.bars { display: flex; align-items: flex-end; gap: 6px; height: 96px; margin-top: 14px; }
+.bars span { flex: 1; background: var(--d-ink-0); border-radius: 1px 1px 0 0; height: 0; transition: height 1.1s var(--e-grind); }
+.bars span.hot { background: var(--d-seal); }
+.bars-lab { display: flex; gap: 6px; font-family: var(--mono); font-size: 9.5px; color: var(--d-ink-3); margin-top: 7px; }
+.bars-lab span { flex: 1; text-align: center; }
+
+/* 热力网格：用**固定格子尺寸**约束面积。若用等分列 + max-width，格子会被拉高，
+   反而比不限宽更高（实测 317px → 463px，过度修正）。 */
+.gridheat { display: grid; grid-template-columns: repeat(auto-fill, 11px); gap: 3px; margin-top: 12px; max-width: 100%; }
+.gridheat i { width: 11px; height: 11px; border-radius: 1px; background: var(--d-paper-2); }
+.gridheat i[data-v="1"] { background: color-mix(in srgb, var(--d-ink-0) 20%, var(--d-paper-2)); }
+.gridheat i[data-v="2"] { background: color-mix(in srgb, var(--d-ink-0) 38%, var(--d-paper-2)); }
+.gridheat i[data-v="3"] { background: color-mix(in srgb, var(--d-ink-0) 58%, var(--d-paper-2)); }
+.gridheat i[data-v="4"] { background: var(--d-ink-0); }
+
+/* ---------- 11. 材质与组件规格 ---------- */
+.spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: clamp(14px, 1.7vw, 22px); }
+.swatch { border: 1px solid var(--line-2); border-radius: 3px; overflow: hidden; background: var(--d-paper-0); }
+/* 色卡必须能看见边界：纸阶与卡片底色几乎同色，只靠底色会变成"一排空盒子"（实测过） */
+.swatch .chip { height: 82px; box-shadow: inset 0 0 0 1px var(--line-2); border-bottom: 1px solid var(--line-2); }
+.swatch .meta { padding: 11px 13px; font-family: var(--mono); font-size: 10.5px; color: var(--d-ink-2); line-height: 1.8; letter-spacing: 0.04em; }
+.swatch .meta b { display: block; font-family: var(--sans); font-size: var(--fs-sm); color: var(--d-ink-0); letter-spacing: 0; margin-bottom: 3px; }
+
+.motion-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 14px; }
+.motion-card {
+  border: 1px solid var(--line-2); border-radius: 3px; background: var(--d-paper-0); padding: 16px;
+  cursor: pointer; transition: border-color 0.25s;
+}
+.motion-card:hover { border-color: var(--d-seal); }
+.motion-card h5 { margin: 0 0 4px; font-size: var(--fs-sm); font-family: var(--serif); font-weight: 700; }
+.motion-card p { margin: 0 0 12px; font-size: var(--fs-xs); color: var(--d-ink-2); line-height: 1.6; }
+.motion-stage { height: 62px; border: 1px solid var(--line); border-radius: 2px; position: relative; overflow: hidden; background: var(--d-paper-1); }
+.motion-stage .blot { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; background: var(--d-ink-0); }
+.motion-card.run .m-bleed .blot { animation: k-bleed 1.15s var(--e-grind); }
+@keyframes k-bleed { 0% { transform: scale(0.1); opacity: 0.15; filter: blur(12px); } 60% { filter: blur(0); } 100% { transform: scale(1); opacity: 1; } }
+.motion-card.run .m-fold .blot { border-radius: 2px; animation: k-fold 1.15s var(--e-stroke); }
+@keyframes k-fold { 0% { transform: perspective(340px) rotateX(-72deg); opacity: 0.35; } 100% { transform: perspective(340px) rotateX(0); opacity: 1; } }
+.motion-card.run .m-seal .blot { border-radius: 5px; background: var(--d-seal); animation: k-seal 0.75s var(--e-stroke); }
+@keyframes k-seal { 0% { transform: scale(1.85) rotate(-11deg); opacity: 0.25; } 70% { transform: scale(0.95) rotate(1deg); } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+.motion-card.run .m-stroke .blot { width: 76%; left: 12%; height: 2px; margin: 0; top: 30px; border-radius: 2px; animation: k-stroke 1.15s var(--e-grind); transform-origin: left center; }
+@keyframes k-stroke { 0% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+.motion-card.run .m-scan .blot { width: 30%; height: 200%; top: -50%; margin: 0; border-radius: 0; background: linear-gradient(90deg, transparent, var(--d-seal), transparent); animation: k-scan 1.15s var(--e-bind); }
+@keyframes k-scan { 0% { transform: translateX(-160%); } 100% { transform: translateX(430%); } }
+.motion-card.run .m-ripple .blot { background: none; box-shadow: inset 0 0 0 2px var(--d-seal); animation: k-ripple 1.15s var(--e-grind); }
+@keyframes k-ripple { 0% { transform: scale(0.05); opacity: 1; } 100% { transform: scale(1.25); opacity: 0; } }
+.motion-card.run .m-focus .blot { width: 22px; height: 22px; margin: -11px 0 0 -11px; background: none; box-shadow: 0 0 0 2px var(--d-ink-0), 0 0 0 7px var(--d-paper-1), 0 0 0 10px var(--d-seal); animation: k-focus 1.15s var(--e-stroke); }
+@keyframes k-focus { 0% { transform: scale(2.6); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+/* ---------- 12. 页脚 ---------- */
+.foot { border-top: 1px solid var(--line-2); margin-top: clamp(40px, 7vh, 96px); padding: 26px 0 60px; display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+.foot span { font-family: var(--mono); font-size: var(--fs-xs); color: var(--d-ink-3); letter-spacing: 0.08em; }
+.foot .spacer { flex: 1; }
+
+/* ---------- 13. 响应式：窄屏重排，而非缩放 ---------- */
+@media (max-width: 1080px) {
+  .cover-grid { grid-template-columns: 1fr; align-items: start; }
+  .verse, .tray { grid-template-columns: 1fr; }
+  .leaf.span4, .leaf.span5, .leaf.span7, .leaf.span8 { grid-column: span 12; }
+}
+@media (max-width: 620px) {
+  .masthead nav { display: none; }
+  .cover-meta { gap: 8px 18px; }
+  .tile:nth-child(3n + 2) { transform: none; }
+  .gridheat { grid-template-columns: repeat(13, 1fr); }
+}
+/* 极窄屏：页眉只留印章与品牌，避免等宽说明折成三行把首屏吃掉 */
+@media (max-width: 720px) {
+  .masthead-in > span:not(.brand):not(.spacer) { display: none; }
+  .masthead-in { padding: 9px var(--gutter); }
+}
+
+/* ---------- 14. 减弱动效：瞬时切换，信息不丢 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .display .ch { opacity: 1; transform: none; filter: none; }
+  .well-fill, .bars span { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <span class="brand">研错本</span>
+    <span>KAOYAN&nbsp;INK&nbsp;ATLAS&nbsp;·&nbsp;VISUAL&nbsp;CONCEPT&nbsp;V2</span>
+    <span class="spacer"></span>
+    <nav>
+      <a href="#verse" aria-current="page">砚台</a>
+      <a href="#tray">蘸墨</a>
+      <a href="#wall">纸墙</a>
+      <a href="#binder">成册</a>
+      <a href="#spec">规格</a>
+    </nav>
+  </div>
+</header>
+
+<main class="sheet">
+
+  <!-- ================= 封面 ================= -->
+  <section class="cover">
+    <div class="cover-kicker">Concept sheet 001 · 视觉方向验证（非最终界面）</div>
+    <div class="cover-grid">
+      <h1 class="display" aria-label="研墨落笔成册">
+        <span class="grp"><span class="ch" style="--i:0">研</span><span class="ch" style="--i:1">墨</span><span class="ch" style="--i:2">·</span><span class="ch" style="--i:3">落</span><span class="ch" style="--i:4">笔</span><span class="ch" style="--i:5">·</span></span><span class="grp"><span class="ch" style="--i:6">成</span><span class="ch" style="--i:7">册</span></span>
+      </h1>
+      <div class="cover-side">
+        <p class="cover-claim">
+          把复习的每一步对应到一个书法动作：<b>录入是蘸墨</b>，<b>解析是研墨</b>，<b>复习是落笔</b>，<b>掌握是墨色沉淀</b>，<b>统计是成册</b>。全站动效都要能回答「这一步是哪一笔」。
+        </p>
+        <button class="seal" type="button" aria-label="盖上印章">研<br />墨</button>
+        <div class="cover-meta">
+          <span>PAPER <b>4</b> 阶</span>
+          <span>INK <b>4</b> 阶</span>
+          <span>SEAL <b>1</b> 主色</span>
+          <span>MOTION <b>3</b> 曲线 / <b>7</b> 原语</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ================= 场景一：砚台 ================= -->
+  <section class="sec" id="verse">
+    <div class="sec-head">
+      <span class="sec-no">01 / VERSE</span>
+      <h2 class="sec-title">今日复习 · 砚台</h2>
+      <span class="sec-note">墨量 = 待复习积压 · 键盘流 · 整块可点</span>
+    </div>
+
+    <div class="verse">
+      <!-- 左：墨柱 -->
+      <aside class="inkstone">
+        <div class="inkstone-lab">Ink well · 墨量</div>
+        <div class="well" role="img" aria-label="今日待复习 38 题，剩余比例约 76%">
+          <div class="well-fill" data-fill="76"></div>
+          <div class="well-ticks" aria-hidden="true"><i style="top:25%"></i><i style="top:50%"></i><i style="top:75%"></i></div>
+        </div>
+        <div class="ink-figure"><span class="n" data-count="38">0</span><span class="u">/ 50 题 今日配额</span></div>
+        <p class="ink-hint">积压 <b>99</b> 题，按每日 50 题摊还，约 <b>2</b> 天清完。不做毕业淘汰——答错只回到明天。</p>
+        <div class="inkdot" title="掌握度分布" aria-label="掌握度分布">
+          <i class="l1"></i><i class="l2"></i><i class="l2"></i><i class="l3"></i><i class="l3"></i><i class="l4"></i><i class="l5"></i>
+        </div>
+      </aside>
+
+      <!-- 右：复习纸页 -->
+      <div>
+        <article class="paper" tabindex="0" role="button">
+          <div class="paper-top">
+            <span class="stamp">数学二</span>
+            <span class="stamp t-teal">高等数学</span>
+            <span class="stamp t-ink">选择题</span>
+            <span class="paper-src">2019 · 真题 · 第 7 题</span>
+            <span class="spacer" style="flex:1"></span>
+            <span class="inkdot"><i class="l2"></i><i class="l2"></i><i class="off"></i><i class="off"></i><i class="off"></i></span>
+          </div>
+          <p class="paper-q">设函数 <b>f(x)</b> 在 <b>x=0</b> 处连续，且 <b>lim(x→0) f(x)/x = 1</b>，则 <b>f′(0)</b> 等于（ ）</p>
+          <div class="paper-ops">
+            <button class="btn btn-primary" type="button">落笔（空格）</button>
+            <button class="btn" type="button">看答案</button>
+            <button class="btn btn-ghost" type="button">稍后</button>
+          </div>
+        </article>
+
+        <article class="paper" tabindex="0" role="button">
+          <div class="paper-top">
+            <span class="stamp t-teal">英语二</span>
+            <span class="stamp t-gold">阅读理解</span>
+            <span class="paper-src">2021 · 真题 · Text 2</span>
+          </div>
+          <p class="paper-q">According to Paragraph&nbsp;3, the author suggests that digital archives ______.</p>
+          <div class="paper-ops">
+            <button class="btn btn-primary" type="button">落笔（空格）</button>
+            <button class="btn" type="button">看答案</button>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ================= 场景二：蘸墨台 ================= -->
+  <section class="sec" id="tray">
+    <div class="sec-head">
+      <span class="sec-no">02 / TRAY</span>
+      <h2 class="sec-title">智能录入 · 蘸墨台</h2>
+      <span class="sec-note">先蘸满墨（多图暂存），再研墨（一次解析）</span>
+    </div>
+
+    <div class="tray">
+      <div>
+        <div class="drop">
+          <p style="margin:0 0 6px;font-family:var(--serif);font-size:var(--fs-h3)">粘贴或选择题目图片</p>
+          <p style="margin:0;font-size:var(--fs-sm);color:var(--d-ink-2)">
+            支持一次选多张（最多 5 张）：原文 + 题目 + 选项分屏截图，<b>全部蘸好再研墨</b>，避免每贴一张就跑一次 AI。
+          </p>
+        </div>
+        <div class="tray-strip" id="strip">
+          <div class="thumb"><b>1</b>原文</div>
+          <div class="thumb" style="animation-delay:.08s"><b>2</b>题目</div>
+          <div class="thumb" style="animation-delay:.16s"><b>3</b>选项</div>
+        </div>
+        <div class="grind">
+          <div class="grind-track"><div class="grind-fill" data-fill="62"></div><div class="grind-scan"></div></div>
+          <div class="grind-log">
+            <div>① 研墨中 · 识别 3 张图片 → 提取原文与题干 <b>DONE</b></div>
+            <div>② 研墨中 · 分段翻译 12 句 <b>RUNNING</b></div>
+            <div>③ 待研 · 生词与短语抽取</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="leaf">
+        <div class="leaf-lab">研墨得出 · 结果</div>
+        <h4 style="font-family:var(--serif);font-size:var(--fs-h3);margin:12px 0 6px">Digital archives</h4>
+        <p style="margin:0;font-size:var(--fs-sm);color:var(--d-ink-2);line-height:1.85">
+          数字档案正在改变研究者获取史料的方式，但作者提醒：<b>可得性不等于可靠性</b>。
+        </p>
+        <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap">
+          <span class="stamp t-teal">archive /ˈɑːkaɪv/</span>
+          <span class="stamp t-teal">accessibility</span>
+          <span class="stamp t-gold">长难句 ×3</span>
+        </div>
+        <div class="paper-ops" style="margin-top:16px">
+          <button class="btn btn-primary" type="button">收为错题</button>
+          <button class="btn" type="button">全部生词入本</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ================= 场景三：宣纸墙 ================= -->
+  <section class="sec" id="wall">
+    <div class="sec-head">
+      <span class="sec-no">03 / WALL</span>
+      <h2 class="sec-title">错题与知识点 · 宣纸墙</h2>
+      <span class="sec-note">整块可点 · 书脊色标 · 错落堆叠</span>
+    </div>
+    <div class="wall">
+      <button class="tile" type="button" style="--spine:var(--d-seal)">
+        <i class="tile-spine" aria-hidden="true"></i>
+        <h4>泰勒公式的余项</h4>
+        <p>展开点与余项形式要一起记；拉格朗日余项适合估阶，佩亚诺余项只给局部信息。</p>
+        <div class="tile-foot"><span>数学二</span><span>·</span><span>错 3 次</span><span>·</span><span>09-08</span></div>
+      </button>
+      <button class="tile" type="button" style="--spine:var(--d-teal)">
+        <i class="tile-spine" aria-hidden="true"></i>
+        <h4>长难句：找主谓</h4>
+        <p>先切分主句主干，再挂从句与插入语。选项里最常见的干扰是「代词指代错位」。</p>
+        <div class="tile-foot"><span>英语二</span><span>·</span><span>错 5 次</span><span>·</span><span>09-07</span></div>
+      </button>
+      <button class="tile" type="button" style="--spine:var(--d-gold)">
+        <i class="tile-spine" aria-hidden="true"></i>
+        <h4>矛盾的对立统一</h4>
+        <p>同一性与斗争性、普遍性与特殊性，两对关系不要混。分析题按「原理—材料—结论」三步写。</p>
+        <div class="tile-foot"><span>政治</span><span>·</span><span>错 2 次</span><span>·</span><span>09-05</span></div>
+      </button>
+      <button class="tile" type="button" style="--spine:var(--d-violet)">
+        <i class="tile-spine" aria-hidden="true"></i>
+        <h4>二叉排序树 vs 堆</h4>
+        <p>前者中序遍历有序，后者只保证局部父子关系。插入删除的复杂度差异是常考点。</p>
+        <div class="tile-foot"><span>408</span><span>·</span><span>错 4 次</span><span>·</span><span>09-04</span></div>
+      </button>
+      <button class="tile" type="button" style="--spine:var(--d-seal)">
+        <i class="tile-spine" aria-hidden="true"></i>
+        <h4>夹逼准则的放缩</h4>
+        <p>放缩要「两头都收得住」；常见错误是只放一边，导致极限夹不住。</p>
+        <div class="tile-foot"><span>数学二</span><span>·</span><span>错 2 次</span><span>·</span><span>09-02</span></div>
+      </button>
+      <button class="tile" type="button" style="--spine:var(--d-teal)">
+        <i class="tile-spine" aria-hidden="true"></i>
+        <h4>虚拟语气三种时态</h4>
+        <p>与现在/过去/将来事实相反，各自的从句与主句形式不同，判断依据看时间状语。</p>
+        <div class="tile-foot"><span>英语二</span><span>·</span><span>错 3 次</span><span>·</span><span>08-30</span></div>
+      </button>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ================= 场景四：成册 ================= -->
+  <section class="sec is-drawn" id="binder">
+    <div class="sec-head">
+      <span class="sec-no">04 / BINDER</span>
+      <h2 class="sec-title">学习统计 · 成册</h2>
+      <span class="sec-note">编辑式非对称网格 · 笔锋折线 · 墨色热力</span>
+    </div>
+
+    <div class="binder">
+      <div class="leaf span4">
+        <div class="leaf-lab">Review streak</div>
+        <div class="leaf-big" data-count="27">0</div>
+        <div class="leaf-sub">连续复习天数 · <span style="color:var(--d-seal)">最佳 41</span></div>
+      </div>
+      <div class="leaf span4">
+        <div class="leaf-lab">Accuracy</div>
+        <div class="leaf-big" data-count="78" data-suffix="%">0</div>
+        <div class="leaf-sub">近 30 天正确率 · 上次 74%</div>
+      </div>
+      <div class="leaf span4">
+        <div class="leaf-lab">Mastery</div>
+        <div class="leaf-big" data-count="62" data-suffix="%">0</div>
+        <div class="leaf-sub">平均掌握度 · 薄弱：级数、概率</div>
+      </div>
+
+      <div class="leaf span7" style="margin-top:0">
+        <div class="leaf-lab">Accumulated strokes · 28 天累计笔迹</div>
+        <svg class="stroke-svg" viewBox="0 0 560 118" preserveAspectRatio="none" aria-label="近 28 天复习量走势">
+          <path class="area" d="M0,92 C40,80 70,54 110,60 C150,66 180,34 220,40 C260,46 300,18 340,26 C380,34 420,12 470,20 C510,26 535,16 560,14 L560,118 L0,118 Z" />
+          <path class="line" d="M0,92 C40,80 70,54 110,60 C150,66 180,34 220,40 C260,46 300,18 340,26 C380,34 420,12 470,20 C510,26 535,16 560,14" style="--len:820" />
+          <circle class="dot" cx="560" cy="14" r="3.4" />
+        </svg>
+      </div>
+
+      <div class="leaf span5">
+        <div class="leaf-lab">Load forecast · 复习负荷预报</div>
+        <div class="bars" data-bars="62,38,84,26,52,71,44,18,33,58,24,12">
+          <span></span><span></span><span class="hot"></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="bars-lab"><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+        <div class="leaf-sub" style="margin-top:12px">周五 84 题偏重，可提前分摊到周四。</div>
+      </div>
+
+      <div class="leaf span12">
+        <div class="leaf-lab">Ink heat · 复习热力（近 26 周）</div>
+        <div class="gridheat" id="heat" aria-hidden="true"></div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ================= 规格表 ================= -->
+  <section class="sec" id="spec">
+    <div class="sec-head">
+      <span class="sec-no">05 / SPEC</span>
+      <h2 class="sec-title">材质与动效规格</h2>
+      <span class="sec-note">点任意一张卡片，看该原语动起来</span>
+    </div>
+
+    <h3 style="font-family:var(--serif);font-size:var(--fs-h3);margin:0 0 14px">色彩：纸 4 阶 · 墨 4 阶 · 朱砂唯一强调</h3>
+    <div class="spec" style="margin-bottom:38px">
+      <div class="swatch"><div class="chip" style="background:var(--d-paper-0)"></div><div class="meta"><b>纸 0 · 最亮面</b>卡片正面 / 弹窗</div></div>
+      <div class="swatch"><div class="chip" style="background:var(--d-paper-1)"></div><div class="meta"><b>纸 1 · 基底</b>页面背景</div></div>
+      <div class="swatch"><div class="chip" style="background:var(--d-paper-2)"></div><div class="meta"><b>纸 2 · 凹陷</b>输入槽 / 空态</div></div>
+      <div class="swatch"><div class="chip" style="background:var(--d-paper-3)"></div><div class="meta"><b>纸 3 · 折痕</b>分隔与叠压</div></div>
+      <div class="swatch"><div class="chip" style="background:var(--d-ink-0)"></div><div class="meta"><b>墨 0 · 正文</b>最高对比</div></div>
+      <div class="swatch"><div class="chip" style="background:var(--d-ink-1)"></div><div class="meta"><b>墨 1 · 次级</b>说明文字</div></div>
+      <div class="swatch"><div class="chip" style="background:var(--d-ink-2)"></div><div class="meta"><b>墨 2 · 辅助</b>元信息</div></div>
+      <div class="swatch"><div class="chip" style="background:var(--d-seal)"></div><div class="meta"><b>朱砂 · 强调</b>主操作 / 印章 / 错误</div></div>
+    </div>
+
+    <h3 style="font-family:var(--serif);font-size:var(--fs-h3);margin:0 0 14px">动效七原语 <span style="font-family:var(--mono);font-size:var(--fs-xs);color:var(--d-ink-2);font-weight:400;letter-spacing:.08em">· 点击卡片重播</span></h3>
+    <div class="motion-row">
+      <div class="motion-card" data-motion><h5>墨晕揭示</h5><p>内容出现：模糊 → 清晰，模拟墨在纸纤维上洇开</p><div class="motion-stage m-bleed"><span class="blot"></span></div></div>
+      <div class="motion-card" data-motion><h5>纸张翻折</h5><p>卡片 → 详情：绕 X 轴翻起，带投影收紧</p><div class="motion-stage m-fold"><span class="blot"></span></div></div>
+      <div class="motion-card" data-motion><h5>印章落定</h5><p>确认类反馈：过冲回弹 + 微旋转，一锤定音</p><div class="motion-stage m-seal"><span class="blot"></span></div></div>
+      <div class="motion-card" data-motion><h5>笔锋描绘</h5><p>数据呈现：路径从左至右写出，像一笔画完</p><div class="motion-stage m-stroke"><span class="blot"></span></div></div>
+      <div class="motion-card" data-motion><h5>扫描线</h5><p>等待上游：说明「正在研墨」，而非虚构百分比</p><div class="motion-stage m-scan"><span class="blot"></span></div></div>
+      <div class="motion-card" data-motion><h5>墨滴扩散</h5><p>点击反馈：从落点扩散的涟漪，对应「落笔」</p><div class="motion-stage m-ripple"><span class="blot"></span></div></div>
+      <div class="motion-card" data-motion><h5>焦点墨圈</h5><p>键盘焦点：深墨圈 + 纸色间隔 + 朱砂外环，始终可见</p><div class="motion-stage m-focus"><span class="blot"></span></div></div>
+    </div>
+
+    <h3 style="font-family:var(--serif);font-size:var(--fs-h3);margin:38px 0 14px">排版：宋体承担语气，无衬线承担信息</h3>
+    <div class="leaf">
+      <p style="font-family:var(--serif);font-size:clamp(24px,3vw,40px);font-weight:700;line-height:1.35;margin:0 0 14px;letter-spacing:-0.01em">
+        考研不是把知识搬进脑子，而是把错的地方一遍遍磨平。
+      </p>
+      <p style="margin:0;color:var(--d-ink-1);max-width:62ch">
+        正文用无衬线保证长时间阅读不累；标题与强调用宋体承担语气与节奏；<span style="font-family:var(--latin);font-variant-numeric:tabular-nums;font-weight:700">1,284 / 27 / 96.5%</span>
+        这类数字走等宽或拉丁字体，避免中文字体里的数字宽窄跳动。所有字号用 <span style="font-family:var(--mono);font-size:12px">clamp()</span> 流体缩放，窄屏重排而不等比缩小。
+      </p>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>概念样张 · 仅用于确认视觉方向</span>
+    <span class="spacer"></span>
+    <span>研墨 · 落笔 · 成册</span>
+    <span>PAPER / INK / SEAL / MOTION</span>
+  </footer>
+</main>
+
+<script>
+(function () {
+  'use strict'
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  /* ---- 墨柱与进度条：进入视口时才填充，避免首屏同时抖动 ---- */
+  function fillWhenVisible(el) {
+    var target = Number(el.dataset.fill || 0)
+    if (reduce) { el.style.height = target + '%'; el.style.width = target + '%'; return }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return
+        // 竖向墨柱用 height，横向进度条用 width
+        if (el.classList.contains('well-fill')) el.style.height = target + '%'
+        else el.style.width = target + '%'
+        io.disconnect()
+      })
+    }, { threshold: 0.35 })
+    io.observe(el)
+  }
+  document.querySelectorAll('[data-fill]').forEach(fillWhenVisible)
+
+  /* ---- 数字滚动：等宽数字逐帧变化，末位不跳宽 ---- */
+  function countUp(el) {
+    var target = Number(el.dataset.count || 0)
+    var suffix = el.dataset.suffix || ''
+    if (reduce) { el.textContent = target + suffix; return }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return
+        io.disconnect()
+        var t0 = performance.now(), dur = 1100
+        ;(function step(now) {
+          var p = Math.min(1, (now - t0) / dur)
+          var eased = 1 - Math.pow(1 - p, 3)
+          el.textContent = Math.round(target * eased) + suffix
+          if (p < 1) requestAnimationFrame(step)
+        })(t0)
+      })
+    }, { threshold: 0.5 })
+    io.observe(el)
+  }
+  document.querySelectorAll('[data-count]').forEach(countUp)
+
+  /* ---- 墨条：进入视口后按数值升长 ---- */
+  var barsWrap = document.querySelector('[data-bars]')
+  if (barsWrap) {
+    var vals = (barsWrap.dataset.bars || '').split(',').map(Number)
+    var spans = barsWrap.querySelectorAll('span')
+    var render = function () {
+      spans.forEach(function (s, i) { s.style.height = Math.max(6, Math.min(100, vals[i] || 0)) + '%' })
+    }
+    if (reduce) render()
+    else new IntersectionObserver(function (en, io) {
+      if (en[0].isIntersecting) { render(); io.disconnect() }
+    }, { threshold: 0.4 }).observe(barsWrap)
+  }
+
+  /* ---- 热力网格：26 周 × 7 天的确定性伪随机，避免每次刷新都变 ---- */
+  var heat = document.getElementById('heat')
+  if (heat) {
+    var seed = 20260914
+    var rnd = function () { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff }
+    for (var i = 0; i < 26 * 7; i++) {
+      var cell = document.createElement('i')
+      var r = rnd()
+      var v = r > 0.86 ? 4 : r > 0.68 ? 3 : r > 0.44 ? 2 : r > 0.24 ? 1 : 0
+      if (v) cell.dataset.v = String(v)
+      heat.appendChild(cell)
+    }
+  }
+
+  /* ---- 动效原语卡片：点击重播（同一张卡可反复看） ---- */
+  document.querySelectorAll('[data-motion]').forEach(function (card) {
+    card.addEventListener('click', function () {
+      card.classList.remove('run')
+      void card.offsetWidth           // 强制重排以重启动画
+      card.classList.add('run')
+    })
+    card.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); card.click() }
+    })
+    card.tabIndex = 0
+    card.setAttribute('role', 'button')
+  })
+
+  /* ---- 落笔涟漪：按钮点击处扩散（scale + opacity，不触发布局） ---- */
+  document.addEventListener('pointerdown', function (ev) {
+    var b = ev.target.closest && ev.target.closest('.btn')
+    if (!b || reduce) return
+    var r = b.getBoundingClientRect()
+    var s = Math.max(r.width, r.height) * 2.2
+    var d = document.createElement('span')
+    d.className = 'rip'
+    d.style.width = d.style.height = s + 'px'
+    d.style.left = (ev.clientX - r.left - s / 2) + 'px'
+    d.style.top = (ev.clientY - r.top - s / 2) + 'px'
+    b.appendChild(d)
+    d.animate(
+      [{ transform: 'scale(0)', opacity: 0.55 }, { transform: 'scale(1)', opacity: 0 }],
+      { duration: 620, easing: 'cubic-bezier(0.22,0.61,0.36,1)' }
+    ).onfinish = function () { d.remove() }
+  })
+
+  /* ---- 印章：点击重播落印 ---- */
+  var seal = document.querySelector('.seal')
+  if (seal && !reduce) {
+    seal.addEventListener('click', function () {
+      seal.animate(
+        [{ transform: 'scale(1.4) rotate(-8deg)', opacity: 0.4 },
+         { transform: 'scale(0.96) rotate(1deg)' },
+         { transform: 'scale(1) rotate(0)' }],
+        { duration: 620, easing: 'cubic-bezier(0.34,1.32,0.42,1)' }
+      )
+    })
+  }
+
+  /* ---- 蘸墨台：点缩略图上的叉可移除，演示「先蘸满再研墨」 ---- */
+  document.querySelectorAll('#strip .thumb').forEach(function (t) {
+    var x = document.createElement('button')
+    x.className = 'x'; x.type = 'button'; x.textContent = '×'
+    x.setAttribute('aria-label', '移除这张图')
+    x.addEventListener('click', function (e) { e.stopPropagation(); t.remove() })
+    t.appendChild(x)
+  })
+})()
+</script>
+</body>
+</html>

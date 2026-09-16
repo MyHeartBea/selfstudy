@@ -36,7 +36,10 @@ class Settings:
     DB_PATH = PROJECT_ROOT / "data" / "kaoyan_mistakes.db"
     BACKUP_DIR = PROJECT_ROOT / "data" / "backups"
     MAX_BACKUPS = 20
-    FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+    # 前端构建产物目录：默认 v2（frontend/dist）。
+    # 允许用 .env 的 FRONTEND_DIST 覆盖 —— 这样 v3 前端（frontend-v3/dist）可以**并行上线**：
+    # 改一行 .env + 重启后端即可切换/回滚，不需要改任何代码，v2 也始终可用。
+    FRONTEND_DIST = Path(os.environ.get("FRONTEND_DIST", str(PROJECT_ROOT / "frontend" / "dist")))
     # 历年真题文件夹（真题库扫描根目录，可用 .env PAPERS_DIR 覆盖）
     PAPERS_DIR = os.environ.get("PAPERS_DIR", str(PROJECT_ROOT / "真题"))
     # 扫描版 PDF 的 OCR 兜底：最多渲染的页数（0=不限，默认 60）
