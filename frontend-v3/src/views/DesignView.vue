@@ -10,6 +10,17 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { focusRing, magnetic, revealAll, traceOnScroll } from '../design/motion'
+import InkCard from '../ui/InkCard.vue'
+import InkDot from '../ui/InkDot.vue'
+import StarRow from '../ui/StarRow.vue'
+import UiButton from '../ui/UiButton.vue'
+import UiField from '../ui/UiField.vue'
+import UiTag from '../ui/UiTag.vue'
+
+/** 组件分区用的受控状态 */
+const demoText = ref('泰勒公式的余项')
+const demoStar = ref(4)
+const demoDot = ref(3)
 
 const root = ref(null)
 let stops = []
@@ -187,6 +198,87 @@ onBeforeUnmount(() => stops.forEach((fn) => typeof fn === 'function' && fn()))
         <div class="panel centre">
           <button class="magnet" type="button">磁吸按钮</button>
           <a class="focus-ring" href="#main">键盘焦点示例</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 组件：原子 ── -->
+    <section class="block">
+      <h2 class="reveal">组件 · 原子</h2>
+      <p class="lead reveal">
+        每个组件都含键盘可达、focus-visible、aria 与 reduced-motion 降级。
+        <b>InkCard 整块可点靠事件绑在卡片本身</b>（不是覆盖层——覆盖层会被 z-index
+        更高的子元素盖住）。
+      </p>
+      <div class="atoms reveal">
+        <div class="atom">
+          <span class="alab mono">ui-button</span>
+          <div class="arow">
+            <UiButton variant="solid">主操作</UiButton>
+            <UiButton>次操作</UiButton>
+            <UiButton variant="quiet">低干扰</UiButton>
+            <UiButton variant="danger">删除</UiButton>
+            <UiButton loading>进行中</UiButton>
+          </div>
+        </div>
+
+        <div class="atom">
+          <span class="alab mono">ui-field</span>
+          <UiField v-model="demoText" label="题干" hint="支持公式与中文混排" counter="7 / 80" />
+        </div>
+
+        <div class="atom">
+          <span class="alab mono">ui-field（错误态）</span>
+          <UiField :model-value="''" label="答案" error="填空答案不能为空" />
+        </div>
+
+        <div class="atom">
+          <span class="alab mono">ui-tag</span>
+          <div class="arow">
+            <UiTag tone="red-shift" dot>反复错</UiTag>
+            <UiTag tone="vein">数据</UiTag>
+            <UiTag tone="gold">过载</UiTag>
+            <UiTag tone="violet">408</UiTag>
+            <UiTag>中性</UiTag>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 组件：复合 ── -->
+    <section class="block">
+      <h2 class="reveal">组件 · 复合</h2>
+      <p class="lead reveal">
+        InkCard 整块可点；InkDot 回答「记住多少」（有模糊地带，所以是五档而非百分比）； StarRow
+        回答「看过几遍」（客观可数）。两者语义不同，不要互相替代。
+      </p>
+
+      <div class="compound reveal">
+        <InkCard spine="var(--redshift)" flagged @select="() => {}">
+          <div class="chead">
+            <UiTag tone="red-shift" size="sm">数学二</UiTag>
+            <UiTag tone="vein" size="sm">高等数学</UiTag>
+            <span class="mono cmeta">2019 · 第 7 题</span>
+          </div>
+          <h3 class="ctitle">设函数 f(x) 在 x=0 处连续，求 f′(0)</h3>
+          <div class="cfoot">
+            <InkDot :value="demoDot" label="掌握度" />
+            <StarRow :value="demoStar" :max="7" label="复习遍数" />
+            <button class="cbtn mono" type="button" @click.stop>内部控件不冒泡</button>
+          </div>
+        </InkCard>
+
+        <div class="compound-note">
+          <p class="cexplain">
+            点卡片空白处 = 打开详情；点右下角按钮不会顺带打开（<b>@click.stop</b>）。 这条是 v2
+            真实事故的正面设计，已由单测钉死。
+          </p>
+          <div class="adjust">
+            <label class="mono">掌握度 {{ demoDot }}</label>
+            <input v-model.number="demoDot" type="range" min="0" max="5" step="1" />
+            <label class="mono">复习遍数 {{ demoStar }}</label>
+            <input v-model.number="demoStar" type="range" min="0" max="7" step="1" />
+          </div>
         </div>
       </div>
     </section>
@@ -535,6 +627,97 @@ h2 {
   margin-top: clamp(40px, 8vh, 90px);
   padding-top: 18px;
   border-top: 1px solid var(--line);
+}
+
+/* ── 组件分区 ── */
+.atoms {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+.atom {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px;
+  background: var(--sky-1);
+}
+.alab {
+  color: var(--ink-3);
+}
+.arow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+}
+.compound {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: clamp(16px, 2.6vw, 40px);
+  align-items: start;
+}
+.chead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 11px;
+}
+.cmeta {
+  color: var(--ink-3);
+}
+.ctitle {
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+.cfoot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.cbtn {
+  margin-left: auto;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  color: var(--ink-2);
+}
+.cbtn:hover {
+  border-color: var(--redshift);
+  color: var(--ink-0);
+}
+.cexplain {
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: 1.8;
+}
+.cexplain b {
+  color: var(--ink-0);
+  font-weight: 500;
+}
+.adjust {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+.adjust label {
+  color: var(--ink-2);
+}
+.adjust input[type='range'] {
+  width: 100%;
+  accent-color: var(--redshift);
+}
+@media (max-width: 900px) {
+  .compound {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
