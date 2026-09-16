@@ -102,11 +102,14 @@ def main() -> int:
     }
 
     if as_json:
+        # --json 只输出纯 JSON：之前同时打印人类摘要，导致消费方（verify_requirements）
+        # 无法直接 json.loads，只能靠找 '{' 猜边界 —— 那是脆弱的接口。
         print(json.dumps(report, ensure_ascii=False, indent=2))
-    else:
-        print(f'首屏合计 {first_kb:.1f} KB / 预算 {BUDGET_FIRST_SCREEN_KB:.0f} KB')
-        print('  组成: ' + ', '.join(f'{p.name} {kb(p):.0f}KB' for p in first))
-        print(f'块总数 {len(assets)}（懒加载块不计入首屏）')
+        return 1 if problems else 0
+
+    print(f'首屏合计 {first_kb:.1f} KB / 预算 {BUDGET_FIRST_SCREEN_KB:.0f} KB')
+    print('  组成: ' + ', '.join(f'{p.name} {kb(p):.0f}KB' for p in first))
+    print(f'块总数 {len(assets)}（懒加载块不计入首屏）')
 
     if problems:
         print('\n性能预算未通过：')

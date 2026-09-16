@@ -95,6 +95,11 @@ jobs:
       - name: Bundle budget
         working-directory: .
         run: python scripts/check_bundle_budget.py
+      # 硬性要求逐条核验（18 项：隐喻/排版/OKLCH/动效/WebGL/光标/磁吸/滚动/
+      # 悬停/Lucide/零 emoji/零 CDN/可访问性/reduced-motion/60fps/启动页/体积/v2 未动）
+      - name: Verify requirements
+        working-directory: .
+        run: python scripts/verify_requirements.py
 
   # v3 真浏览器 E2E（Playwright，独立端口 5176）
   # 后端不需要：E2E 里所有 /api 请求都用 page.route 打桩，所以 CI 里可独立运行。
