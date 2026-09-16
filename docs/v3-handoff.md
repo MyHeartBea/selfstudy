@@ -248,3 +248,21 @@ python main.py      # 工作目录 backend/
 
 **仍待用户确认的一步**：把 8000 的 FRONTEND_DIST 指到 v3（即 `serve_frontend.ps1 -Target v3`）。
 这是对外行为变更，需用户点头；回滚是一条命令。
+
+## 十一、待推送提交与网络故障记录（2026-09-16 晚）
+
+**本地有 1 个提交尚未推送到远端**：20d23b（生词本重做：真 3D 翻卡 + 三档反馈，键位与 v2 对齐）。
+远端 origin/main 停在 db7b6fe。
+
+**失败原因（已定位，非仓库问题）**：本机到 github.com:443 不可达。
+- git config http.proxy = http://127.0.0.1:7897，但**该端口没有监听**（Windows 系统代理 ProxyEnable=0）
+- 进程里只有 clash-verge-service（服务），代理内核未启动 → 没有任何可用代理
+- 绕过代理直连：Failed to connect to github.com port 443；Test-NetConnection github.com:443 = False
+- 但 https://api.github.com 与普通外网可通（说明是到 github.com 这条链路的连通性问题）
+
+**恢复办法（任选）**：
+1. 启动代理内核，让 127.0.0.1:7897 恢复监听，然后 git push -u origin main
+2. 或修好直连后：git -c http.proxy= -c https.proxy= push -u origin main
+3. 推送成功后确认：curl -s https://api.github.com/repos/MyHeartBea/selfstudy/commits/main | findstr sha
+
+**提交内容不会丢**：20d23b 在本地 git 历史里，工作区干净。
