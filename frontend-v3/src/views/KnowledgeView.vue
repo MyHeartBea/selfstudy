@@ -149,7 +149,7 @@ usePageMotion(pageRoot, { stagger: 55 })
 <template>
   <main ref="pageRoot" id="main" class="pad">
     <header class="head">
-      <span class="mono">[04] SPECIMENS · 知识点库</span>
+      <h1 class="mono page-h1">知识点库</h1>
       <span class="mono">{{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
     </header>
 
@@ -195,7 +195,7 @@ usePageMotion(pageRoot, { stagger: 55 })
       <div class="wall reveal" data-reveal>
         <InkCard v-for="row in items" :key="row.id" spine="var(--vein)" @select="openDetail(row)">
           <div class="chead">
-            <h3 class="kname">{{ row.tag_name }}</h3>
+            <h2 class="kname">{{ row.tag_name }}</h2>
             <span class="mono subj">{{ subjectName(row.subject_id) }}</span>
           </div>
           <p v-if="row.summary" class="ksum">{{ plain(row.summary).slice(0, 120) }}</p>
@@ -266,6 +266,13 @@ usePageMotion(pageRoot, { stagger: 55 })
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .pad {
   position: relative;
   z-index: var(--z-content);

@@ -160,7 +160,7 @@ onMounted(async () => {
         <span class="mono idx">{{ index + 1 }} / {{ queue.length }}</span>
       </div>
 
-      <h2 class="q">{{ current.question }}</h2>
+      <h1 class="q">{{ current.question }}</h1>
 
       <ul v-if="current.question_type === 'choice'" class="opts">
         <li

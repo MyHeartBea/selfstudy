@@ -88,7 +88,7 @@ onMounted(async () => {
 <template>
   <main id="main" ref="pageRoot" class="pad">
     <header class="head">
-      <span class="mono">[05] BINDER · 学习统计</span>
+      <h1 class="mono page-h1">学习统计</h1>
       <span class="mono"
         >{{ stats?.total_mistakes ?? 0 }} 条错题 · 复习 {{ reviews?.total_reviews ?? 0 }} 次</span
       >
@@ -204,6 +204,13 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .pad {
   position: relative;
   z-index: var(--z-content);

@@ -87,7 +87,7 @@ onMounted(load)
 <template>
   <main id="main" ref="pageRoot" class="pad">
     <header class="head">
-      <span class="mono">[08] ARCHIVE · 真题库</span>
+      <h1 class="mono page-h1">真题库</h1>
       <span class="mono">{{ items.length }} 套 · 已入库 {{ imported.length }}</span>
     </header>
 
@@ -133,7 +133,7 @@ onMounted(load)
             <span v-if="row.year" class="mono yr">{{ row.year }}</span>
             <span v-if="row.subject" class="mono subj">{{ row.subject }}</span>
           </div>
-          <h3 class="ptitle">{{ row.title }}</h3>
+          <h2 class="ptitle">{{ row.title }}</h2>
           <p class="pmeta mono">
             {{ row.question_count || 0 }} 题 · 已作答 {{ row.answered_count || 0 }}
           </p>
@@ -180,6 +180,13 @@ onMounted(load)
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .pad {
   position: relative;
   z-index: var(--z-content);

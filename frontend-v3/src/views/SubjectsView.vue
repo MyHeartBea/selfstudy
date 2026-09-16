@@ -128,7 +128,7 @@ onMounted(() => {
       <section class="col main reveal" data-reveal>
         <template v-if="active">
           <div class="mhead">
-            <h2 class="title">{{ active.name }}</h2>
+            <h1 class="title">{{ active.name }}</h1>
             <UiTag tone="vein" size="sm"> 错题 {{ counts.get(active.id) || 0 }} 条 </UiTag>
           </div>
 

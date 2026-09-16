@@ -218,7 +218,7 @@ usePageMotion(pageRoot, { stagger: 55 })
           <span class="mono idx">{{ doneCount + 1 }} / {{ total }}</span>
         </div>
 
-        <h2 class="q">{{ current.question }}</h2>
+        <h1 class="q">{{ current.question }}</h1>
 
         <ul v-if="current.question_type === 'choice'" class="opts">
           <li

@@ -90,6 +90,11 @@ jobs:
       # v3 的 Vue 模板编译错误同样只有 build 能发现
       - name: Build v3
         run: npm run build
+      # 性能预算：首屏体积与单块上限。chunkSizeWarningLimit 只打印警告，
+      # 这里把它变成会让 CI 失败的硬断言（脚本从 dist/index.html 解析真实首屏资源）
+      - name: Bundle budget
+        working-directory: .
+        run: python scripts/check_bundle_budget.py
 
   # 真浏览器 E2E：命中测试（整块可点）与真实 paste 事件只有这里能覆盖。
   # 自己起 vite dev（Playwright webServer），所有 /api 在浏览器层打桩，不需要后端。

@@ -152,7 +152,7 @@ usePageMotion(pageRoot, { stagger: 55 })
       </div>
 
       <button class="card" type="button" @click="flipped = !flipped">
-        <span class="word">{{ current?.word }}</span>
+        <h1 class="word">{{ current?.word }}</h1>
         <span v-if="current?.phonetic" class="mono phon">{{ current.phonetic }}</span>
 
         <template v-if="flipped">

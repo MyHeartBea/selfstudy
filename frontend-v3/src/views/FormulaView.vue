@@ -79,7 +79,7 @@ usePageMotion(pageRoot, { stagger: 55 })
 <template>
   <main ref="pageRoot" id="main" class="pad">
     <header class="head">
-      <span class="mono">[07] FORMULA · 公式背诵</span>
+      <h1 class="mono page-h1">公式背诵</h1>
       <span class="mono">{{ items.length }} 条 · 当前 {{ filtered.length }}</span>
     </header>
 
@@ -118,7 +118,7 @@ usePageMotion(pageRoot, { stagger: 55 })
         <div class="chead">
           <UiTag tone="gold" size="sm">{{ row.category }}</UiTag>
         </div>
-        <h3 class="ftitle">{{ row.title }}</h3>
+        <h2 class="ftitle">{{ row.title }}</h2>
         <!-- 卡片内只渲染公式本体；KaTeX 懒加载 -->
         <div class="fprev"><MathText :text="row.content" /></div>
       </InkCard>
@@ -141,6 +141,13 @@ usePageMotion(pageRoot, { stagger: 55 })
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .pad {
   position: relative;
   z-index: var(--z-content);

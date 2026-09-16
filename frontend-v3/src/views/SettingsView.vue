@@ -93,7 +93,7 @@ onMounted(() => {
 
     <!-- 版本与来源：并行期最要紧的自查信息 -->
     <section class="leaf reveal" data-reveal>
-      <h2 class="kh">版本与来源</h2>
+      <h1 class="kh">版本与来源</h1>
       <div class="rows">
         <div class="row">
           <span class="k">当前前端</span>

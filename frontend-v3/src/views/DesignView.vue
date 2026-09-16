@@ -102,7 +102,7 @@ onBeforeUnmount(() => stops.forEach((fn) => typeof fn === 'function' && fn()))
 <template>
   <main id="main" ref="root" class="spec">
     <header class="head">
-      <span class="mono">[02] SPEC · 活体规范</span>
+      <h1 class="mono page-h1">活体规范</h1>
       <span class="mono">点任意原语卡可重播</span>
     </header>
 
@@ -292,10 +292,17 @@ onBeforeUnmount(() => stops.forEach((fn) => typeof fn === 'function' && fn()))
             真实事故的正面设计，已由单测钉死。
           </p>
           <div class="adjust">
-            <label class="mono">掌握度 {{ demoDot }}</label>
-            <input v-model.number="demoDot" type="range" min="0" max="5" step="1" />
-            <label class="mono">复习遍数 {{ demoStar }}</label>
-            <input v-model.number="demoStar" type="range" min="0" max="7" step="1" />
+            <label class="mono" for="adj-mastery">掌握度 {{ demoDot }}</label>
+            <input
+              id="adj-mastery"
+              v-model.number="demoDot"
+              type="range"
+              min="0"
+              max="5"
+              step="1"
+            />
+            <label class="mono" for="adj-star">复习遍数 {{ demoStar }}</label>
+            <input id="adj-star" v-model.number="demoStar" type="range" min="0" max="7" step="1" />
           </div>
         </div>
       </div>
@@ -382,6 +389,13 @@ onBeforeUnmount(() => stops.forEach((fn) => typeof fn === 'function' && fn()))
 </template>
 
 <style scoped>
+.page-h1 {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
 .spec {
   position: relative;
   z-index: var(--z-content);
