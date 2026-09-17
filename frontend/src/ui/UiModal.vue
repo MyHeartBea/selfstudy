@@ -51,6 +51,7 @@ onUnmounted(() => {
       <div
         v-if="modelValue"
         class="modal-backdrop"
+        data-lenis-prevent
         :style="{ zIndex: props.zIndex }"
         @mousedown.self="close()"
       >

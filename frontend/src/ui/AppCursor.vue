@@ -80,6 +80,8 @@ function onVisibility() {
 
 onMounted(() => {
   if (!allowed()) return
+  // 挂载成功才隐藏原生指针（安全网：脚本没跑起来时原生指针仍在）
+  document.body.classList.add('km-custom-cursor')
   window.addEventListener('pointermove', onMove, { passive: true })
   window.addEventListener('pointerdown', onDown, { passive: true })
   window.addEventListener('pointerup', onUp, { passive: true })
@@ -90,6 +92,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  document.body.classList.remove('km-custom-cursor')
   cancelAnimationFrame(raf)
   window.removeEventListener('pointermove', onMove)
   window.removeEventListener('pointerdown', onDown)

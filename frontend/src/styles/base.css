@@ -757,3 +757,34 @@ textarea.field-input {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }
+
+/* ── 自定义光标：隐藏原生指针（学参考稿）────────────────────────────────
+   用户反馈"鼠标加上一个圆球，鼠标完全没有隐匿掉，非常难看" —— 之前我刻意
+   保留原生指针作为可用性兜底，但视觉上确实是两个东西叠在一起。改为隐藏原生
+   指针，同时做两件事防"没有指针"：
+     · 输入类控件（输入框/文本域/下拉）保留文本光标 —— 否则选字没有反馈
+     · 只在 body 带上 .km-custom-cursor 时才隐藏 —— 该类由 AppCursor 挂载成功后
+       添加。万一脚本没跑起来（或被拦截），原生指针自动回来，不会"没有指针"。
+   iframe / video 也保留默认指针，避免这些区域"点不到"的错觉。 */
+body.km-custom-cursor,
+body.km-custom-cursor a,
+body.km-custom-cursor button,
+body.km-custom-cursor [role='button'],
+body.km-custom-cursor .card,
+body.km-custom-cursor .row,
+body.km-custom-cursor summary {
+  cursor: none;
+}
+body.km-custom-cursor input,
+body.km-custom-cursor textarea,
+body.km-custom-cursor select,
+body.km-custom-cursor iframe,
+body.km-custom-cursor video {
+  cursor: auto;
+}
+body.km-custom-cursor input[type='text'],
+body.km-custom-cursor input[type='search'],
+body.km-custom-cursor input[type='number'],
+body.km-custom-cursor textarea {
+  cursor: text;
+}
