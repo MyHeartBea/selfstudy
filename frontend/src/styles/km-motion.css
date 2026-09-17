@@ -1,0 +1,169 @@
+/* ============================================================================
+   错题本 · 交互与排版增强层（km-motion.css）
+   ----------------------------------------------------------------------------
+   学自参考稿、但**保持 v2 的米色 + 朱砂语言**（用户选定的方案 A）。
+
+   这一层的意义：把"列表该有的交互"一次定义好，各页面直接复用类名，
+   不必每页重写一遍悬停/揭示/等宽读数 —— 也就不会再出现"改了一页、漏了九页"。
+
+   包含四组：
+     1. .km-list / .km-item     列表与条目：整行悬停填充（clip-path）+ 位移
+     2. .km-reveal              逐行揭示（配合 GSAP 或 CSS transition）
+     3. .km-mono / .km-num      等宽小字与等宽数位（读数不抖）
+     4. 光标命中态              由 AppCursor 加类，这里定义"命中时元素自身的反馈"
+
+   硬约束：只动 transform / opacity / clip-path（合成层，不触发布局）。
+   ========================================================================== */
+
+/* ── 1. 列表与条目 ──────────────────────────────────────────────────────── */
+.km-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 整行可交互条目：悬停时**整行**被填充并轻微右移。
+   用 clip-path 而不是背景色过渡：clip 只影响合成，且能做出"从左侧刷过来"的方向感
+   （单纯改 background-color 没有方向，观感廉价）。 */
+.km-item {
+  position: relative;
+  isolation: isolate;
+  transition: padding-left 0.5s var(--ease);
+}
+.km-item::before {
+  content: '';
+  position: absolute;
+  inset: 0 calc(-1 * var(--pad, 20px));
+  z-index: -1;
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.55s var(--ease);
+}
+.km-item:hover::before,
+.km-item:focus-within::before {
+  clip-path: inset(0 0 0 0);
+}
+.km-item:hover {
+  padding-left: 12px;
+}
+
+/* 卡片式条目：悬停上浮 + 边框转亮（暗/亮两种主题都能用）。
+   不用大阴影：米色底上的黑阴影会显脏，改用描边与极淡冷光。 */
+.km-card {
+  position: relative;
+  transition:
+    transform 0.45s var(--ease),
+    border-color 0.35s var(--ease),
+    box-shadow 0.45s var(--ease);
+  will-change: transform;
+}
+.km-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--line-strong);
+  box-shadow: 0 18px 40px -30px rgba(0, 0, 0, 0.55);
+}
+/* 卡片内的"折起"暗示：右下角一道斜切，只在悬停出现 */
+.km-card::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  background: linear-gradient(315deg, var(--surface-2, rgba(0, 0, 0, 0.06)) 0 50%, transparent 50%);
+  opacity: 0;
+  transition: opacity 0.35s var(--ease);
+}
+.km-card:hover::after {
+  opacity: 1;
+}
+
+/* 列表里的次要信息统一用等宽小字（参考稿的 .mono 手法） */
+.km-meta {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+/* 极小 + 大字距 + 大写：用于栏目标签/眉头 */
+.km-kicker {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* ── 2. 逐行揭示 ─────────────────────────────────────────────────────────
+   外层做遮罩（overflow hidden），内层从下方顶上来。
+   与"整体淡入"的区别：文字像是被**推出来**的，一行一行有先后。
+   触发方式二选一：
+     · 父级带 .km-reveal-root，进入视口后由 CSS 过渡（配合一两行 JS 加 .in）
+     · 或交给 GSAP ScrollTrigger（见 composables/motion.js 的 data-reveal-lines） */
+.km-reveal-line {
+  display: block;
+  overflow: hidden;
+}
+.km-reveal-line > * {
+  display: block;
+  transform: translateY(105%);
+  opacity: 0;
+  transition:
+    transform 0.95s cubic-bezier(0.22, 1.12, 0.36, 1),
+    opacity 0.5s ease;
+}
+.km-reveal-root.in .km-reveal-line > *,
+.km-reveal-line.in > * {
+  transform: none;
+  opacity: 1;
+}
+/* 第二行起依次延迟（错峰） */
+.km-reveal-root.in .km-reveal-line:nth-child(2) > *,
+.km-reveal-line.in:nth-child(2) > * {
+  transition-delay: 0.1s;
+}
+.km-reveal-root.in .km-reveal-line:nth-child(3) > *,
+.km-reveal-line.in:nth-child(3) > * {
+  transition-delay: 0.2s;
+}
+
+/* ── 3. 等宽数位 ─────────────────────────────────────────────────────────
+   页面上有多处在滚动数字（useCountUp）。比例字体下 "1" 比 "8" 窄，
+   每跳一次整行就抖一下 —— 计数器上非常显眼。 */
+.km-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* ── 4. 光标命中态 ───────────────────────────────────────────────────────
+   AppCursor 给光标自己加类；这里定义"被命中的元素"自身的反馈：
+   轻微顶起 + 强调色描边，让"可点"这件事在元素上也成立，而不只是光标变大。 */
+@media (hover: hover) and (pointer: fine) {
+  a:hover,
+  button:hover,
+  [role='button']:hover {
+    /* 只做很轻的位移，避免整页元素乱动 */
+    transition: transform 0.3s var(--ease);
+  }
+}
+
+/* ── 降级：减弱动效时全部瞬时到位 ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .km-item,
+  .km-item::before,
+  .km-card,
+  .km-card::after,
+  .km-reveal-line > * {
+    transition: none;
+  }
+  .km-item:hover {
+    padding-left: 0;
+  }
+  .km-card:hover {
+    transform: none;
+  }
+  .km-reveal-line > * {
+    transform: none;
+    opacity: 1;
+  }
+}
