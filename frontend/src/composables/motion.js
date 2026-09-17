@@ -223,6 +223,84 @@ export async function bindScrollMotion(root) {
       })
     })
 
+    // 2.5) 图表生长：按滚动进度长出来（用户要求"全部加入"）
+    //   条形用 scaleX、柱子用 scaleY、折线用 stroke-dashoffset —— 都只动合成属性，
+    //   不碰 width/height（那会触发布局抖动）。
+    root.querySelectorAll('[data-grow]').forEach((host) => {
+      const kind = host.dataset.grow
+      const trigger = {
+        trigger: host,
+        start: 'top 96%',
+        end: 'top 40%',
+        scrub: 0.6,
+      }
+
+      if (kind === 'bars') {
+        // 只选真正的"条"：v2 里条都写成 <i>。之前用宽选择器（i, .w-bar i, span[style]）
+        // 会把图例色块也算进来，缩放后出现莫名其妙的空白。
+        const bars = host.querySelectorAll('i')
+        if (!bars.length) return
+        gsap.set(bars, { transformOrigin: 'left center' })
+        // 用 fromTo 而不是 from：from 在元素已进入触发区时会立刻应用起始值，
+        // 若 scrub 进度已是 1 就**永远停在 scaleX(0)**（实测过的 bug）。
+        gsap.fromTo(
+          bars,
+          { scaleX: 0 },
+          { scaleX: 1, ease: 'none', stagger: 0.05, scrollTrigger: trigger },
+        )
+        return
+      }
+
+      if (kind === 'steps') {
+        const cols = host.querySelectorAll(':scope > *')
+        if (!cols.length) return
+        gsap.set(cols, { transformOrigin: 'bottom center' })
+        gsap.fromTo(
+          cols,
+          { scaleY: 0 },
+          { scaleY: 1, ease: 'none', stagger: 0.06, scrollTrigger: trigger },
+        )
+        return
+      }
+
+      if (kind === 'chart') {
+        const paths = host.querySelectorAll('path, polyline, line')
+        const dots = host.querySelectorAll('circle')
+        paths.forEach((el) => {
+          // 用 let + try 包住：某些浏览器对不可见 SVG 调 getTotalLength 会抛错
+          let len
+          try {
+            len = el.getTotalLength ? el.getTotalLength() : 0
+          } catch {
+            len = 0
+          }
+          if (!len) return
+          gsap.set(el, { strokeDasharray: len, strokeDashoffset: len })
+          gsap.to(el, { strokeDashoffset: 0, ease: 'none', scrollTrigger: trigger })
+        })
+        if (dots.length) {
+          gsap.from(dots, {
+            opacity: 0,
+            scale: 0.6,
+            ease: 'none',
+            stagger: 0.04,
+            scrollTrigger: trigger,
+          })
+        }
+        return
+      }
+
+      if (kind === 'ring') {
+        const arc = host.querySelector('circle')
+        if (!arc) return
+        const r = arc.r?.baseVal?.value || 0
+        const len = 2 * Math.PI * r
+        if (!len) return
+        gsap.set(arc, { strokeDasharray: len, strokeDashoffset: len })
+        gsap.to(arc, { strokeDashoffset: 0, ease: 'none', scrollTrigger: trigger })
+      }
+    })
+
     // 3) 视差：按 data-parallax 的值决定位移幅度（默认 60px）
     root.querySelectorAll('[data-parallax]').forEach((el) => {
       const amount = Number(el.dataset.parallax) || 60

@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
       <GlassCard>
         <h3 class="panel-title" data-reveal-lines>掌握度墨阶</h3>
         <p class="cap" data-reveal-words>{{ stats.total_mistakes }} 道错题 · 墨色越深掌握越牢</p>
-        <div class="m-steps">
+        <div class="m-steps" data-grow="steps">
           <div
             v-for="s in masterySteps"
             :key="s.level"
@@ -481,18 +481,18 @@ onBeforeUnmount(() => {
             去复习，点亮今天
           </UiButton>
         </div>
-        <ReviewHeatmap :days="119" />
+        <ReviewHeatmap :days="119" data-reveal-lines />
       </GlassCard>
 
       <GlassCard>
         <h3 class="panel-title" data-reveal-lines>薄弱知识点</h3>
         <p class="cap">按累计答错排序 · 点击直通练习</p>
-        <div v-if="reviewStats.weakest_tags.length" class="weak-list">
+        <div v-if="reviewStats.weakest_tags.length" class="weak-list km-list">
           <button
             v-for="(row, i) in reviewStats.weakest_tags"
             :key="row.tag_name"
             type="button"
-            class="weak-item"
+            class="weak-item km-item"
             @click="practiceTag(row.tag_name)"
           >
             <span class="w-rank num km-num">{{ i + 1 }}</span>
@@ -536,7 +536,7 @@ onBeforeUnmount(() => {
             >逾期 <b class="num km-num">{{ forecast.overdue }}</b> 题</span
           >
         </div>
-        <div class="fc-bars">
+        <div class="fc-bars" data-grow="bars">
           <div
             v-for="c in forecastCols"
             :key="c.day"
@@ -630,7 +630,7 @@ onBeforeUnmount(() => {
           <h3 class="panel-title" data-reveal-lines>模考成绩趋势</h3>
           <span class="cap">最近 {{ mockTrend.length }} 场 · 交卷自动存档</span>
         </div>
-        <div v-if="mockTrend.length >= 2" class="mk-chart">
+        <div v-if="mockTrend.length >= 2" class="mk-chart" data-grow="chart">
           <svg
             viewBox="0 0 560 90"
             width="100%"
@@ -1718,6 +1718,21 @@ onBeforeUnmount(() => {
   background: none;
   border: 0;
   margin-top: var(--sec-gap);
+}
+/* 右列两行**强制等高**：minmax(0,1fr) 会把可用高度均分给两行，
+   于是 瓷砖1 + gap + 瓷砖2 恒等于左侧英雄卡的高度，底边自然齐平。
+   （原来写 minmax(158px,1fr)，内容高度不同就会不齐 —— 截图可见。） */
+.stats-page .bento-top {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+.stats-page .bento-top > * {
+  height: 100%;
+}
+.stats-page .b-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 .stats-page :is(.b-hero, .b-tile, .span2, .span3) {
   border-radius: 0 !important;
