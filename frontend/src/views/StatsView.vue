@@ -295,7 +295,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page stats-page">
     <div class="view-hero">
       <div class="view-hero-copy">
         <div class="view-kicker">Learning Analytics</div>
@@ -572,7 +572,7 @@ onMounted(() => {
           </span>
         </div>
         <p v-else class="cap mk-empty">
-          还没有模考存档——去「自主练习 → 真题模考」打一场，成绩会自动记到这里。
+          还没有模考存档——去「自主练习 - 真题模考」打一场，成绩会自动记到这里。
         </p>
       </GlassCard>
     </div>
@@ -668,7 +668,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* ---------- 顶部区（子网格：两行强制等高 → 卡片对齐） ---------- */
+/* ---------- 顶部区（子网格：两行强制等高 - 卡片对齐） ---------- */
 .bento-top {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
@@ -1385,6 +1385,48 @@ onMounted(() => {
   }
   .subj-row .s-nums em:first-child {
     margin-left: 0;
+  }
+}
+/* ── 进入动画（由 BootCalibration 结束时的 body.ready 触发）─────────────
+   与进入动画的分工：进入动画负责"整块向上抽走"，页面只负责"抽走后错峰到位"。
+   body:not(.ready) 时元素保持隐藏 —— 进入动画还在播时页面不会提前露脸。 */
+.stats-page .view-hero,
+.stats-page .bento-top {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.9s var(--ease),
+    transform 1.05s var(--spring, var(--ease));
+}
+/* 英雄卡是视觉主角：位移稍大、带极轻的缩放 */
+.stats-page .b-hero {
+  opacity: 0;
+  transform: translateY(22px) scale(0.985);
+  transition:
+    opacity 1s var(--ease),
+    transform 1.2s var(--spring, var(--ease));
+}
+body.ready .stats-page .view-hero,
+body.ready .stats-page .bento-top,
+body.ready .stats-page .b-hero {
+  opacity: 1;
+  transform: none;
+}
+/* 错峰：先标题、再 Bento 区（英雄卡随 Bento 一起，它是该区第一块） */
+body.ready .stats-page .view-hero {
+  transition-delay: 0.02s;
+}
+body.ready .stats-page .bento-top {
+  transition-delay: 0.14s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stats-page .view-hero,
+  .stats-page .bento-top,
+  .stats-page .b-hero {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 }
 </style>
