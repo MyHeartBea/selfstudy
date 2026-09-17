@@ -177,8 +177,8 @@ const hasImage = computed(
   只作用于本组件，不影响其它页面。
 */
 .mistake-card {
-  --paper-bg: #fdfbf5;
-  --paper-bg-2: #f5f1e8;
+  --paper-bg: #f8f2e6;
+  --paper-bg-2: #f1ead9;
   --paper-ink: #2c2822;
   --paper-ink-2: #635c4d;
   --paper-ink-3: #8f8672;
@@ -188,12 +188,29 @@ const hasImage = computed(
      纯 #fdfbf5 在深底上像一块灯箱：对比硬、无层次。
      渐变让上方略亮、下方略沉，读起来像"一张有厚度的纸"；
      内亮边模拟纸张边缘受光。 */
-  background: linear-gradient(180deg, #fffdf8 0%, var(--paper-bg) 42%, #f4efe4 100%);
+  background: linear-gradient(180deg, #fdf9f0 0%, #f8f2e6 46%, #f1ead9 100%);
   color: var(--paper-ink);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     inset 0 0 0 1px rgba(44, 40, 34, 0.06);
 }
+/* ── 图版 / 文字区的明度差（修"上下都是白的"）───────────────────────────
+   原来题图容器是纯白衬板、而卡面也是亮纸色，两者几乎同色，上下连成一片白。
+   这里给图版区保留白（图片需要干净底），但把它**明确成一块"图版"**：
+   加一条下边线切开，形成"上图下文的版式"；文字区则用更沉的纸色。 */
+.mistake-card .shot-banner {
+  background: #ffffff;
+  border-bottom: 1px solid rgba(44, 40, 34, 0.1);
+  padding: 10px 10px 12px;
+}
+.mistake-card .card-body {
+  background: var(--paper-bg);
+}
+/* 题干区再沉半档，与图版形成层次 */
+.mistake-card .question-text {
+  color: var(--paper-ink);
+}
+
 /* 内部文字统一走纸面配色（v2 各子组件用不同类名，所以按标签与常见类兜底） */
 .mistake-card :is(h1, h2, h3, h4, p, span, b, strong, em, time, dt, dd).not-this {
   color: inherit;

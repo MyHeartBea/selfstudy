@@ -1571,4 +1571,175 @@ onBeforeUnmount(() => {
     transition: none;
   }
 }
+/* ══ 首页整体重构（编辑式版式：编号章节 + 发丝线 + 大留白 + 无浮卡）══════
+   学参考稿的做法。参考稿通篇没有阴影与圆角浮卡，层级完全靠"细线 + 留白 +
+   字号对比"建立 —— 这是它显得高级的主要原因。这里把原来"一堆圆角浮卡堆叠"
+   改为"一份报告"的读法。
+
+   为什么用追加覆盖层而不是改模板：
+     · 风险最低（不动结构、不动 JS，随时可撤）
+     · 用现有类名精确指定，不会产生"定义了没用"的死样式
+   ─────────────────────────────────────────────────────────────────── */
+
+/* ① 页面留白与节奏 */
+.stats-page {
+  --sec-gap: clamp(56px, 9vh, 128px);
+  padding-bottom: clamp(80px, 12vh, 160px);
+}
+
+/* ② 英雄区：满屏级呼吸（标题大字 + 超大上下留白） */
+.stats-page .view-hero {
+  min-height: min(62svh, 620px);
+  display: flex;
+  align-items: flex-end;
+  padding-top: clamp(40px, 8vh, 96px);
+  padding-bottom: clamp(28px, 4.5vh, 56px);
+  border-bottom: 1px solid var(--line);
+}
+.stats-page .view-hero-copy {
+  /* 不再限制 ch 宽度：中文标题在 108px 字号下会被逐字换行。
+     改用 max-width 的百分比，保证标题一行放得下，说明文字单独限宽。 */
+  max-width: min(100%, 68rem);
+}
+.stats-page .ttl {
+  /* 再放大一档：它是整页的主角 */
+  font-size: clamp(2.6rem, 7.6vw, 6.8rem) !important;
+  line-height: 0.98 !important;
+  letter-spacing: -0.045em !important;
+}
+.stats-page .view-desc {
+  max-width: 40ch;
+}
+
+/* ③ 编号章节：每个区标题写成 [NN] — 名称，配上下发丝线 */
+.stats-page .panel-head,
+.stats-page .fc-head,
+.stats-page .rp-head {
+  align-items: baseline;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: clamp(20px, 3vh, 36px);
+}
+.stats-page .panel-title,
+.stats-page .fc-head .panel-title,
+.stats-page .rp-head .panel-title {
+  font-size: 11.5px !important;
+  letter-spacing: 0.2em !important;
+  text-transform: uppercase !important;
+  color: var(--ink-2) !important;
+}
+/* 章节序号：用伪元素加，避免改模板 */
+.stats-page .bento > .span2:nth-of-type(1) .panel-head::before {
+  content: '[01]';
+}
+.stats-page .bento > .span2:nth-of-type(2) .panel-head::before {
+  content: '[02]';
+}
+.stats-page .fc-strip .fc-head::before {
+  content: '[03]';
+}
+.stats-page .report-strip .rp-head::before {
+  content: '[04]';
+}
+.stats-page .fc-head::before,
+.stats-page .rp-head::before,
+.stats-page .panel-head::before {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  margin-right: 2px;
+}
+
+/* ④ 去浮卡：圆角收小、阴影去掉、改发丝线；网格靠细线分隔 */
+.stats-page :is(.bento-top, .bento) {
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-top: var(--sec-gap);
+}
+.stats-page :is(.b-hero, .b-tile, .span2, .span3) {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  background: var(--surface) !important;
+}
+/* 章节之间拉开发丝线 */
+.stats-page :is(.fc-strip, .report-strip) {
+  margin-top: var(--sec-gap) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border: 1px solid var(--line) !important;
+  background: var(--surface) !important;
+}
+
+/* ⑤ 数字与标签排版：读数更大、标签统一极小大写等宽 */
+.stats-page :is(.b-tile .num, .m-num, .rp-cluster b) {
+  font-size: clamp(1.7rem, 2.9vw, 2.6rem) !important;
+  line-height: 1 !important;
+  letter-spacing: -0.03em !important;
+}
+.stats-page :is(.m-label, .b-tile .k, .cap, .rp-hint) {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+.stats-page .cap {
+  text-transform: none;
+}
+
+/* ⑥ 内容内边距统一（原来各卡不同，读起来散） */
+.stats-page :is(.b-hero, .b-tile, .span2, .span3) > * {
+  padding-left: clamp(18px, 2.2vw, 32px);
+  padding-right: clamp(18px, 2.2vw, 32px);
+}
+.stats-page :is(.b-hero, .b-tile, .span2, .span3) {
+  padding-top: clamp(18px, 2.2vw, 32px);
+  padding-bottom: clamp(18px, 2.2vw, 32px);
+}
+
+/* ⑦ 章节入场：错峰（由 .entered 触发）+ 过冲曲线。只动 transform/opacity */
+.stats-page .bento-top,
+.stats-page .bento,
+.stats-page .fc-strip,
+.stats-page .report-strip {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.7s var(--ease),
+    transform 0.9s cubic-bezier(0.22, 1.12, 0.36, 1);
+}
+.stats-page.entered .bento-top {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.12s;
+}
+.stats-page.entered .bento {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.2s;
+}
+.stats-page.entered .fc-strip {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.28s;
+}
+.stats-page.entered .report-strip {
+  opacity: 1;
+  transform: none;
+  transition-delay: 0.36s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stats-page .bento-top,
+  .stats-page .bento,
+  .stats-page .fc-strip,
+  .stats-page .report-strip {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
 </style>
