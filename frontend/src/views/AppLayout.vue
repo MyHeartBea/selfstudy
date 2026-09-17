@@ -11,6 +11,7 @@ import { loadBaseData } from '../composables/useBaseData'
 import request from '../api/request'
 import Icon from '../ui/Icon.vue'
 import AmbientLayer from '../ui/AmbientLayer.vue'
+import ShaderBackdrop from '../ui/ShaderBackdrop.vue'
 import DockNav from '../ui/DockNav.vue'
 import CommandPalette from '../ui/CommandPalette.vue'
 import UiModal from '../ui/UiModal.vue'
@@ -227,6 +228,7 @@ onUnmounted(() => {
 <template>
   <div class="layout">
     <AmbientLayer />
+    <ShaderBackdrop />
     <div ref="veilEl" class="theme-veil" aria-hidden="true"></div>
 
     <!-- 桌面端：顶部悬浮 Dock -->

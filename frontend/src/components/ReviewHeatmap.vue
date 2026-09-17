@@ -105,7 +105,7 @@ function title(cell) {
 </script>
 
 <template>
-  <div class="heatmap" :class="{ loading }">
+  <div class="heatmap km-archive" :class="{ loading }">
     <div class="hm-canvas">
       <div class="hm-weeks">
         <span v-for="(label, i) in WEEK_LABELS" :key="i" class="hm-week-label">{{ label }}</span>
@@ -253,5 +253,46 @@ function title(cell) {
 .hm-legend .hm-cell {
   width: 11px;
   height: 11px;
+}
+/* ── 档案格形态（重做）─────────────────────────────────────────────────
+   v2 原版是圆角小方块，观感偏"图表控件"。
+   参考稿的语言是**硬边方格 + 发丝线 + 极简色阶**，像一份档案矩阵。
+   只改观感，不动数据。 */
+.heatmap.km-archive .hm-cell {
+  border-radius: 0;
+  /* 用内描边做"格"，比外阴影更贴合档案感，也不会在小尺寸下发脏 */
+  box-shadow: inset 0 0 0 1px var(--line);
+  transition:
+    transform 0.28s var(--ease),
+    box-shadow 0.28s var(--ease),
+    background 0.35s var(--ease);
+}
+.heatmap.km-archive .hm-cell:hover {
+  transform: scale(1.18);
+  box-shadow:
+    inset 0 0 0 1px var(--accent),
+    0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  z-index: 3;
+}
+/* 逐格点亮：按列错峰（--i 由模板写入或退回统一延迟） */
+.heatmap.km-archive .hm-cell {
+  opacity: 0;
+  transform: scale(0.82);
+  transition:
+    opacity 0.42s var(--ease),
+    transform 0.5s cubic-bezier(0.22, 1.12, 0.36, 1),
+    box-shadow 0.28s var(--ease);
+}
+:global(.stats-page.entered) .heatmap.km-archive .hm-cell,
+:global(.entered) .heatmap.km-archive .hm-cell {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .heatmap.km-archive .hm-cell {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
 }
 </style>
