@@ -177,8 +177,8 @@ const hasImage = computed(
   只作用于本组件，不影响其它页面。
 */
 .mistake-card {
-  --paper-bg: #f8f2e6;
-  --paper-bg-2: #f1ead9;
+  --paper-bg: #f1e9d9;
+  --paper-bg-2: #ece3d0;
   --paper-ink: #2c2822;
   --paper-ink-2: #635c4d;
   --paper-ink-3: #8f8672;
@@ -199,12 +199,20 @@ const hasImage = computed(
    这里给图版区保留白（图片需要干净底），但把它**明确成一块"图版"**：
    加一条下边线切开，形成"上图下文的版式"；文字区则用更沉的纸色。 */
 .mistake-card .shot-banner {
-  background: #ffffff;
-  border-bottom: 1px solid rgba(44, 40, 34, 0.1);
+  /* 纯白 #fff 在暖纸旁边会显得刺眼；改为暖白，与纸面同一色系 */
+  background: #fbf8f1;
+  border-bottom: 1px solid rgba(44, 40, 34, 0.12);
   padding: 10px 10px 12px;
 }
+/*
+  实测发现的错位点：我先前把"纸面"加在了 .mistake-card 自身，
+  但视觉主体其实是内层 .card-body —— 而它被写成了 rgb(248,242,230)，
+  于是整块可见区域仍是米白，卡片自身的深色底完全看不到。
+  用户说"把白色改成米白色压根没啥区别"就是因为改错了层。
+  这里把纸面落到内层，并加深到"暖纸"，与纯白拉开明显差距。
+*/
 .mistake-card .card-body {
-  background: var(--paper-bg);
+  background: #f1e9d9;
 }
 /* 题干区再沉半档，与图版形成层次 */
 .mistake-card .question-text {

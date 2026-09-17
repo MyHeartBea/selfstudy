@@ -1749,10 +1749,18 @@ onBeforeUnmount(() => {
 .stats-page .bento-top > * {
   border: 1px solid var(--line) !important;
 }
-/* 三张卡的内边距完全一致（避免"一张挤一张松"的错位感） */
-.stats-page .bento-top > * > * {
-  padding-left: clamp(18px, 2.2vw, 30px);
-  padding-right: clamp(18px, 2.2vw, 30px);
+/*
+  不要给 .bento-top > * > * 再加左右内边距。
+  实测踩到：.b-tile 自身是 `padding: 32px 0px`（仅竖直），
+  而它的内层 .gcard-body 又有 `padding: 24px 32px` —— 两层叠加后
+  卡片背景比内容宽约 30px（左右各 30），读起来就是"内容陷在凹槽里"，
+  这也是被连续两轮感知为"错位"的真正原因（外框坐标是对的，错在内边距叠加）。
+  所以留白只在容器层统一给，卡片自身不再重复加。
+*/
+.stats-page .bento-top > * {
+  /* 让卡片内容与外框对齐：保留竖直呼吸，左右交给内层 body */
+  padding-left: 0;
+  padding-right: 0;
 }
 .stats-page .bento-top > * {
   height: 100%;
