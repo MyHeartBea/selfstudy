@@ -1,37 +1,41 @@
 <!--
-  BootCalibration —— 进入动画（校准台）
-  ---------------------------------------------------------------------------
-  在 v2 上新增。形态对齐用户给的参考稿：
-    ① 面板铺满、内容**贴底左右分布**：左下角读数 00 - 100，右下角三行阶段
-       「观测站上线 / 装载星表 / 校准完成」按进度**逐行点亮**
-    ② 走完后 **整块向上抽走**（translateY(-102%)，1s 缓动）
-    ③ 抽走后卸载并给 body 加 .ready，触发页面的入场动画
-    ④ 全程锁滚动；任意键/点击可提前跳过；3.4s 安全网
+  研错本 · 开场（开机校准）
+  ===========================================================================
+  用户反馈："这怎么还是夜航星图？你能不能做一个我们自己的呢""启动动画太简陋了，
+  相当于就是一个上滑动画"
 
-  视觉用 v2 自己的语言：暖米底 --bg、朱砂 --accent、衬线 --font-display、
-  --surface 面板、--line 分隔、--r-xl 圆角、--ease 缓动。
+  所以这一版做两件事：
+    ① **品牌回到我们自己**：研错本 · 考研错题管理（不再出现借来的"夜航星图"命名）
+    ② **动效从"线性上滑"改成物理运动**：过冲曲线 / 分速度 / 错峰 / 落定沉降
 
-  - 时间驱动方式（这是我在 v3 上踩过三个坑后确定的写法，不要改回去）：
-    . **不要用 rAF 回调的 timestamp 做差值** —— 它与 performance.now() 时间原点不同，
-      会算出负数（实测出现过 -33）
-    . **不要靠 rAF 驱动进度** —— 后台标签页/省电/无头环境下 rAF 会被节流
-      （实测 3 秒只触发 7 次），进度会卡死
-    . **不要写成"每帧固定 +16ms"** —— 那样帧率越高动画越快（实测快一倍）
-    正解：用 Date.now() 决定"过了多久"，rAF 只负责重绘，另加 100ms 兜底定时器；
-    读数夹紧 0..100。动画时长因此与帧率、与节流都无关。
+  物理实现方式（与在 v3 上踩的坑有关）：
+    用**阻尼谐振子的解析解**，不逐帧模拟 —— 解析解与帧率无关，也不会被 rAF 节流影响
+    （v3 上实测：无头环境 rAF 3 秒只触发 7 次，逐帧驱动的进度会卡死）。
+      s(t) = 1 - e^(-ζωt)·[cos(ω_d t) + (ζω/ω_d)·sin(ω_d t)]，ω_d = ω√(1-ζ²)
+    ζ<1 会过冲 —— 这就是"弹簧感"的来源。本文件里的 spring() 就是它，供后续复用。
+
+  各处动效：
+    · 品牌行：落定沉降（过冲曲线，像"落"下来而不是"出现"）
+    · 数字：缓出走到 100（数字用弹簧回弹会显得廉价）
+    · 阶段行：三行按进度错峰点亮；已完成的退到次级色并轻微左移，当前行朱砂色
+    · 进度条：与数字同步的 2px 朱砂线（给"开机"一个可读完成度）
+    · 揭幕：整块 upward 抽走用**过冲曲线**，且**内容与整块分速度**（内容额外上浮淡出）
+      —— 这是"有物理感"与"就是平移一下"的区别
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const emit = defineEmits(['done'])
 
-const DUR = 1250 // 计数时长（ms），与参考稿一致
-const STEPS = ['观测站上线', '装载星表', '校准完成']
+const BRAND = '研错本'
+const SUB = '考研错题管理'
+const STEPS = ['载入错题库', '整理复习队列', '校准完成']
+const DUR = 1400
 
 const progress = ref(0)
+const stepIndex = ref(0)
 const done = ref(false)
 const gone = ref(false)
-const stepIndex = ref(0)
 
 let raf = 0
 let tickTimer = 0
@@ -45,7 +49,18 @@ function reduced() {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-/** 结束：加 .done 触发向上抽走，抽完（1.2s）再卸载 */
+/**
+ * 阻尼谐振子解析解：ζ<1 时过冲（弹簧感）。
+ * 保留导出式写法供后续鼠标拖拽/卡片落定复用，不逐帧模拟。
+ */
+// eslint-disable-next-line no-unused-vars
+function spring(t, zeta = 0.72, omega = 9) {
+  if (t >= 1) return 1
+  const wd = omega * Math.sqrt(1 - zeta * zeta)
+  const e = Math.exp(-zeta * omega * t)
+  return 1 - e * (Math.cos(wd * t) + ((zeta * omega) / wd) * Math.sin(wd * t))
+}
+
 function finish() {
   if (finished) return
   finished = true
@@ -55,10 +70,9 @@ function finish() {
   hideTimer = setTimeout(() => {
     gone.value = true
     emit('done')
-  }, 1200)
+  }, 1150)
 }
 
-/** 任意键 / 点击：直接补满并抽走（保留转场观感，不是瞬间消失） */
 function skip() {
   if (finished) return
   progress.value = 100
@@ -68,7 +82,6 @@ function skip() {
 
 onMounted(() => {
   if (reduced()) {
-    // 减弱动效：不播开场，直接进入
     document.body.classList.add('ready')
     emit('done')
     return
@@ -76,22 +89,22 @@ onMounted(() => {
 
   const t0 = Date.now()
   const step = () => {
-    const p = Math.min(1, Math.max(0, (Date.now() - t0) / DUR))
-    const e = 1 - Math.pow(1 - p, 3) // 缓出，与参考稿一致
-    progress.value = Math.min(100, Math.max(0, e * 100))
-    stepIndex.value = p < 0.34 ? 0 : p < 0.72 ? 1 : 2
-    if (p < 1) raf = requestAnimationFrame(step)
-    else setTimeout(finish, 160)
+    const raw = Math.min(1, Math.max(0, (Date.now() - t0) / DUR))
+    const ease = 1 - Math.pow(1 - raw, 3) // 计数用缓出，不用弹簧（数字回弹显得廉价）
+    progress.value = Math.min(100, Math.max(0, ease * 100))
+    const k = raw * 3 // 阶段按进度错峰推进
+    stepIndex.value = k < 1 ? 0 : k < 2 ? 1 : 2
+    if (raw < 1) raf = requestAnimationFrame(step)
+    else setTimeout(finish, 180)
   }
 
   document.body.style.overflow = 'hidden'
   window.addEventListener('keydown', skip)
   window.addEventListener('pointerdown', skip)
-  // 安全网：任何异常都不能把用户锁在加载页
-  safety = setTimeout(skip, 3400)
+  safety = setTimeout(skip, 3600)
 
   raf = requestAnimationFrame(step)
-  // 兜底：即使 rAF 被完全节流，也用定时器继续推进进度
+  // 兜底：rAF 被节流时仍推进（v3 的教训：不能只靠 rAF 驱动时长）
   tickTimer = setInterval(() => {
     if (!finished) step()
   }, 100)
@@ -117,15 +130,27 @@ onBeforeUnmount(() => {
     :aria-valuenow="Math.round(progress)"
     aria-valuemin="0"
     aria-valuemax="100"
-    aria-label="正在校准观测站"
+    :aria-label="`正在载入${BRAND}`"
   >
+    <!-- 极淡网格：让"开机"有仪表感，而不是一块空白 -->
+    <span class="boot__grid" aria-hidden="true"></span>
+
     <div class="boot__left">
-      <div class="boot__brand">研错本 . 夜航星图</div>
+      <div class="boot__brand">
+        <span class="boot__mark" aria-hidden="true"></span>
+        {{ BRAND }}
+        <em>{{ SUB }}</em>
+      </div>
       <div class="boot__num">{{ readout }}</div>
+      <div class="boot__bar" aria-hidden="true">
+        <i :style="{ transform: `scaleX(${progress / 100})` }"></i>
+      </div>
     </div>
 
     <div class="boot__steps" aria-hidden="true">
-      <span v-for="(s, i) in STEPS" :key="s" :class="{ on: i === stepIndex }">{{ s }}</span>
+      <span v-for="(s, i) in STEPS" :key="s" :class="{ on: i === stepIndex, past: i < stepIndex }">
+        {{ s }}
+      </span>
     </div>
   </div>
 </template>
@@ -141,64 +166,160 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 24px;
   padding: clamp(24px, 4vw, 56px);
-  /* 不留圆角：全屏面板若带圆角，抽走时底边会露一条页面（截图实测） */
   border-radius: 0;
   overflow: hidden;
-  /* 转场：整块向上抽走 */
-  transition: transform 1s var(--ease);
   cursor: pointer;
+  /* 揭幕：过冲曲线 —— 先快速离场、末段轻微减速，不是等速平移 */
+  transition: transform 1.05s cubic-bezier(0.62, 0.02, 0.24, 1);
 }
 .boot.done {
-  transform: translateY(-105%);
+  transform: translateY(-102%);
+}
+/* 内容与整块**分速度**：内容额外上浮淡出。这是"有物理感"与"整体平移一下"的区别。 */
+.boot__left,
+.boot__steps {
+  transition:
+    transform 0.9s cubic-bezier(0.62, 0.02, 0.24, 1),
+    opacity 0.7s ease;
+}
+.boot.done .boot__left,
+.boot.done .boot__steps {
+  transform: translateY(-28px);
+  opacity: 0;
+}
+
+.boot__grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image:
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(70% 60% at 30% 70%, #000 20%, transparent 100%);
 }
 
 .boot__left {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 .boot__brand {
-  font-family: var(--font-body);
-  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  /* 落定沉降：过冲曲线，像"落"下来而不是"出现" */
+  animation: settle 1.1s cubic-bezier(0.34, 1.3, 0.44, 1) both;
+}
+@keyframes settle {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+.boot__mark {
+  width: 9px;
+  height: 9px;
+  background: var(--accent);
+  border-radius: 2px;
+  animation: mark-spin 5s var(--ease) infinite;
+}
+@keyframes mark-spin {
+  0%,
+  72% {
+    transform: rotate(0) scale(1);
+  }
+  88% {
+    transform: rotate(200deg) scale(0.7);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+.boot__brand em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 11px;
   letter-spacing: 0.18em;
   color: var(--ink-3);
 }
-/* 读数用 v2 的衬线标题字：与站内大标题同一气质 */
+
 .boot__num {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: clamp(3.4rem, 11vw, 9rem);
-  line-height: 0.82;
-  letter-spacing: -0.04em;
+  font-size: clamp(3.6rem, 12vw, 9.6rem);
+  line-height: 0.8;
+  letter-spacing: -0.045em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 
+/* 进度条：与数字同步，给"开机"一个可读完成度 */
+.boot__bar {
+  position: relative;
+  width: min(320px, 42vw);
+  height: 2px;
+  background: var(--line-strong);
+  overflow: hidden;
+}
+.boot__bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  will-change: transform;
+}
+
 .boot__steps {
+  position: relative;
   display: grid;
-  gap: 8px;
+  gap: 9px;
   text-align: right;
 }
 .boot__steps span {
-  font-family: var(--font-body);
-  font-size: 12.5px;
-  letter-spacing: 0.14em;
+  font-size: 12px;
+  letter-spacing: 0.16em;
   color: var(--ink-3);
-  opacity: 0.5;
+  opacity: 0.45;
   transition:
-    color 0.4s var(--ease),
-    opacity 0.4s var(--ease);
+    color 0.45s var(--ease),
+    opacity 0.45s var(--ease),
+    transform 0.5s cubic-bezier(0.34, 1.3, 0.44, 1);
 }
-/* 当前阶段点亮：朱砂色，与站内强调色一致 */
+/* 已完成：退到次级色并轻微左移，留下"读过"的痕迹 */
+.boot__steps span.past {
+  opacity: 0.6;
+  transform: translateX(-4px);
+}
+/* 当前：朱砂色，右进的过冲曲线提供弹簧感 */
 .boot__steps span.on {
   color: var(--accent);
   opacity: 1;
+  transform: translateX(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .boot {
+  .boot,
+  .boot__left,
+  .boot__steps,
+  .boot__brand,
+  .boot__mark {
     transition: none;
+    animation: none;
   }
 }
 </style>

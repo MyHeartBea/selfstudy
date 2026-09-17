@@ -1,6 +1,6 @@
 <script setup>
 /** 学习统计 · 墨韵 2.0 Bento：英雄卡 + 瓷砖 + SVG 趋势 + 墨阶掌握度 + 热力图 + 科目分析 */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -287,19 +287,41 @@ function practiceTag(tag) {
   })
 }
 
+/* ── 进入状态：进入动画（BootCalibration）结束时给 body 加 .ready，
+   本页据此把根元素的 .entered 打开，页面动效才播放。
+   不直接用 `body.ready` 选择器承接：scoped CSS 与全局类的组合太脆（实测踩过）。 */
+const entered = ref(document.body.classList.contains('ready'))
+let enterObserver = null
+
 onMounted(() => {
+  if (!entered.value) {
+    enterObserver = new MutationObserver(() => {
+      if (document.body.classList.contains('ready')) {
+        entered.value = true
+        enterObserver.disconnect()
+        enterObserver = null
+      }
+    })
+    enterObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+  }
   loadStats()
   loadForecast()
   loadMocks()
 })
+onBeforeUnmount(() => {
+  if (enterObserver) enterObserver.disconnect()
+})
 </script>
 
 <template>
-  <div class="page stats-page">
+  <div class="page stats-page" :class="{ entered }">
     <div class="view-hero">
       <div class="view-hero-copy">
         <div class="view-kicker">Learning Analytics</div>
-        <h2>学习统计</h2>
+        <!-- 标题逐行揭示：外层做遮罩，内层做位移（参考稿的 line / line__i 手法） -->
+        <h2 class="ttl">
+          <span class="ttl-line"><span class="ttl-i">学习统计</span></span>
+        </h2>
         <p class="view-desc">用数据看复习节奏，找到下一轮该攻克的薄弱点。</p>
       </div>
       <div class="header-actions">
@@ -1387,7 +1409,7 @@ onMounted(() => {
     margin-left: 0;
   }
 }
-/* ── 进入动画（由 BootCalibration 结束时的 body.ready 触发）─────────────
+/* ── 进入动画（由进入动画结束时给根元素加的 .entered 触发）─────────────
    与进入动画的分工：进入动画负责"整块向上抽走"，页面只负责"抽走后错峰到位"。
    body:not(.ready) 时元素保持隐藏 —— 进入动画还在播时页面不会提前露脸。 */
 .stats-page .view-hero,
@@ -1406,17 +1428,17 @@ onMounted(() => {
     opacity 1s var(--ease),
     transform 1.2s var(--spring, var(--ease));
 }
-body.ready .stats-page .view-hero,
-body.ready .stats-page .bento-top,
-body.ready .stats-page .b-hero {
+.stats-page.entered .view-hero,
+.stats-page.entered .bento-top,
+.stats-page.entered .b-hero {
   opacity: 1;
   transform: none;
 }
 /* 错峰：先标题、再 Bento 区（英雄卡随 Bento 一起，它是该区第一块） */
-body.ready .stats-page .view-hero {
+.stats-page.entered .view-hero {
   transition-delay: 0.02s;
 }
-body.ready .stats-page .bento-top {
+.stats-page.entered .bento-top {
   transition-delay: 0.14s;
 }
 
@@ -1477,5 +1499,62 @@ body.ready .stats-page .bento-top {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-3);
+}
+/* ── 标题逐行揭示（由进入动画结束时给根元素加的 .entered 触发）──────────────────
+   遮罩掀开式：外层 overflow hidden，内层从下方顶上来。
+   与"整体淡入"的区别：文字像是**被推出来**的，一行一行，有先后。 */
+.stats-page .ttl {
+  display: block;
+  margin: 6px 0 10px;
+}
+.stats-page .ttl-line {
+  display: block;
+  overflow: hidden;
+  /* 给下滑的字留出空间，但遮罩只在竖直方向裁切 */
+  padding-bottom: 0.06em;
+}
+.stats-page .ttl-i {
+  display: block;
+  transform: translateY(105%);
+  opacity: 0;
+  transition:
+    transform 1.05s cubic-bezier(0.22, 1.12, 0.36, 1),
+    opacity 0.5s ease;
+}
+.stats-page.entered .ttl-i {
+  transform: none;
+  opacity: 1;
+}
+/* 眉头先到，标题随后 —— 错峰让"出现"有节奏感 */
+.stats-page .view-kicker {
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity 0.6s ease 0.05s,
+    transform 0.8s cubic-bezier(0.22, 1.12, 0.36, 1) 0.05s;
+}
+.stats-page.entered .view-kicker {
+  opacity: 1;
+  transform: none;
+}
+.stats-page .view-desc {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 0.7s ease 0.26s,
+    transform 0.9s cubic-bezier(0.22, 1.12, 0.36, 1) 0.26s;
+}
+.stats-page.entered .view-desc {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .stats-page .ttl-i,
+  .stats-page .view-kicker,
+  .stats-page .view-desc {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
 }
 </style>
