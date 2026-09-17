@@ -195,15 +195,31 @@ export async function bindScrollMotion(root) {
 
     // 2) 逐行揭示：行内元素从下方顶上来（遮罩由 CSS overflow:hidden 提供）
     root.querySelectorAll('[data-reveal-lines]').forEach((host) => {
-      const lines = host.querySelectorAll('.line, .line__i, [data-line]')
+      let lines = host.querySelectorAll('.line, .line__i, [data-line]')
+
+      // 没有预置行结构时（v2 的面板标题是纯文本），自动包一层：
+      // 外层做遮罩、内层做位移 —— 与参考稿的 .line / .line__i 同构。
+      // 不这么做的话 querySelectorAll 返回空集合，补间作用在空集合上，
+      // 实测表现为"滚动到标题什么也没发生"。
+      if (!lines.length && host.textContent && host.textContent.trim()) {
+        const raw = host.textContent.trim()
+        host.textContent = ''
+        host.style.overflow = 'hidden'
+        const inner = document.createElement('span')
+        inner.textContent = raw
+        inner.style.display = 'block'
+        host.appendChild(inner)
+        lines = [inner]
+        host.dataset.splitLines = '1'
+      }
       if (!lines.length) return
+
       gsap.from(lines, {
         yPercent: 105,
-        opacity: 0,
-        duration: 1.1,
+        duration: 1.05,
         ease: 'power3.out',
         stagger: 0.09,
-        scrollTrigger: { trigger: host, start: 'top 88%' },
+        scrollTrigger: { trigger: host, start: 'top 92%' },
       })
     })
 

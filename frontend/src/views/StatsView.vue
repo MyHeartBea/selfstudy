@@ -390,10 +390,26 @@ onBeforeUnmount(() => {
         </div>
       </GlassCard>
 
-      <GlassCard class="b-tile">
+      <GlassCard class="b-tile km-live">
+        <!-- 复合悬停装饰层 -->
+        <span class="km-live__ghost" aria-hidden="true">03</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
         <MetricTile icon="layers" :value="nTotal" label="累计错题" tone="accent" />
       </GlassCard>
-      <GlassCard class="b-tile">
+      <GlassCard class="b-tile km-live">
+        <!-- 复合悬停装饰层 -->
+        <span class="km-live__ghost" aria-hidden="true">04</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
         <MetricTile
           icon="chart"
           :value="nTotalAcc"
@@ -405,10 +421,18 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 主 Bento：趋势 + 墨阶 / 热力图 + 薄弱点 -->
-    <div class="bento">
-      <GlassCard class="span2">
+    <div class="bento" data-parallax="36">
+      <GlassCard class="span2 km-live">
+        <!-- 复合悬停装饰层 -->
+        <span class="km-live__ghost" aria-hidden="true">05</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
         <div class="panel-head">
-          <h3 class="panel-title">复习趋势</h3>
+          <h3 class="panel-title" data-reveal-lines>复习趋势</h3>
           <span class="cap">近 7 天完成次数（描边生长）</span>
         </div>
         <AreaChart
@@ -421,8 +445,8 @@ onBeforeUnmount(() => {
       </GlassCard>
 
       <GlassCard>
-        <h3 class="panel-title">掌握度墨阶</h3>
-        <p class="cap">{{ stats.total_mistakes }} 道错题 · 墨色越深掌握越牢</p>
+        <h3 class="panel-title" data-reveal-lines>掌握度墨阶</h3>
+        <p class="cap" data-reveal-words>{{ stats.total_mistakes }} 道错题 · 墨色越深掌握越牢</p>
         <div class="m-steps">
           <div
             v-for="s in masterySteps"
@@ -442,9 +466,17 @@ onBeforeUnmount(() => {
         </div>
       </GlassCard>
 
-      <GlassCard class="span2">
+      <GlassCard class="span2 km-live">
+        <!-- 复合悬停装饰层 -->
+        <span class="km-live__ghost" aria-hidden="true">06</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
         <div class="panel-head">
-          <h3 class="panel-title">复习热力图</h3>
+          <h3 class="panel-title" data-reveal-lines>复习热力图</h3>
           <UiButton size="sm" variant="ghost" @click="router.push('/review')">
             去复习，点亮今天
           </UiButton>
@@ -453,7 +485,7 @@ onBeforeUnmount(() => {
       </GlassCard>
 
       <GlassCard>
-        <h3 class="panel-title">薄弱知识点</h3>
+        <h3 class="panel-title" data-reveal-lines>薄弱知识点</h3>
         <p class="cap">按累计答错排序 · 点击直通练习</p>
         <div v-if="reviewStats.weakest_tags.length" class="weak-list">
           <button
@@ -488,9 +520,17 @@ onBeforeUnmount(() => {
       </GlassCard>
 
       <!-- 复习负荷预报 -->
-      <GlassCard class="span3 fc-strip" :pad="false" :hover="false">
+      <GlassCard class="span3 fc-strip km-live" :pad="false" :hover="false">
+        <!-- 复合悬停装饰层 -->
+        <span class="km-live__ghost" aria-hidden="true">07</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
         <div class="fc-head">
-          <h3 class="panel-title">复习负荷预报</h3>
+          <h3 class="panel-title" data-reveal-lines>复习负荷预报</h3>
           <span class="cap">未来 30 天到期分布，哪天堆多了提前匀开</span>
           <span v-if="forecast.overdue" class="fc-overdue"
             >逾期 <b class="num km-num">{{ forecast.overdue }}</b> 题</span
@@ -516,10 +556,18 @@ onBeforeUnmount(() => {
       </GlassCard>
 
       <!-- AI 错因周报 -->
-      <GlassCard class="span3 report-strip" :hover="false">
+      <GlassCard class="span3 report-strip km-live" :hover="false">
+        <!-- 复合悬停装饰层 -->
+        <span class="km-live__ghost" aria-hidden="true">08</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
         <div class="rp-head">
           <div>
-            <h3 class="panel-title">AI 错因周报</h3>
+            <h3 class="panel-title" data-reveal-lines>AI 错因周报</h3>
             <p class="cap">近 7 天答错题目按错因聚类，给出针对性训练建议</p>
           </div>
           <div class="rp-actions">
@@ -570,8 +618,16 @@ onBeforeUnmount(() => {
 
       <!-- 模考成绩趋势 -->
       <GlassCard class="span3 mock-strip" :pad="false" :hover="false">
+        <!-- 复合悬停装饰层 -->
+        <span class="km-live__ghost" aria-hidden="true">09</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
         <div class="fc-head">
-          <h3 class="panel-title">模考成绩趋势</h3>
+          <h3 class="panel-title" data-reveal-lines>模考成绩趋势</h3>
           <span class="cap">最近 {{ mockTrend.length }} 场 · 交卷自动存档</span>
         </div>
         <div v-if="mockTrend.length >= 2" class="mk-chart">
@@ -616,7 +672,7 @@ onBeforeUnmount(() => {
     <!-- 分布 -->
     <div class="grid-2">
       <GlassCard>
-        <h3 class="panel-title">题型分布</h3>
+        <h3 class="panel-title" data-reveal-lines>题型分布</h3>
         <div v-if="typeDonut.segs.length" class="donut-wrap">
           <svg class="donut" viewBox="0 0 40 40" role="img" aria-label="题型分布环形图">
             <circle class="donut-track" cx="20" cy="20" :r="typeDonut.R" />
@@ -649,7 +705,7 @@ onBeforeUnmount(() => {
       </GlassCard>
 
       <GlassCard>
-        <h3 class="panel-title">题目来源分布</h3>
+        <h3 class="panel-title" data-reveal-lines>题目来源分布</h3>
         <div v-if="stats.by_source_type && stats.by_source_type.length">
           <div v-for="s in stats.by_source_type" :key="s.source_type" class="src-row">
             <span class="s-name">{{ s.name }}</span>
@@ -671,7 +727,7 @@ onBeforeUnmount(() => {
     <!-- 科目分析：规模 × 效果 合并一张图 -->
     <GlassCard class="block-card">
       <div class="panel-head">
-        <h3 class="panel-title">科目分析</h3>
+        <h3 class="panel-title" data-reveal-lines>科目分析</h3>
         <span class="cap">错题规模 × 复习效果 · 墨条越长征题越多</span>
       </div>
       <div v-if="subjectMerged.length" class="subj-list">
@@ -1652,17 +1708,21 @@ onBeforeUnmount(() => {
   margin-right: 2px;
 }
 
-/* ④ 去浮卡：圆角收小、阴影去掉、改发丝线；网格靠细线分隔 */
+/* ④ 去浮卡：圆角归零、阴影去掉、改发丝线。
+   注意（踩过的错位 bug）：**网格容器不能设底色**。
+   我上一版用 `gap:1px + background:var(--line)` 伪造发丝线，
+   结果空出来的格位也被底色填上，看起来是"多出一块没对齐的底"。
+   正解：网格只排布，底色与描边交给各自卡片。 */
 .stats-page :is(.bento-top, .bento) {
-  gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
+  gap: 14px;
+  background: none;
+  border: 0;
   margin-top: var(--sec-gap);
 }
 .stats-page :is(.b-hero, .b-tile, .span2, .span3) {
   border-radius: 0 !important;
   box-shadow: none !important;
-  border: 0 !important;
+  border: 1px solid var(--line) !important;
   background: var(--surface) !important;
 }
 /* 章节之间拉开发丝线 */
