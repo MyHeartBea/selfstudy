@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from app.database import local_day_bounds_utc
+from ..vocab_filter import should_reject
 
 # mastery_level（答对次数）→ 下次间隔天数
 INTERVALS = [0, 1, 2, 4, 7, 15, 30, 60]
@@ -296,6 +297,16 @@ def import_english_words(conn: sqlite3.Connection, items: List[dict], source: st
         note = str(item.get("note") or "").strip()
         src = str(item.get("source") or source or "").strip()
         kind = "phrase" if item.get("kind") == "phrase" else "word"
+
+        # 收录过滤：拒绝"简单词"与"整句"（用户要求）
+        #   · 简单词：基础词停用表里的高频词（report / case / stay / change / way …）
+        #   · 整句：词数 > 4、含句末标点、首字母大写且 >=4 词
+        # 拒绝时写进 failed 并说明原因 —— 静默丢弃会让用户以为"导入成功但少了词"。
+        reject, why = should_reject(word, kind)
+        if reject:
+            failed.append({"index": index, "text": word, "reason": f"已过滤：{why}"})
+            continue
+
         existing = get_vocab_by_word(conn, word)
         if existing is not None:
             sets = []
