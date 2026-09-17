@@ -30,20 +30,38 @@
   /* 色相：未指定时用主题强调色的近似值（朱砂约 12） */
   --h: 12;
   --km-accent: hsl(var(--h) 72% 48%);
-  --km-accent-soft: hsl(var(--h) 85% 55% / 0.16);
-  --km-accent-line: hsl(var(--h) 80% 52% / 0.42);
+  /* 光晕/扫描用的强调色：透明度要够高才"看得见"（低于 0.2 在米色底上几乎无效） */
+  --km-accent-soft: hsl(var(--h) 85% 52% / 0.2);
+  --km-accent-line: hsl(var(--h) 80% 50% / 0.55);
+  /* halo 用色相色而不是黑色 —— 米色底上黑阴影会发脏 */
+  --km-halo: 0 22px 46px -26px hsl(var(--h) 55% 32% / 0.42);
 
   position: relative;
   isolation: isolate;
   overflow: hidden;
   transform-style: preserve-3d;
-  /* 倾斜由 JS 写 --rx/--ry；不写字面 transform 以免与其它动画互相覆盖 */
-  transform: perspective(1200px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  /* 倾斜由 JS 写 --rx/--ry；不写字面 transform 以免与其它动画互相覆盖。
+     位移与放大也放在这里：合成为一个矩阵，避免多属性分别过渡产生"错位" */
+  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg))
+    translateY(var(--km-lift, 0px)) scale(var(--km-scale, 1));
   transition:
-    transform 0.5s var(--ease),
-    border-color 0.5s var(--ease),
-    background 0.6s var(--ease);
+    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.4s var(--ease),
+    background 0.45s var(--ease),
+    box-shadow 0.45s var(--ease);
   will-change: transform;
+}
+
+/* 悬停：背景**明度跃迁**（这是"看得见"的关键，微调边框没有这个效果） */
+.km-live:hover,
+.km-live:focus-within {
+  --km-lift: -6px;
+  --km-scale: 1.008;
+  background: var(--surface-2, rgba(0, 0, 0, 0.045));
+  border-color: var(--km-accent);
+  box-shadow: var(--km-halo);
+  /* 提升层叠：否则放大/位移的部分会被相邻卡片盖住 */
+  z-index: 3;
 }
 
 /* ② 光晕跟随：参考稿用 --mx/--my 定位径向渐变 */
@@ -53,13 +71,21 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: radial-gradient(
-    120% 90% at var(--mx, 50%) var(--my, 50%),
-    var(--km-accent-soft),
-    transparent 55%
-  );
+  /* 两层叠加：一层大范围柔光 + 一层中心亮斑，
+     单层渐变在米色底上会显得"灰"，两层才有力 */
+  background:
+    radial-gradient(
+      42% 34% at var(--mx, 50%) var(--my, 50%),
+      hsl(var(--h) 85% 55% / 0.22),
+      transparent 70%
+    ),
+    radial-gradient(
+      130% 95% at var(--mx, 50%) var(--my, 50%),
+      var(--km-accent-soft),
+      transparent 58%
+    );
   opacity: 0;
-  transition: opacity 0.6s var(--ease);
+  transition: opacity 0.5s var(--ease);
 }
 .km-live:hover::after,
 .km-live:focus-within::after {
@@ -77,7 +103,7 @@
   line-height: 0.8;
   letter-spacing: -0.09em;
   color: var(--km-accent);
-  opacity: 0.045;
+  opacity: 0.05;
   pointer-events: none;
   font-variant-numeric: tabular-nums;
   transition:
@@ -85,8 +111,9 @@
     transform 0.9s var(--ease);
 }
 .km-live:hover .km-live__ghost {
-  opacity: 0.13;
-  transform: translate(-6px, -6px);
+  /* 近 3 倍亮度差 —— 这是"明显"的一部分 */
+  opacity: 0.16;
+  transform: translate(-8px, -8px) scale(1.04);
 }
 
 /* 内容层必须压在光晕之上 */
@@ -98,9 +125,9 @@
 /* ③ 四角取景框：默认在框外并透明，悬停归位 */
 .km-live__corner {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--km-accent-line);
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--km-accent-line);
   opacity: 0;
   z-index: 3;
   pointer-events: none;
@@ -113,28 +140,28 @@
   left: 10px;
   border-right: none;
   border-bottom: none;
-  transform: translate(-6px, -6px);
+  transform: translate(-9px, -9px);
 }
 .km-live__corner.tr {
   top: 10px;
   right: 10px;
   border-left: none;
   border-bottom: none;
-  transform: translate(6px, -6px);
+  transform: translate(9px, -9px);
 }
 .km-live__corner.bl {
   bottom: 10px;
   left: 10px;
   border-right: none;
   border-top: none;
-  transform: translate(-6px, 6px);
+  transform: translate(-9px, 9px);
 }
 .km-live__corner.br {
   bottom: 10px;
   right: 10px;
   border-left: none;
   border-top: none;
-  transform: translate(6px, 6px);
+  transform: translate(9px, 9px);
 }
 .km-live:hover .km-live__corner,
 .km-live:focus-within .km-live__corner {

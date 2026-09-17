@@ -37,7 +37,7 @@ useGrain()
 const booting = ref(true)
 const router = useRouter()
 // 站内换页遮罩
-const { veilVisible } = useRouteVeil(router)
+const { veilPhase } = useRouteVeil(router)
 
 let magnets = []
 let unbindScroll = null
@@ -97,6 +97,6 @@ function onBootDone() {
   <ToastHost />
   <ConfirmHost />
   <AppCursor />
-  <RouteVeil :visible="veilVisible" />
+  <RouteVeil :phase="veilPhase" />
   <BootCalibration v-if="booting" @done="onBootDone" />
 </template>
