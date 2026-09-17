@@ -224,6 +224,76 @@ onUnmounted(() => {
       .removeEventListener?.('change', systemThemeHandler)
   }
 })
+
+/* ── 换页动画（JS 驱动）─────────────────────────────────────────────────
+   不依赖 Vue <Transition>：连续四版实测都不可靠。
+   做法：路由变化时新内容已渲染 -> 立刻给它一个**起始偏移**（内联样式），
+   再用 runAnim 推到 0。只动 transform / opacity。
+   方向由 pageDir（导航顺序决定）给出。 */
+const deckInner = ref(null)
+let pageAnimTimer = 0
+
+const easeOut = (p) => 1 - Math.pow(1 - p, 3)
+
+function playPageEnter() {
+  const el = deckInner.value
+  if (!el) return
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+  // 方向：next = 新页在当前页右边 -> 新页从右侧进来
+  const fromX = pageDir.value === 'next' ? 5.5 : -5.5
+  const t0 = Date.now()
+  const DUR = 420
+
+  clearInterval(pageAnimTimer)
+  el.style.willChange = 'transform, opacity'
+  pageAnimTimer = window.setInterval(() => {
+    const raw = Math.min(1, (Date.now() - t0) / DUR)
+    const e = easeOut(raw)
+    const x = fromX * (1 - e)
+    const op = 0.55 + 0.45 * e
+    el.style.transform = `translate3d(${x.toFixed(2)}%, 0, 0)`
+    el.style.opacity = op.toFixed(3)
+    if (raw >= 1) {
+      clearInterval(pageAnimTimer)
+      el.style.transform = ''
+      el.style.opacity = ''
+      el.style.willChange = ''
+    }
+  }, 16)
+}
+
+/**
+ * 路由变化后播入场动画。
+ *
+ * **时序是关键**（实测踩到的坑）：页面是懒加载组件 + 异步取数据，
+ * `watch(route.path)` 在路由变化那一刻就触发，此时容器里还没有内容 ——
+ * 动画作用在空容器上就**看不见**，等内容渲染出来时动画早已结束。
+ * 所以先等容器真的有内容（首个子元素有高度）再开始，最多等 500ms。
+ */
+function whenContentReady(cb, deadline = 500) {
+  const t0 = Date.now()
+  const tick = () => {
+    const el = deckInner.value
+    const child = el && el.firstElementChild
+    const ready = child && child.getBoundingClientRect().height > 8
+    if (ready || Date.now() - t0 > deadline) {
+      cb()
+      return
+    }
+    requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
+watch(
+  () => route.path,
+  () => {
+    whenContentReady(playPageEnter)
+  },
+)
+
+onUnmounted(() => clearInterval(pageAnimTimer))
 </script>
 
 <template>
@@ -307,11 +377,15 @@ onUnmounted(() => {
     </Transition>
 
     <main class="deck">
-      <router-view v-slot="{ Component, route }">
-        <Transition :name="`km-flip-${pageDir}`" mode="out-in">
-          <component :is="Component" :key="route.path" />
-        </Transition>
-      </router-view>
+      <!--
+        换页动画用 JS 驱动内联样式（不再用 <Transition>）。
+        原因：Vue 的 Transition 在这套嵌套 router-view + 动态 name + 全局类名的
+        组合下连续四版都不可靠（黑屏 / 上下堆叠 / 没动画）；而 JS 写内联样式
+        在本环境已被证明可靠（开机动画即如此）。
+      -->
+      <div ref="deckInner" class="deck-inner">
+        <router-view />
+      </div>
     </main>
 
     <CommandPalette />

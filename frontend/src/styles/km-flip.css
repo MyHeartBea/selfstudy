@@ -1,62 +1,18 @@
 /* ============================================================================
-   换页动画：方向滑动（styles/km-flip.css）
+   换页动画（styles/km-flip.css）
    ----------------------------------------------------------------------------
-   演进过程（都来自实测反馈，写在这里避免走回头路）：
-     1) 横向淡入 + out-in      -> "单纯的黑屏"（旧页淡到 0、新页也从 0 开始，中间全黑）
-     2) 去掉 out-in + 3D 翻书  -> 两页在文档流里上下堆叠，"翻完看不到内容"
-     3) 加定位上下文 + 绝对定位 -> 3D 变换在嵌套 router-view 里仍不稳定，"直接没动画了"
-     4) 本版：**方向滑动** —— 稳定优先
-        · mode="out-in"：一次只动一页，不需要绝对定位与定位上下文（少两个失效点）
-        · **进入页起始 opacity: 1**：这是不再黑屏的关键 ——
-          原来进入页从 opacity:0 开始，中间必然出现"什么都没有"的一帧；
-          现在它一亮就在，只是从侧面滑入。
-        · 出场 0.2s（短，不占时间）、入场 0.3s；两段同向。
-   ========================================================================== */
+   演进记录（每版都被实测打回，写在这里避免走回头路）：
+     1) 横向淡入 + mode="out-in"   -> "单纯的黑屏"
+        （旧页淡到 0、新页也从 0 开始，中间那几帧屏幕上什么都没有）
+     2) 去掉 out-in + 3D 翻书      -> 两页在文档流里上下堆叠，"翻完看不到内容"
+     3) 定位上下文 + 绝对定位       -> 3D 变换在嵌套 router-view 里失效，"直接没动画"
+     4) 方向滑动 + 全局类名         -> 仍然"直接回到最基本的切换"
+    结论：Vue 的 <Transition> 在这套嵌套 router-view + 动态 name + 全局类名的组合下
+    一直不可靠。改用 **JS 写内联样式**（开机动画即如此，已证明可靠）。
 
-.km-flip-next-enter-active,
-.km-flip-prev-enter-active {
-  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.km-flip-next-leave-active,
-.km-flip-prev-leave-active {
-  transition:
-    transform 0.2s cubic-bezier(0.5, 0, 0.75, 0),
-    opacity 0.2s linear;
-}
-
-/* 往右翻：旧页向左滑出，新页从右侧滑入（同向） */
-.km-flip-next-leave-to {
-  transform: translate3d(-24%, 0, 0);
-  opacity: 0;
-}
-.km-flip-next-enter-from {
-  transform: translate3d(30%, 0, 0);
-  /* opacity 保持 1 —— 不再黑屏的关键 */
-  opacity: 1;
-}
-
-/* 往左翻：旧页向右滑出，新页从左侧滑入 */
-.km-flip-prev-leave-to {
-  transform: translate3d(24%, 0, 0);
-  opacity: 0;
-}
-.km-flip-prev-enter-from {
-  transform: translate3d(-30%, 0, 0);
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .km-flip-next-enter-active,
-  .km-flip-prev-enter-active,
-  .km-flip-next-leave-active,
-  .km-flip-prev-leave-active {
-    transition: none;
-  }
-  .km-flip-next-enter-from,
-  .km-flip-prev-enter-from,
-  .km-flip-next-leave-to,
-  .km-flip-prev-leave-to {
-    transform: none;
-    opacity: 1;
-  }
+   所以这个文件现在只保留容器的基础样式；动画由 AppLayout 的 playPageEnter
+   直接写内联 transform / opacity。 */
+.deck-inner {
+  position: relative;
+  /* 动画期间会写内联 transform，这里不做 transition —— 由 JS 逐帧推进 */
 }
