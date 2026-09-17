@@ -47,10 +47,12 @@ const router = useRouter()
  * 换页方向：'right' 表示新页在当前页右边（当前页向左滑出）。
  * 由导航顺序（NAV_ORDER）决定 —— 见 router/index.js 的注释。
  */
-const pageDir = ref('right')
+const pageDir = ref('next')
 router.beforeEach((to, from) => {
   if (!from.name) return true
-  pageDir.value = navIndexOf(to.name) >= navIndexOf(from.name) ? 'right' : 'left'
+  // 注意方向语义：next 表示"新页在当前页右边"。
+  // 实测发现第一版方向反了 —— 所以这里用 `>` 取 next，`<=` 取 prev。
+  pageDir.value = navIndexOf(to.name) > navIndexOf(from.name) ? 'next' : 'prev'
   return true
 })
 
@@ -109,14 +111,16 @@ function onBootDone() {
 
 <template>
   <!--
-    页面内容转场：不遮盖，让新页面自己推上来。
-      · mode="out-in"：旧页面走完再上新页面，避免两层内容叠在一起
-      · 时长刻意做短（进 320ms / 出 180ms）——站内换页要"利落"，
-        超过 400ms 就会被感觉成"卡"
-      · 只动 opacity / transform
+    页面内容转场：3D 翻书（方向由 NAV_ORDER 决定）。
+      · **刻意不用 mode="out-in"**：翻书需要两页同时存在 ——
+        一页绕书脊转走、另一页在下面显露。
+        用 out-in 时旧页先淡到全黑、新页才进，中间那一帧就是"黑屏"
+        （这是用户实测反馈过的问题）。
+      · 只动 transform / opacity / filter
   -->
   <RouterView v-slot="{ Component, route }">
-    <Transition :name="`km-page-${pageDir}`" mode="out-in">
+    <!-- 不用 mode="out-in"：翻书需要两页同时存在（一页转走、另一页露出） -->
+    <Transition :name="`km-flip-${pageDir}`">
       <component :is="Component" :key="route.path" />
     </Transition>
   </RouterView>
@@ -129,68 +133,106 @@ function onBootDone() {
 <style>
 /* 全局（不能用 scoped：Transition 的类名要作用在根元素上） */
 /*
-  换页动画：**方向感知的横向翻动**（用户要求）
+  换页动画：**3D 翻书**
   ---------------------------------------------------------------------------
-  · 目标页在当前页右边 -> 向左翻动（新页从右侧进、旧页向左出）
-  · 目标页在当前页左边 -> 向右翻动（新页从左侧进、旧页向右出）
-  方向由 router/index.js 的 NAV_ORDER 决定（"左右"只能由导航顺序定义）。
+  上一版的两个问题（用户实测反馈）：
+    1) 方向反了 —— 已在 beforeEach 里反过来（见脚本注释）
+    2) "单纯的黑屏，没有翻书感" —— 根因是用了 mode="out-in"：
+       旧页先淡出到 opacity:0、新页才进，中间那段屏幕上什么都没有 = 黑屏；
+       而且逐一进出根本不可能产生翻书观感，因为翻书的关键是**两页同时存在**：
+       一页转走，另一页在下面露出来。
 
-  过渡类加在页面**根元素**上，所以整页内容（字体、卡片、图表）一起平移 ——
-  这正是用户要的"整个页面 字体 随页面翻动"。
-
-  两个关键取舍：
-  1) 出入场用 **out-in**（旧页先走完再上新页），避免两页叠在一起互相穿透；
-     代价是总时长 = 出 + 进（约 0.5s），所以单段都做得短。
-  2) 两段是**同向**的（都朝同一侧移动），读起来是"翻过去一页"；
-     若做成"一个进一个退"，观感会是错位而不是翻页。
+  这一版的要点：
+    · 两页**同时**存在（去掉 out-in）
+    · 离开的那页绕**书脊**（左/右边缘）做 rotateY 转走，并轻微暗化 —— 像纸被翻过去
+    · 进入的那页在下方**轻微反向**起手，转走的那页掀开后它正好显露
+    · 容器加 perspective，否则 rotateY 只会把页面压扁，没有立体感
+    · backface-visibility: hidden 避免旋转过 90° 后出现镜像内容
 */
-.km-page-right-enter-active,
-.km-page-left-enter-active {
-  transition:
-    opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.km-page-right-leave-active,
-.km-page-left-leave-active {
-  /* 出场更快：旧内容不该占着时间 */
-  transition:
-    opacity 0.16s ease,
-    transform 0.26s cubic-bezier(0.5, 0, 0.75, 0);
+/* 每一页都带自己的透视（无需外层容器，避免破坏既有布局） */
+.km-flip-next-leave-active,
+.km-flip-next-enter-active,
+.km-flip-prev-leave-active,
+.km-flip-prev-enter-active {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 
-/* 新页在右边：新页从右滑入，旧页向左滑出 */
-.km-page-right-enter-from {
-  opacity: 0;
-  transform: translate3d(6%, 0, 0);
+/* ── 往右翻（新页在右侧）：当前页绕**左边缘**（书脊）向左转走 ────────── */
+.km-flip-next-leave-active {
+  position: relative;
+  z-index: 2;
+  transform-origin: left center;
+  transform: perspective(1800px) rotateY(0deg);
+  transition:
+    transform 0.62s cubic-bezier(0.42, 0, 0.24, 1),
+    opacity 0.62s linear,
+    filter 0.62s linear;
 }
-.km-page-right-leave-to {
-  opacity: 0;
-  transform: translate3d(-6%, 0, 0);
+.km-flip-next-leave-to {
+  transform: perspective(1800px) rotateY(-96deg) translateZ(0);
+  opacity: 0.35;
+  filter: brightness(0.55);
+}
+/* 新页在下面：轻微反向起手，掀开后显露 */
+.km-flip-next-enter-active {
+  position: relative;
+  z-index: 1;
+  transform-origin: right center;
+  transition:
+    transform 0.62s cubic-bezier(0.42, 0, 0.24, 1),
+    opacity 0.4s ease-out;
+}
+.km-flip-next-enter-from {
+  opacity: 0.25;
+  transform: perspective(1800px) rotateY(12deg) scale(0.985);
 }
 
-/* 新页在左边：新页从左滑入，旧页向右滑出 */
-.km-page-left-enter-from {
-  opacity: 0;
-  transform: translate3d(-6%, 0, 0);
+/* ── 往左翻（新页在左侧）：镜像 —— 当前页绕**右边缘**向右转走 ────────── */
+.km-flip-prev-leave-active {
+  position: relative;
+  z-index: 2;
+  transform-origin: right center;
+  transform: perspective(1800px) rotateY(0deg);
+  transition:
+    transform 0.62s cubic-bezier(0.42, 0, 0.24, 1),
+    opacity 0.62s linear,
+    filter 0.62s linear;
 }
-.km-page-left-leave-to {
-  opacity: 0;
-  transform: translate3d(6%, 0, 0);
+.km-flip-prev-leave-to {
+  transform: perspective(1800px) rotateY(96deg) translateZ(0);
+  opacity: 0.35;
+  filter: brightness(0.55);
+}
+.km-flip-prev-enter-active {
+  position: relative;
+  z-index: 1;
+  transform-origin: left center;
+  transition:
+    transform 0.62s cubic-bezier(0.42, 0, 0.24, 1),
+    opacity 0.4s ease-out;
+}
+.km-flip-prev-enter-from {
+  opacity: 0.25;
+  transform: perspective(1800px) rotateY(-12deg) scale(0.985);
 }
 
 /* 减弱动效：不做转场，直接切换 */
 @media (prefers-reduced-motion: reduce) {
-  .km-page-right-enter-active,
-  .km-page-left-enter-active,
-  .km-page-right-leave-active,
-  .km-page-left-leave-active {
+  .km-flip-next-leave-active,
+  .km-flip-next-enter-active,
+  .km-flip-prev-leave-active,
+  .km-flip-prev-enter-active {
     transition: none;
   }
-  .km-page-right-enter-from,
-  .km-page-left-enter-from,
-  .km-page-right-leave-to,
-  .km-page-left-leave-to {
+  .km-flip-next-enter-from,
+  .km-flip-prev-enter-from {
     opacity: 1;
+    transform: none;
+  }
+  .km-flip-next-leave-to,
+  .km-flip-prev-leave-to {
+    opacity: 0;
     transform: none;
   }
 }
