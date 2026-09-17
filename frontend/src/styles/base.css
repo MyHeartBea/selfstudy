@@ -246,7 +246,7 @@ textarea.field-input {
   align-items: center;
 }
 
-/* 卡片 → 纸片 */
+/* 卡片 -> 纸片 */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -407,7 +407,7 @@ textarea.field-input {
     height: auto !important;
     max-height: 200px;
   }
-  /* 打开详情时打印 → 正文直排 */
+  /* 打开详情时打印 -> 正文直排 */
   .modal-backdrop {
     position: static !important;
     background: none !important;
@@ -742,4 +742,18 @@ textarea.field-input {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ── 数字等宽（学自参考稿）─────────────────────────────────────────────
+   页面上有多处在滚动数字（useCountUp）。比例字体下 '1' 比 '8' 窄，
+   数字每跳一次整行就会左右抖一下 —— 这在计数器上非常显眼。
+   等宽数位让每个数字占同样宽度，滚动时不再抖动。
+   同时给等宽字体栈一个统一的兜底（v2 未定义 --font-mono 时也能用）。 */
+.num,
+[data-num],
+.hero-value,
+.metric-value,
+.mono-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }

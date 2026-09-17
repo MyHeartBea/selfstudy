@@ -27,6 +27,10 @@ import {
   startSmoothScroll,
   stopSmoothScroll,
 } from './composables/motion'
+import { useGrain } from './composables/grain'
+
+// 噪点层：纯色底加材料感（学自参考稿的 feTurbulence + steps 位移）
+useGrain()
 
 const booting = ref(true)
 const router = useRouter()
