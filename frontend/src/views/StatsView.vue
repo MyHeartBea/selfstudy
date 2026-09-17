@@ -1429,4 +1429,53 @@ body.ready .stats-page .bento-top {
     transition: none;
   }
 }
+/* ── 首屏排版尺度（学习参考稿：把层级拉开）─────────────────────────────
+   只改字号/字距/层级，不动字体族与配色 —— 保持 v2 的一致性。
+   参考稿的量级是 clamp(2.4rem, 9.2vw, 10rem) + line-height .88；
+   v2 有侧栏与工具栏、且首屏是 Bento（不是满屏单标题），照抄会撑破，
+   所以按实际可用宽度收敛到 6.4vw / 5.6rem。 */
+.stats-page .view-hero-copy h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2.2rem, 6.4vw, 5.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  margin: 6px 0 10px;
+}
+/* 眉头：极小 + 大字距大写（参考稿的 eyebrow 手法） */
+.stats-page .view-kicker {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.stats-page .view-desc {
+  font-size: clamp(0.92rem, 1.1vw, 1.06rem);
+  line-height: 1.75;
+  max-width: 44ch;
+  color: var(--ink-2);
+}
+
+/* 英雄读数：放大到参考稿的量级（它用 clamp(1.5rem,3vw,2.6rem)） */
+.stats-page .hero-value {
+  font-size: clamp(3rem, 7vw, 6.4rem);
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+/* 瓷砖里的读数：同样放大，但比英雄卡低一级（层级要有主次） */
+.stats-page .b-tile .num {
+  font-size: clamp(1.5rem, 2.6vw, 2.4rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+/* 区块标题：参考稿是等宽小字 + 分隔线，比卡片大标题更克制 */
+.stats-page .panel-title,
+.stats-page .panel-head {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
 </style>
