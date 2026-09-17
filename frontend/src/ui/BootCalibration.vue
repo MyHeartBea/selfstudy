@@ -56,6 +56,60 @@ function reduced() {
  *   根因与早先实测的「无头环境 rAF 3 秒只触发 7 次」同源：合成器不产生帧。
  *   改为 JS 写内联 transform 后，任何环境下行为一致。
  */
+
+/**
+ * 粒子迸发：从圆心向外炸开约 44 个粒子。
+ *
+ * 为什么用 JS 而不是 CSS 动画：本环境（无头/合成器不产帧）里 CSS 动画与过渡
+ * 都不推进 —— 实测过选择器匹配、类名已渲染，但位移恒为 0。
+ * JS 写内联 transform 则稳定生效。
+ */
+function burstParticles() {
+  const host = rootEl.value?.querySelector('.boot__burst')
+  if (!host) return
+  const cx = window.innerWidth / 2
+  const cy = window.innerHeight / 2
+  // 三色：朱砂为主，少量琥珀与米白 —— 保持 v2 的配色语言
+  const colors = ['var(--accent)', 'var(--gold)', 'var(--ink)']
+  const count = 44
+
+  const parts = []
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('span')
+    el.className = 'boot__particle'
+    const size = 2 + Math.random() * 4
+    el.style.width = `${size.toFixed(1)}px`
+    el.style.height = `${size.toFixed(1)}px`
+    el.style.left = `${cx}px`
+    el.style.top = `${cy}px`
+    el.style.background = colors[i % colors.length]
+    host.appendChild(el)
+
+    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.35
+    const dist = 90 + Math.random() * 300
+    parts.push({
+      el,
+      dx: Math.cos(angle) * dist,
+      dy: Math.sin(angle) * dist,
+      spin: (Math.random() - 0.5) * 240,
+    })
+  }
+
+  runAnim(1150, (p) => {
+    const e = 1 - Math.pow(1 - p, 2.2) // 缓出：一开始快，逐渐减速
+    const fade = p < 0.25 ? p / 0.25 : 1 - (p - 0.25) / 0.75
+    parts.forEach((q) => {
+      const x = q.dx * e
+      const y = q.dy * e
+      const sc = 1 - e * 0.55
+      q.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${sc.toFixed(3)}) rotate(${(q.spin * e).toFixed(1)}deg)`
+      q.el.style.opacity = Math.max(0, fade).toFixed(3)
+    })
+  }).then(() => {
+    parts.forEach((q) => q.el.remove())
+  })
+}
+
 function runAnim(duration, onTick) {
   return new Promise((resolve) => {
     const t0 = Date.now()
@@ -82,7 +136,10 @@ async function startSpin() {
   const halfTop = rootEl.value?.querySelector('.boot__half--top')
   const halfBot = rootEl.value?.querySelector('.boot__half--bottom')
 
-  // 1) 圆环转两圈 + 轻微放大（模拟"启动"的动作）
+  // 1) 粒子迸发（与转圈同时开始，视觉上就是"能量从圆心炸开"）
+  burstParticles()
+
+  // 2) 圆环转两圈 + 轻微放大（模拟"启动"的动作）
   await runAnim(SPIN_MS, (p) => {
     if (!dial) return
     const deg = easeOut(p) * 720
@@ -169,6 +226,7 @@ onBeforeUnmount(() => {
     ref="rootEl"
     class="boot"
     :class="[`is-${phase}`]"
+    :style="{ '--p': progress / 100 }"
     role="progressbar"
     :aria-valuenow="Math.round(progress)"
     aria-valuemin="1"
@@ -183,6 +241,9 @@ onBeforeUnmount(() => {
     <div class="boot__half boot__half--top" aria-hidden="true">
       <div class="boot__content">
         <span class="boot__frame"></span>
+        <span class="boot__tear" aria-hidden="true"></span>
+        <!-- 撕裂线：各半屏各带一条，贴在自己那一侧的分界边上 -->
+        <span class="boot__tear" aria-hidden="true"></span>
         <svg class="boot__dial" viewBox="0 0 300 300" :style="{ '--p': progress / 100 }">
           <g class="boot__ticks">
             <line
@@ -281,6 +342,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <!-- 粒子迸发层：到 100% 时由 JS 注入粒子 -->
+    <div class="boot__burst" aria-hidden="true"></div>
 
     <!-- 明显的进度条：横贯底部整宽，4px 高，朱砂填充 + 游标 -->
     <div class="boot__progress" aria-hidden="true">
@@ -578,6 +642,73 @@ onBeforeUnmount(() => {
   }
   .boot.is-spin .boot__dial {
     animation: none;
+  }
+}
+/* ── 撕裂线（用户："中间整体的分裂感不强，加一条明显的动态感线"）──────────
+   两条线，各自贴在自己那一侧的分界边：
+     上半屏 bottom:0、下半屏 top:0。
+   撕裂时两条发光边线一起被拉开 —— 分裂感来自"两条线被拉开"，
+   而不只是"画面平移"。强度随进度增长（--p），到 100% 时最亮。 */
+.boot__tear {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  /* 强度随进度：1% 时几乎不可见，100% 时满亮 */
+  opacity: calc(0.25 + var(--p, 0) * 0.75);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 12%,
+    var(--accent) 50%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 88%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 12px 1px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 0 30px 4px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+/*
+  线要定位在**裁剪边界**上，而不是 content 的上下边：
+  .boot__content 铺满全屏，它的 bottom:0 落在视口底（实测 y=1048），
+  而那一带已被 clip 裁掉 —— 线根本看不见。
+  top:50% 才是真正的撕开处。
+*/
+.boot__half--top .boot__tear {
+  top: calc(50% - 2px);
+}
+.boot__half--bottom .boot__tear {
+  top: 50%;
+}
+/* 到 100%（转圈阶段）时线更粗更亮，强调"要裂了" */
+.boot.is-spin .boot__tear {
+  height: 3px;
+  box-shadow:
+    0 0 18px 2px color-mix(in srgb, var(--accent) 62%, transparent),
+    0 0 46px 8px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* ── 粒子迸发层 ─────────────────────────────────────────────────────────
+   绝对定位的小圆点，初始都在圆心，由 JS 写 transform 向外炸开。
+   用 JS 而不是 CSS 动画的原因见脚本注释（本环境 CSS 动画不推进）。 */
+.boot__burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  overflow: hidden;
+}
+.boot__particle {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate3d(0, 0, 0);
+  will-change: transform, opacity;
+  filter: blur(0.3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot__burst {
+    display: none;
   }
 }
 </style>
