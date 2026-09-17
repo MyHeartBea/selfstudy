@@ -654,8 +654,12 @@ onBeforeUnmount(() => {
   left: 0;
   right: 0;
   height: 2px;
-  /* 强度随进度：1% 时几乎不可见，100% 时满亮 */
-  opacity: calc(0.25 + var(--p, 0) * 0.75);
+  /*
+    只在到 100% 时出现（用户明确要求）。
+    原来写成随进度从 0.25 亮到 1.00 —— 也就是全程可见，不符合预期。
+    现在默认 opacity:0，只有 .is-spin / .is-split 阶段才亮起。
+  */
+  opacity: 0;
   background: linear-gradient(
     90deg,
     transparent 0%,
@@ -680,9 +684,15 @@ onBeforeUnmount(() => {
 .boot__half--bottom .boot__tear {
   top: 50%;
 }
-/* 到 100%（转圈阶段）时线更粗更亮，强调"要裂了" */
+/* 撕裂阶段保持可见（它随两半一起被拉开） */
+.boot.is-split .boot__tear {
+  opacity: 1;
+}
+/* 到 100%（转圈阶段）才出现，并更粗更亮，强调"要裂了" */
 .boot.is-spin .boot__tear {
+  opacity: 1;
   height: 3px;
+  transition: opacity 0.28s ease-out;
   box-shadow:
     0 0 18px 2px color-mix(in srgb, var(--accent) 62%, transparent),
     0 0 46px 8px color-mix(in srgb, var(--accent) 26%, transparent);

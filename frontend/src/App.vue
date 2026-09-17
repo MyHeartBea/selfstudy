@@ -27,6 +27,7 @@ import ConfirmHost from './ui/ConfirmHost.vue'
 import BootCalibration from './ui/BootCalibration.vue'
 import AppCursor from './ui/AppCursor.vue'
 import { useRouter } from 'vue-router'
+import { navIndexOf } from './router'
 import {
   bindScrollMotion,
   magnetic,
@@ -41,6 +42,17 @@ useGrain()
 
 const booting = ref(true)
 const router = useRouter()
+
+/**
+ * 换页方向：'right' 表示新页在当前页右边（当前页向左滑出）。
+ * 由导航顺序（NAV_ORDER）决定 —— 见 router/index.js 的注释。
+ */
+const pageDir = ref('right')
+router.beforeEach((to, from) => {
+  if (!from.name) return true
+  pageDir.value = navIndexOf(to.name) >= navIndexOf(from.name) ? 'right' : 'left'
+  return true
+})
 
 let magnets = []
 let unbindScroll = null
@@ -104,7 +116,7 @@ function onBootDone() {
       · 只动 opacity / transform
   -->
   <RouterView v-slot="{ Component, route }">
-    <Transition name="km-page" mode="out-in">
+    <Transition :name="`km-page-${pageDir}`" mode="out-in">
       <component :is="Component" :key="route.path" />
     </Transition>
   </RouterView>
@@ -116,34 +128,68 @@ function onBootDone() {
 
 <style>
 /* 全局（不能用 scoped：Transition 的类名要作用在根元素上） */
-.km-page-enter-active {
+/*
+  换页动画：**方向感知的横向翻动**（用户要求）
+  ---------------------------------------------------------------------------
+  · 目标页在当前页右边 -> 向左翻动（新页从右侧进、旧页向左出）
+  · 目标页在当前页左边 -> 向右翻动（新页从左侧进、旧页向右出）
+  方向由 router/index.js 的 NAV_ORDER 决定（"左右"只能由导航顺序定义）。
+
+  过渡类加在页面**根元素**上，所以整页内容（字体、卡片、图表）一起平移 ——
+  这正是用户要的"整个页面 字体 随页面翻动"。
+
+  两个关键取舍：
+  1) 出入场用 **out-in**（旧页先走完再上新页），避免两页叠在一起互相穿透；
+     代价是总时长 = 出 + 进（约 0.5s），所以单段都做得短。
+  2) 两段是**同向**的（都朝同一侧移动），读起来是"翻过去一页"；
+     若做成"一个进一个退"，观感会是错位而不是翻页。
+*/
+.km-page-right-enter-active,
+.km-page-left-enter-active {
   transition:
-    opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
     transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.km-page-leave-active {
+.km-page-right-leave-active,
+.km-page-left-leave-active {
   /* 出场更快：旧内容不该占着时间 */
   transition:
-    opacity 0.18s ease,
-    transform 0.22s ease;
+    opacity 0.16s ease,
+    transform 0.26s cubic-bezier(0.5, 0, 0.75, 0);
 }
-.km-page-enter-from {
+
+/* 新页在右边：新页从右滑入，旧页向左滑出 */
+.km-page-right-enter-from {
   opacity: 0;
-  transform: translateY(18px);
+  transform: translate3d(6%, 0, 0);
 }
-.km-page-leave-to {
+.km-page-right-leave-to {
   opacity: 0;
-  transform: translateY(-10px);
+  transform: translate3d(-6%, 0, 0);
+}
+
+/* 新页在左边：新页从左滑入，旧页向右滑出 */
+.km-page-left-enter-from {
+  opacity: 0;
+  transform: translate3d(-6%, 0, 0);
+}
+.km-page-left-leave-to {
+  opacity: 0;
+  transform: translate3d(6%, 0, 0);
 }
 
 /* 减弱动效：不做转场，直接切换 */
 @media (prefers-reduced-motion: reduce) {
-  .km-page-enter-active,
-  .km-page-leave-active {
+  .km-page-right-enter-active,
+  .km-page-left-enter-active,
+  .km-page-right-leave-active,
+  .km-page-left-leave-active {
     transition: none;
   }
-  .km-page-enter-from,
-  .km-page-leave-to {
+  .km-page-right-enter-from,
+  .km-page-left-enter-from,
+  .km-page-right-leave-to,
+  .km-page-left-leave-to {
     opacity: 1;
     transform: none;
   }

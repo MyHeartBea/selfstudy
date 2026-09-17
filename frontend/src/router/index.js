@@ -100,3 +100,30 @@ router.afterEach((to) => {
 })
 
 export default router
+
+/**
+ * 导航顺序（用于判断换页方向）。
+ * 为什么要它：用户要求"选左边那一页就向左翻、选右边那一页就向右翻"，
+ * 而"左右"只能由导航里的先后顺序定义 —— 路由表本身不含这个信息。
+ * 数组顺序与导航栏一致。
+ */
+export const NAV_ORDER = [
+  'home',
+  'stats',
+  'review',
+  'capture',
+  'mistakes',
+  'vocab',
+  'knowledge',
+  'formulas',
+  'papers',
+  'practice',
+  'subjects',
+  'design',
+]
+
+/** 取某个路由在导航顺序里的编号；未知路由排到最后 */
+export function navIndexOf(name) {
+  const i = NAV_ORDER.indexOf(name)
+  return i === -1 ? NAV_ORDER.length : i
+}
