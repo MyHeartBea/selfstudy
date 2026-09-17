@@ -207,7 +207,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page km-editorial">
     <div class="view-hero">
       <div class="view-hero-copy">
         <div class="view-kicker">Knowledge Base</div>

@@ -90,7 +90,7 @@ onMounted(loadProfiles)
 </script>
 
 <template>
-  <div class="page">
+  <div class="page km-editorial">
     <div class="view-hero">
       <div class="view-hero-copy">
         <div class="view-kicker">Subject Guide</div>
