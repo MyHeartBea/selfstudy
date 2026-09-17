@@ -115,7 +115,7 @@ onMounted(loadProfiles)
       <article
         v-for="(row, i) in profiles"
         :key="row.subject_id"
-        class="card card-pad subject-card"
+        class="card card-pad subject-card km-card"
         :style="{ '--enter-delay': i * 80 + 'ms', '--scol': subjectColor(row.subject_id) }"
       >
         <i class="s-topbar" aria-hidden="true"></i>

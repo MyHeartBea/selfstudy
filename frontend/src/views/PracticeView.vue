@@ -1,5 +1,5 @@
 <script setup>
-/** 自主练习配置：模式选择 + 抽题数量 + 筛选条件 → 跳转 /review */
+/** 自主练习配置：模式选择 + 抽题数量 + 筛选条件 -> 跳转 /review */
 import { onMounted, reactive, ref, computed, watch, toRef } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -286,7 +286,7 @@ onMounted(loadBaseData)
           <Icon name="chevron-down" :size="13" class="adv-arrow" />
         </summary>
         <div class="filter-grid">
-          <div class="f-item">
+          <div class="f-item km-item">
             <label class="f-label">科目</label>
             <UiSelect
               v-model="filters.subjectId"

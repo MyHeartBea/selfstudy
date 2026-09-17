@@ -348,7 +348,7 @@ onBeforeUnmount(() => {
         <div class="hero-label"><Icon name="clock" :size="15" /> 今日待复习</div>
         <div class="hero-body">
           <div class="hero-left">
-            <div class="hero-value num">{{ nDue }}</div>
+            <div class="hero-value num km-num">{{ nDue }}</div>
             <div class="hero-delta">
               今日新增 <b>{{ nTodayNew }}</b> 题 · 新错题优先
             </div>

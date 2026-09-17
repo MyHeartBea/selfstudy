@@ -499,11 +499,11 @@ async function exportAnki() {
         text="生词本还是空的，粘贴词表批量导入或逐个添加"
         icon="book"
       />
-      <div v-else class="vocab-grid">
+      <div v-else class="vocab-grid km-list">
         <article
           v-for="(row, i) in items"
           :key="row.id"
-          class="vocab-card card"
+          class="vocab-card km-card card"
           :style="{ '--enter-delay': Math.min(i, 11) * 45 + 'ms' }"
         >
           <span class="v-mark serif" aria-hidden="true">{{

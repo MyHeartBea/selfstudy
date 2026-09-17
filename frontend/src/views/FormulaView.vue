@@ -110,7 +110,7 @@ const reciteQueue = ref([])
 const reciteKnown = ref(0)
 const reciteTotal = ref(0)
 // 背诵模式当前卡是否已翻面（显示内容）。此前的实现漏了这个声明，
-// 却在 openMemorize/markRecite/模板里以 .value 读写 → 点「显示内容」直接抛错。
+// 却在 openMemorize/markRecite/模板里以 .value 读写 -> 点「显示内容」直接抛错。
 const reciteRevealed = ref(false)
 
 function markRecite(known) {
@@ -228,7 +228,7 @@ onMounted(loadFormulas)
       <article
         v-for="(item, i) in filteredItems"
         :key="item.id"
-        class="formula-card card"
+        class="formula-card km-card card"
         role="button"
         tabindex="0"
         :aria-label="`查看公式 ${item.title}`"

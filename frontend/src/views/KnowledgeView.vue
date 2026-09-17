@@ -115,7 +115,7 @@ function openDetail(row) {
   loadLinkedMistakes(row)
 }
 
-/** 知识点 ↔ 错题：拉取该知识点关联的错题与掌握情况 */
+/** 知识点 <-> 错题：拉取该知识点关联的错题与掌握情况 */
 async function loadLinkedMistakes(row) {
   linked.value = null
   linkedLoading.value = true
@@ -252,7 +252,7 @@ onMounted(() => {
 
     <template v-if="loading && !items.length">
       <div class="k-grid">
-        <div v-for="n in 6" :key="n" class="k-card card sk-card">
+        <div v-for="n in 6" :key="n" class="k-card km-card card sk-card">
           <Skeleton variant="text" :width="'55%'" />
           <Skeleton variant="text" :count="2" />
         </div>
@@ -375,7 +375,7 @@ onMounted(() => {
         </div>
         <p v-else class="muted">这条知识点还没有摘要，可以点「AI 总结」自动生成。</p>
 
-        <!-- 知识点 ↔ 错题：关联错题与掌握情况 -->
+        <!-- 知识点 <-> 错题：关联错题与掌握情况 -->
         <div class="k-linked">
           <div class="section-label">
             关联错题
@@ -385,7 +385,7 @@ onMounted(() => {
           <div v-if="linkedLoading" class="muted">正在统计…</div>
           <template v-else-if="linked && linked.total">
             <div class="k-linked-stats">
-              <span class="ls-item"
+              <span class="ls-item km-item"
                 ><b>{{ linked.total }}</b> 题</span
               >
               <span class="ls-item"
@@ -406,7 +406,7 @@ onMounted(() => {
               <b>{{ (linked.hit_tags || []).join('、') }}</b> 找到的错题
             </p>
             <ul class="k-linked-list">
-              <li v-for="m in linked.items" :key="m.id" class="kl-row">
+              <li v-for="m in linked.items" :key="m.id" class="kl-row km-item">
                 <button class="kl-main" :title="m.question" @click="practiceOne(m.id)">
                   <span class="kl-q">{{ plainSummary(m.question).slice(0, 60) }}</span>
                   <span class="kl-meta">
@@ -688,7 +688,7 @@ onMounted(() => {
   font-size: 13px;
 }
 
-/* 知识点 ↔ 错题链接 */
+/* 知识点 <-> 错题链接 */
 .k-linked {
   display: flex;
   flex-direction: column;

@@ -162,7 +162,7 @@ function fmtDuration(sec) {
   return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`
 }
 
-/** 真题库科目名（如 英语二/数学二/计算机408/政治）→ 错题本 subject_id（按名称包含关系匹配）。 */
+/** 真题库科目名（如 英语二/数学二/计算机408/政治）-> 错题本 subject_id（按名称包含关系匹配）。 */
 async function subjectIdFor(paperSubject) {
   try {
     const res = await request.get('/subjects', { silent: true })
@@ -616,7 +616,7 @@ onUnmounted(() => {
 
     <!-- 模考成绩单 -->
     <template v-if="done && mockReport">
-      <GlassCard class="stage-card" :hover="false">
+      <GlassCard class="stage-card km-card" :hover="false">
         <template #badge><StageBadge text="模考成绩单" /></template>
         <div class="mr-body">
           <RingProgress :percentage="mockReport.score">
@@ -646,7 +646,7 @@ onUnmounted(() => {
         </div>
         <div v-if="mockReport.details.length" class="mr-wrong">
           <div class="block-label">错题回顾</div>
-          <div v-for="d in mockReport.details" :key="d.id" class="mr-item">
+          <div v-for="d in mockReport.details" :key="d.id" class="mr-item km-item">
             <p class="mr-q"><MathText :text="d.snippet + '…'" /></p>
             <p class="mr-ans">
               你的答案：<b class="mr-bad">{{ d.your }}</b>
@@ -763,7 +763,7 @@ onUnmounted(() => {
               <div
                 v-for="opt in mockOptionList"
                 :key="opt.key"
-                class="option-row clickable"
+                class="option-row km-item clickable"
                 :class="{ selected: mockPicked(opt.key) }"
                 @click="mockPick(opt.key)"
               >

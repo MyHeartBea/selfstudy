@@ -1,6 +1,6 @@
 <script setup>
 /**
- * 真题库：扫描历年真题文件夹 → AI 拆题入库 → 整卷模考。
+ * 真题库：扫描历年真题文件夹 -> AI 拆题入库 -> 整卷模考。
  * 流水线状态轮询；题目浏览器支持查看题干/选项/答案/解析。
  */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
@@ -191,7 +191,7 @@ onUnmounted(stopPolling)
         icon="notebook"
       />
       <div v-else class="paper-grid">
-        <GlassCard v-for="p in papers" :key="p.id" class="paper-card" :hover="true">
+        <GlassCard v-for="p in papers" :key="p.id" class="paper-card km-card" :hover="true">
           <template #badge>
             <StageBadge v-if="p.status === 'done'" :text="`${p.question_count} 题`" />
           </template>
@@ -252,7 +252,7 @@ onUnmounted(stopPolling)
       <div class="paper-view">
         <div v-for="q in selected.questions" :key="q.id" class="pq">
           <p v-if="q.passage" class="pq-passage"><MathText :text="q.passage" /></p>
-          <div class="pq-row">
+          <div class="pq-row km-item">
             <span class="pq-no num">{{ q.no }}</span>
             <div class="pq-main">
               <div class="pq-q"><MathText :text="q.question" /></div>
@@ -286,7 +286,7 @@ onUnmounted(stopPolling)
         <div
           v-for="c in paperCandidates"
           :key="c.rel_path"
-          class="cand-row"
+          class="cand-row km-item"
           :class="{ imported: c.imported }"
         >
           <span class="c-seal" :style="{ '--pcol': SUBJECT_TONES[c.subject] || 'var(--ink-3)' }">{{

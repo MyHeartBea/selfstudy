@@ -1,7 +1,7 @@
 <script setup>
 /**
- * 环境氛围层（墨韵 2.0）：底纱 → 旋转极光 → 视差光斑 → 呼吸墨渍 →
- * 远山剪影 → 墨字水印 → 纸纹噪点 → 暗角 → 浮尘；另含鼠标跟随柔光。
+ * 环境氛围层（墨韵 2.0）：底纱 -> 旋转极光 -> 视差光斑 -> 呼吸墨渍 ->
+ * 远山剪影 -> 墨字水印 -> 纸纹噪点 -> 暗角 -> 浮尘；另含鼠标跟随柔光。
  * 纯展示层：fixed、pointer-events:none，动画走 CSS，视差走单个 rAF 循环。
  */
 import { onMounted, onUnmounted, ref } from 'vue'
@@ -93,6 +93,7 @@ onUnmounted(() => {
   opacity: 0;
   transition: opacity 0.9s var(--ease);
 }
+:global(body.ready .ambient),
 :global(body.app-ready .ambient) {
   opacity: 1;
 }
