@@ -322,10 +322,10 @@ onBeforeUnmount(() => {
         <h2 class="ttl">
           <span class="ttl-line"><span class="ttl-i">学习统计</span></span>
         </h2>
-        <p class="view-desc">用数据看复习节奏，找到下一轮该攻克的薄弱点。</p>
+        <p class="view-desc" data-reveal-words>用数据看复习节奏，找到下一轮该攻克的薄弱点。</p>
       </div>
       <div class="header-actions">
-        <UiButton variant="primary" @click="router.push('/review')">
+        <UiButton variant="primary" data-magnetic @click="router.push('/review')">
           <Icon name="refresh" :size="15" />
           开始今日复习
         </UiButton>
@@ -336,7 +336,7 @@ onBeforeUnmount(() => {
     <div class="bento-top">
       <GlassCard class="b-hero" :hover="false" @mousemove="onHeroMove" @mouseleave="onHeroLeave">
         <span class="hero-seal" aria-hidden="true">今</span>
-        <div class="hero-bg" aria-hidden="true"></div>
+        <div class="hero-bg" aria-hidden="true" data-parallax="48"></div>
         <span
           v-if="reviewStats.streak_days"
           class="streak-chip"
