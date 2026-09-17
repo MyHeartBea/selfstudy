@@ -83,7 +83,7 @@ const hasImage = computed(
 
 <template>
   <article
-    class="mistake-card card tilt"
+    class="mistake-card card tilt km-card"
     :class="{ picked: selected }"
     :style="{ '--enter-delay': `${Math.min(pos, 11) * 55}ms`, '--spine': spineColor }"
     tabindex="0"
