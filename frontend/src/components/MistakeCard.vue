@@ -83,6 +83,8 @@ const hasImage = computed(
     <!-- ⑤ 幽灵序号：压在背景的巨型编号 -->
     <span class="km-live__ghost" aria-hidden="true">{{ String(index).padStart(2, '0') }}</span>
     <!-- ③ 四角取景框 ④ 扫描线 -->
+    <!-- 顶边标尺：悬停时从左向右展开的朱砂线（"被选中"的空间语言） -->
+    <span class="km-live__rule" aria-hidden="true"></span>
     <span class="km-live__corner tl" aria-hidden="true"></span>
     <span class="km-live__corner tr" aria-hidden="true"></span>
     <span class="km-live__corner bl" aria-hidden="true"></span>
@@ -164,6 +166,45 @@ const hasImage = computed(
 </template>
 
 <style scoped>
+/*
+  纸面配色（修一个真实可读性 bug）
+  ---------------------------------------------------------------------------
+  这张卡刻意做成"米色纸片"以与深色底形成纸感对比。但深色主题下，
+  卡内文字会**继承主题的浅色 ink**，造成"浅字 + 浅纸"——静止状态几乎不可读；
+  而悬停叠加朱砂染色后反倒更清楚，于是产生了"只有悬停才看得出"的错觉。
+
+  这里给卡片内部显式定义一套纸面配色，不再依赖从 body 继承的主题色。
+  只作用于本组件，不影响其它页面。
+*/
+.mistake-card {
+  --paper-bg: #fdfbf5;
+  --paper-bg-2: #f5f1e8;
+  --paper-ink: #2c2822;
+  --paper-ink-2: #635c4d;
+  --paper-ink-3: #8f8672;
+  --paper-line: rgba(44, 40, 34, 0.12);
+
+  background: var(--paper-bg);
+  color: var(--paper-ink);
+}
+/* 内部文字统一走纸面配色（v2 各子组件用不同类名，所以按标签与常见类兜底） */
+.mistake-card :is(h1, h2, h3, h4, p, span, b, strong, em, time, dt, dd).not-this {
+  color: inherit;
+}
+.mistake-card .seal-no,
+.mistake-card .card-foot,
+.mistake-card .passage-count,
+.mistake-card .foot-item {
+  color: var(--paper-ink-3);
+}
+.mistake-card .question-text,
+.mistake-card .passage-preview {
+  color: var(--paper-ink);
+}
+.mistake-card .tag-row :is(.ui-tag, span) {
+  color: var(--paper-ink-2);
+}
+
 .mistake-card {
   position: relative;
   display: flex;

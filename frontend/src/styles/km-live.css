@@ -29,12 +29,16 @@
 .km-live {
   /* 色相：未指定时用主题强调色的近似值（朱砂约 12） */
   --h: 12;
-  --km-accent: hsl(var(--h) 72% 48%);
-  /* 光晕/扫描用的强调色：透明度要够高才"看得见"（低于 0.2 在米色底上几乎无效） */
-  --km-accent-soft: hsl(var(--h) 85% 52% / 0.2);
-  --km-accent-line: hsl(var(--h) 80% 50% / 0.55);
+  /* 强调色用 hsl 的**逗号语法 + 明确 alpha**：
+     实测过空格语法 `hsl(var(--h) 72% 48%)` 计算后会带出 alpha 通道
+     （描边算出 0.49 透明度，看着"不实"），所以全部写死 alpha。 */
+  --km-accent: hsl(var(--h), 72%, 46%);
+  --km-accent-ring: hsl(var(--h), 85%, 50%, 0.22);
+  --km-accent-soft: hsl(var(--h), 85%, 52%, 0.22);
+  --km-accent-line: hsl(var(--h), 80%, 50%, 0.6);
+  --km-accent-tint: hsl(var(--h), 72%, 50%, 0.085);
   /* halo 用色相色而不是黑色 —— 米色底上黑阴影会发脏 */
-  --km-halo: 0 22px 46px -26px hsl(var(--h) 55% 32% / 0.42);
+  --km-halo: 0 22px 46px -26px hsl(var(--h), 55%, 32%, 0.42);
 
   position: relative;
   isolation: isolate;
@@ -52,16 +56,77 @@
   will-change: transform;
 }
 
-/* 悬停：背景**明度跃迁**（这是"看得见"的关键，微调边框没有这个效果） */
-.km-live:hover,
-.km-live:focus-within {
-  --km-lift: -6px;
-  --km-scale: 1.008;
-  background: var(--surface-2, rgba(0, 0, 0, 0.045));
-  border-color: var(--km-accent);
-  box-shadow: var(--km-halo);
-  /* 提升层叠：否则放大/位移的部分会被相邻卡片盖住 */
+/*
+  悬停：**朱砂色环 + 暖色染色 + 顶边标尺**。
+
+  试错记录（避免以后又走回头路）：
+    第 1 版：上浮 6px + 描边转色 —— 用户说"力度不够"，确实：米色底上位移与描边
+             色差人眼几乎捕捉不到。
+    第 2 版：整卡反相（92% 深墨覆盖层）—— 截图一看是"糊了一层脏"，
+             因为米色与深墨是明度两端，大面积反相像被涂掉，而不是"选中"。
+    本 版：**用边缘信号代替整面改色** —— 2px 实色描边 + 外圈柔光 + 顶边标尺 +
+             同色系（暖色）轻染。边界清楚、颜色不脏，这是"选中"该有的语言。
+*/
+/* 双类选择器（.km-live.km-live）：提高权重以压过 v2 主题里 .card 的 box-shadow。
+   实测：单类时我的 box-shadow 被覆盖，计算值仍是 .card 的黑色阴影 ——
+   也就是说"朱砂外圈"根本没生效，力度自然不够。 */
+.km-live.km-live:hover,
+.km-live.km-live:focus-within {
+  --km-lift: -8px;
+  --km-scale: 1.012;
+  /* border-color / box-shadow 必须 !important：
+     组件的 scoped 样式里有 `.xxx:hover { box-shadow: var(--shadow-2) }`，
+     与全局规则同权重但位于产物之后，会覆盖掉这里的悬停光环。
+     实测证据：悬停后 transform 与 z-index 都已生效，唯独 box-shadow 仍是旧值。
+     .km-live 是全局覆盖层，职责就是统一各页悬停表现，所以这里夺取这两个属性。 */
+  border-color: var(--km-accent-colored, hsl(var(--h), 72%, 46%)) !important;
+  border-width: 2px !important;
+  box-shadow:
+    0 0 0 3px var(--km-accent-ring),
+    0 26px 52px -26px hsl(var(--h), 58%, 28%, 0.55) !important;
   z-index: 3;
+}
+
+/* 暖色轻染：同色系才不会脏（对比上一版的深墨反相） */
+.km-live::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border-radius: inherit;
+  background: var(--km-accent-tint);
+  opacity: 0;
+  transition: opacity 0.4s var(--ease);
+}
+.km-live:hover::before,
+.km-live:focus-within::before {
+  opacity: 1;
+}
+
+/* 顶边标尺：一条朱砂线从左向右展开 —— "被选中"的空间语言 */
+.km-live__rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 6;
+  pointer-events: none;
+  background: var(--km-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.km-live:hover .km-live__rule,
+.km-live:focus-within .km-live__rule {
+  transform: scaleX(1);
+}
+
+/* 内容层压在染色层之上（不改文字颜色：染色很轻，深色文字仍然可读） */
+.km-live__inner {
+  position: relative;
+  z-index: 5;
 }
 
 /* ② 光晕跟随：参考稿用 --mx/--my 定位径向渐变 */
@@ -76,7 +141,7 @@
   background:
     radial-gradient(
       42% 34% at var(--mx, 50%) var(--my, 50%),
-      hsl(var(--h) 85% 55% / 0.22),
+      hsl(var(--h), 85%, 55%, 0.22),
       transparent 70%
     ),
     radial-gradient(
@@ -111,9 +176,8 @@
     transform 0.9s var(--ease);
 }
 .km-live:hover .km-live__ghost {
-  /* 近 3 倍亮度差 —— 这是"明显"的一部分 */
-  opacity: 0.16;
-  transform: translate(-8px, -8px) scale(1.04);
+  opacity: 0.22;
+  transform: translate(-8px, -8px) scale(1.05);
 }
 
 /* 内容层必须压在光晕之上 */
