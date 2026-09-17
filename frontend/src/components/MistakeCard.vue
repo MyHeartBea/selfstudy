@@ -24,8 +24,6 @@ const props = defineProps({
 
 const emit = defineEmits(['open', 'toggle-select'])
 
-const TILT_MAX = 3 // 最大倾斜角度，克制不炫技
-
 // 思路文本净化：去掉 $..$ 数学记号与反斜杠命令，截断展示
 function approachSummary(text, max = 22) {
   const value = String(text || '')
@@ -36,21 +34,6 @@ function approachSummary(text, max = 22) {
     .replace(/\s+/g, ' ')
     .trim()
   return value.length > max ? `${value.slice(0, max)}…` : value
-}
-
-function onCardMove(event) {
-  if (!window.matchMedia('(pointer: fine)').matches) return
-  const el = event.currentTarget
-  const rect = el.getBoundingClientRect()
-  const px = (event.clientX - rect.left) / rect.width
-  const py = (event.clientY - rect.top) / rect.height
-  el.style.transform = `perspective(900px) rotateX(${(0.5 - py) * TILT_MAX}deg) rotateY(${(px - 0.5) * TILT_MAX}deg) translateY(-3px)`
-  el.style.setProperty('--sheen-x', `${px * 100}%`)
-  el.style.setProperty('--sheen-y', `${py * 100}%`)
-}
-
-function onCardLeave(event) {
-  event.currentTarget.style.transform = ''
 }
 
 function onCheckboxChange(checked) {
@@ -82,8 +65,13 @@ const hasImage = computed(
 </script>
 
 <template>
+  <!--
+    悬停复合特效统一由 .km-live 提供（styles/km-live.css + composables/kmLive.js）。
+    原来自带的 tilt（3°、自己写 transform）已移除：两处都动 transform 会互相覆盖，
+    且参考稿的幅度是 8-10°，3° 几乎看不出来 —— 用户反馈"鼠标放上去没有明显的动态特效"。
+  -->
   <article
-    class="mistake-card card tilt km-card"
+    class="mistake-card card km-live"
     :class="{ picked: selected }"
     :style="{ '--enter-delay': `${Math.min(pos, 11) * 55}ms`, '--spine': spineColor }"
     tabindex="0"
@@ -91,74 +79,87 @@ const hasImage = computed(
     @click="$emit('open', mistake.id)"
     @keydown.enter="$emit('open', mistake.id)"
     @keydown.space.prevent="$emit('open', mistake.id)"
-    @mousemove="onCardMove"
-    @mouseleave="onCardLeave"
   >
+    <!-- ⑤ 幽灵序号：压在背景的巨型编号 -->
+    <span class="km-live__ghost" aria-hidden="true">{{ String(index).padStart(2, '0') }}</span>
+    <!-- ③ 四角取景框 ④ 扫描线 -->
+    <span class="km-live__corner tl" aria-hidden="true"></span>
+    <span class="km-live__corner tr" aria-hidden="true"></span>
+    <span class="km-live__corner bl" aria-hidden="true"></span>
+    <span class="km-live__corner br" aria-hidden="true"></span>
+    <span class="km-live__scan" aria-hidden="true"></span>
+
     <i class="spine" aria-hidden="true"></i>
-    <span class="card-sheen" aria-hidden="true"></span>
 
-    <!-- 通栏图版：首图等高裁齐，白底衬板（走缩略图通道） -->
-    <div v-if="hasImage" class="shot-banner">
-      <QuestionImages :images="mistake.images" :max-width="480" :count="1" thumb />
-    </div>
-
-    <div class="card-body">
-      <div class="card-top">
-        <span class="seal-no">{{ String(index).padStart(4, '0') }}</span>
-        <MistakeMeta :mistake="mistake" compact />
-        <span class="top-end" @click.stop>
-          <UiStars :model-value="mistake.difficulty || 0" readonly :size="13" />
-          <UiCheckbox :model-value="selected" @click.stop @update:model-value="onCheckboxChange" />
-        </span>
+    <div class="km-live__inner">
+      <!-- 通栏图版：首图等高裁齐，白底衬板（走缩略图通道） -->
+      <div v-if="hasImage" class="shot-banner">
+        <QuestionImages :images="mistake.images" :max-width="480" :count="1" thumb />
       </div>
 
-      <div class="question-text">
-        <template v-if="mistake.passage_text">
-          <p class="passage-preview">{{ cardText }}</p>
-          <span v-if="englishQuestionCount > 1" class="passage-count"
-            >英语整篇 · 共 {{ englishQuestionCount }} 题</span
-          >
-        </template>
-        <RichText v-else :text="mistake.question" />
-      </div>
+      <div class="card-body">
+        <div class="card-top">
+          <span class="seal-no">{{ String(index).padStart(4, '0') }}</span>
+          <MistakeMeta :mistake="mistake" compact />
+          <span class="top-end" @click.stop>
+            <UiStars :model-value="mistake.difficulty || 0" readonly :size="13" />
+            <UiCheckbox
+              :model-value="selected"
+              @click.stop
+              @update:model-value="onCheckboxChange"
+            />
+          </span>
+        </div>
 
-      <div
-        v-if="(mistake.knowledge_tags && mistake.knowledge_tags.length) || mistake.approach"
-        class="tag-row"
-      >
-        <UiTag v-for="t in mistake.knowledge_tags || []" :key="t" size="sm">{{ t }}</UiTag>
-        <span v-if="mistake.approach" class="approach-chip" :title="mistake.approach">
-          {{ approachSummary(mistake.approach) }}
-        </span>
-      </div>
+        <div class="question-text">
+          <template v-if="mistake.passage_text">
+            <p class="passage-preview">{{ cardText }}</p>
+            <span v-if="englishQuestionCount > 1" class="passage-count"
+              >英语整篇 · 共 {{ englishQuestionCount }} 题</span
+            >
+          </template>
+          <RichText v-else :text="mistake.question" />
+        </div>
 
-      <div class="card-foot">
-        <UiTag v-if="mistake.review_paused" size="sm">已暂停</UiTag>
-        <span
-          v-else-if="mistake.next_review_at"
-          class="foot-item"
-          :title="'下次复习 ' + formatTime(mistake.next_review_at)"
+        <div
+          v-if="(mistake.knowledge_tags && mistake.knowledge_tags.length) || mistake.approach"
+          class="tag-row"
         >
-          <svg
-            viewBox="0 0 24 24"
-            width="12"
-            height="12"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
+          <UiTag v-for="t in mistake.knowledge_tags || []" :key="t" size="sm">{{ t }}</UiTag>
+          <span v-if="mistake.approach" class="approach-chip" :title="mistake.approach">
+            {{ approachSummary(mistake.approach) }}
+          </span>
+        </div>
+
+        <div class="card-foot">
+          <UiTag v-if="mistake.review_paused" size="sm">已暂停</UiTag>
+          <span
+            v-else-if="mistake.next_review_at"
+            class="foot-item"
+            :title="'下次复习 ' + formatTime(mistake.next_review_at)"
           >
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 7v5l3.5 2" />
-          </svg>
-          {{ formatTime(mistake.next_review_at).slice(5) }}
-        </span>
-        <span v-if="mistake.source_name" class="foot-item grow" :title="mistake.source_name">{{
-          mistake.source_name
-        }}</span>
-        <span class="foot-item">{{ formatTime(mistake.created_at).slice(0, 10) }}</span>
+            <svg
+              viewBox="0 0 24 24"
+              width="12"
+              height="12"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3.5 2" />
+            </svg>
+            {{ formatTime(mistake.next_review_at).slice(5) }}
+          </span>
+          <span v-if="mistake.source_name" class="foot-item grow" :title="mistake.source_name">{{
+            mistake.source_name
+          }}</span>
+          <span class="foot-item">{{ formatTime(mistake.created_at).slice(0, 10) }}</span>
+        </div>
       </div>
     </div>
+    <!-- /.km-live__inner -->
   </article>
 </template>
 
@@ -171,17 +172,22 @@ const hasImage = computed(
   cursor: pointer;
   height: 100%;
   overflow: hidden;
-  animation: card-in 0.55s var(--ease) both;
+  /* 入场动画**只动 opacity**，不动 transform。
+     原因（实测踩到）：入场动画用 `both` 填充模式，动画结束后仍会持续占用
+     transform 属性；而 .km-live 的悬停倾斜也走 transform（通过 --rx/--ry），
+     结果被动画的 transform 覆盖 —— 实测悬停时 computed transform 始终是
+     matrix(1,0,0,1,0,0)，倾斜完全没生效。
+     所以把"位移动画"交给外层容器（.card-grid 的错峰入场），
+     这里只负责淡入，避免两处争同一个属性。 */
+  animation: card-fade 0.55s var(--ease) both;
   animation-delay: var(--enter-delay, 0ms);
 }
-@keyframes card-in {
+@keyframes card-fade {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 .mistake-card:hover {

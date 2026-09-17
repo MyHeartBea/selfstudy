@@ -770,25 +770,27 @@ textarea.field-input {
      · 只在 body 带上 .km-custom-cursor 时才隐藏 —— 该类由 AppCursor 挂载成功后
        添加。万一脚本没跑起来（或被拦截），原生指针自动回来，不会"没有指针"。
    iframe / video 也保留默认指针，避免这些区域"点不到"的错觉。 */
+/* 用通配覆盖**所有元素**：
+   之前只写了 a/button/.card/.row，导致顶部悬浮导航（Dock 内部用 div[role=button]
+   与自定义组件）仍显示原生指针 —— 用户实测"放到最上面的悬浮选择页还是有鼠标出现"。
+   现在统一隐藏，再对输入类做例外。 */
 body.km-custom-cursor,
-body.km-custom-cursor a,
-body.km-custom-cursor button,
-body.km-custom-cursor [role='button'],
-body.km-custom-cursor .card,
-body.km-custom-cursor .row,
-body.km-custom-cursor summary {
-  cursor: none;
+body.km-custom-cursor * {
+  cursor: none !important;
 }
 body.km-custom-cursor input,
 body.km-custom-cursor textarea,
 body.km-custom-cursor select,
 body.km-custom-cursor iframe,
-body.km-custom-cursor video {
-  cursor: auto;
+body.km-custom-cursor video,
+body.km-custom-cursor [contenteditable='true'] {
+  cursor: auto !important;
 }
 body.km-custom-cursor input[type='text'],
 body.km-custom-cursor input[type='search'],
 body.km-custom-cursor input[type='number'],
+body.km-custom-cursor input[type='password'],
+body.km-custom-cursor input[type='email'],
 body.km-custom-cursor textarea {
-  cursor: text;
+  cursor: text !important;
 }

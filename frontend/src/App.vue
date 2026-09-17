@@ -29,6 +29,7 @@ import {
 } from './composables/motion'
 import { useGrain } from './composables/grain'
 import { useRouteVeil } from './composables/routeVeil'
+import { startLiveHover } from './composables/kmLive'
 
 // 噪点层：纯色底加材料感（学自参考稿的 feTurbulence + steps 位移）
 useGrain()
@@ -40,6 +41,7 @@ const { veilVisible } = useRouteVeil(router)
 
 let magnets = []
 let unbindScroll = null
+let stopLive = null
 
 onMounted(async () => {
   const saved = localStorage.getItem('km-theme')
@@ -52,6 +54,8 @@ onMounted(async () => {
     magnets.push(magnetic(el))
   })
   await bindMotion()
+  // 悬停复合特效的指针追踪（事件委托，全站一次）
+  stopLive = startLiveHover()
 })
 
 /**
@@ -72,6 +76,7 @@ onBeforeUnmount(() => {
   magnets.forEach((fn) => fn())
   magnets = []
   if (unbindScroll) unbindScroll()
+  if (stopLive) stopLive()
   stopSmoothScroll()
 })
 

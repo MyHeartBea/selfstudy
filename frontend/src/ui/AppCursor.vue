@@ -126,11 +126,28 @@ onBeforeUnmount(() => {
     opacity 0.3s ease;
   will-change: transform;
 }
-/* 命中：扩张到 54px 并转朱砂 */
+/* 命中：扩张到 54px，但**改为细描边环 + 透明内芯**。
+   为什么不像参考稿那样直接变实心强调色：参考稿的底色是 #060607（近黑），
+   实心 #FF4D1C 在暗底上是"亮起来"；v2 是米色底，大面积实心朱砂会变成
+   一团刺眼的红 —— 这就是用户说"鼠标太丑"的原因。
+   在浅底上改用"环"：同样传达"可点"，但只占一圈线。 */
 .cur.is-hover {
   width: 54px;
   height: 54px;
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+/* 命中时内芯留一个极小的实心点，保持"指针尖"的位置感 */
+.cur.is-hover::after {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
   background: var(--accent);
+  transform: translate(-50%, -50%);
 }
 /* 按下：再收一点 */
 .cur.is-press {

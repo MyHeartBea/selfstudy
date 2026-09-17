@@ -12,6 +12,7 @@ import './styles/tokens.css'
 import './styles/base.css'
 // 交互与排版增强层（列表悬停 / 逐行揭示 / 等宽数位）—— 学自参考稿，保持 v2 语言
 import './styles/km-motion.css'
+import './styles/km-live.css'
 
 const app = createApp(App)
 app.directive('reveal', reveal)
