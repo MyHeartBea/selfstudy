@@ -99,17 +99,25 @@
   margin-top: var(--sec-gap);
 }
 
-/* ── 入场：错峰（由 .entered 触发，与首页同一套） ────────────────────── */
-.km-editorial
-  :is(.card-grid, .formula-grid, .vocab-grid, .subject-grid, .k-grid, .paper-grid, .km-list) {
+/* ── 入场：错峰（**显式 opt-in**）──────────────────────────────────────
+   这里刻意**不再**对网格默认隐藏。
+   原因（真实事故）：我原先写的是 `.km-editorial .card-grid { opacity: 0 }` +
+   `.km-editorial.entered ... { opacity: 1 }`，但 9 个页面里只有首页有 entered
+   逻辑 —— 其余 8 页内容**永远停在 opacity:0**，表现为"数据消失了"。
+
+   所以改成"默认可见 + 需要时显式声明"：
+     给元素加 data-enter="stagger" 才参与入场。
+   状态没来最多是"少一个动效"，绝不会变成"整片内容看不见"。
+   这也是可用性底线：动效层永远不该有能力让内容消失。 */
+.km-editorial [data-enter='stagger'] {
   opacity: 0;
   transform: translateY(18px);
   transition:
     opacity 0.6s var(--ease),
     transform 0.85s cubic-bezier(0.22, 1.12, 0.36, 1);
 }
-.km-editorial.entered
-  :is(.card-grid, .formula-grid, .vocab-grid, .subject-grid, .k-grid, .paper-grid, .km-list) {
+.km-editorial.entered [data-enter='stagger'],
+.km-editorial [data-enter='stagger'].entered {
   opacity: 1;
   transform: none;
 }
