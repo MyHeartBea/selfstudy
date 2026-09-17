@@ -121,3 +121,30 @@
     transition: none;
   }
 }
+
+/* ── 行式条目：统一整行悬停填充（复习选项、试卷题行、练习筛选项）────
+   这些行在 v2 里各自有 hover 样式，风格不一；这里统一为"整行从左侧刷上底色"。
+   只动 clip-path 与 transform，不碰布局。 */
+.km-editorial :is(.option-row, .pq-row, .cand-row, .f-item, .mr-item) {
+  position: relative;
+  isolation: isolate;
+  transition: padding-left 0.4s var(--ease);
+}
+.km-editorial :is(.option-row, .pq-row, .cand-row, .f-item, .mr-item)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--surface-2, rgba(0, 0, 0, 0.04));
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.5s var(--ease);
+}
+.km-editorial :is(.option-row, .pq-row, .cand-row, .f-item, .mr-item):hover::before {
+  clip-path: inset(0 0 0 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .km-editorial :is(.option-row, .pq-row, .cand-row, .f-item, .mr-item)::before {
+    transition: none;
+  }
+}
