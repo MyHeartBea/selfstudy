@@ -1732,10 +1732,27 @@ onBeforeUnmount(() => {
 }
 /* 右列两行**强制等高**：minmax(0,1fr) 会把可用高度均分给两行，
    于是 瓷砖1 + gap + 瓷砖2 恒等于左侧英雄卡的高度，底边自然齐平。
-   （原来写 minmax(158px,1fr)，内容高度不同就会不齐 —— 截图可见。） */
+   实测：178.844 × 2 + 14 = 371.688 = 英雄卡高度，几何完全对齐。 */
 .stats-page .bento-top {
   grid-template-rows: repeat(2, minmax(0, 1fr));
   align-items: stretch;
+}
+/* 观感统一：三块读作"同一组"，而不是浮在背景上的三张卡。
+   实测几何本来就对齐，用户感知到的"错位"来自观感不统一 ——
+   英雄卡有暖色光晕与醒目四角，两张瓷砖是素面。 */
+.stats-page .bento-top {
+  /* 极淡容器底 + 统一描边，把两列收进同一个视野里 */
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  border: 1px solid var(--line);
+  padding: 10px;
+}
+.stats-page .bento-top > * {
+  border: 1px solid var(--line) !important;
+}
+/* 三张卡的内边距完全一致（避免"一张挤一张松"的错位感） */
+.stats-page .bento-top > * > * {
+  padding-left: clamp(18px, 2.2vw, 30px);
+  padding-right: clamp(18px, 2.2vw, 30px);
 }
 .stats-page .bento-top > * {
   height: 100%;
