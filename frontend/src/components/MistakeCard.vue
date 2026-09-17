@@ -184,8 +184,15 @@ const hasImage = computed(
   --paper-ink-3: #8f8672;
   --paper-line: rgba(44, 40, 34, 0.12);
 
-  background: var(--paper-bg);
+  /* 暖纸 + 极淡渐变 + 内亮边 —— 避免"死白"。
+     纯 #fdfbf5 在深底上像一块灯箱：对比硬、无层次。
+     渐变让上方略亮、下方略沉，读起来像"一张有厚度的纸"；
+     内亮边模拟纸张边缘受光。 */
+  background: linear-gradient(180deg, #fffdf8 0%, var(--paper-bg) 42%, #f4efe4 100%);
   color: var(--paper-ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 0 0 1px rgba(44, 40, 34, 0.06);
 }
 /* 内部文字统一走纸面配色（v2 各子组件用不同类名，所以按标签与常见类兜底） */
 .mistake-card :is(h1, h2, h3, h4, p, span, b, strong, em, time, dt, dd).not-this {

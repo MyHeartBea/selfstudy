@@ -334,7 +334,21 @@ onBeforeUnmount(() => {
 
     <!-- 顶部区：英雄卡 + 两张瓷砖（子网格两行强制等高，卡片对齐） -->
     <div class="bento-top">
-      <GlassCard class="b-hero" :hover="false" @mousemove="onHeroMove" @mouseleave="onHeroLeave">
+      <GlassCard
+        class="b-hero km-live"
+        :hover="false"
+        style="--h: 12"
+        @mousemove="onHeroMove"
+        @mouseleave="onHeroLeave"
+      >
+        <!-- 复合悬停的装饰层（幽灵序号 / 四角 / 扫描线 / 顶边标尺） -->
+        <span class="km-live__ghost" aria-hidden="true">今</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
         <span class="hero-seal" aria-hidden="true">今</span>
         <div class="hero-bg" aria-hidden="true" data-parallax="48"></div>
         <span
@@ -343,7 +357,7 @@ onBeforeUnmount(() => {
           :title="`最长连续纪录见「连续复习」`"
         >
           <Icon name="flame" :size="14" />
-          连续 <b class="num">{{ nStreak }}</b> 天
+          连续 <b class="num km-num">{{ nStreak }}</b> 天
         </span>
         <div class="hero-label"><Icon name="clock" :size="15" /> 今日待复习</div>
         <div class="hero-body">
@@ -355,11 +369,11 @@ onBeforeUnmount(() => {
             <div class="hero-chips">
               <span class="h-chip"
                 ><Icon name="target" :size="13" />今日正确率
-                <b class="num">{{ nAccToday }}<i>%</i></b></span
+                <b class="num km-num">{{ nAccToday }}<i>%</i></b></span
               >
               <span class="h-chip"
                 ><Icon name="sparkles" :size="13" />平均掌握度
-                <b class="num">{{ nMastery }}</b></span
+                <b class="num km-num">{{ nMastery }}</b></span
               >
             </div>
             <UiButton variant="primary" class="hero-cta" @click="router.push('/review')">
@@ -369,7 +383,7 @@ onBeforeUnmount(() => {
           </div>
           <RingProgress :percentage="ringPercent">
             <div class="ring-center-text">
-              <b class="num">{{ nReviewed }}/{{ reviewStats.due_today }}</b>
+              <b class="num km-num">{{ nReviewed }}/{{ reviewStats.due_today }}</b>
               <span>今日已完成</span>
             </div>
           </RingProgress>
@@ -416,7 +430,7 @@ onBeforeUnmount(() => {
             class="m-step"
             :style="{ '--d': s.delay + 'ms' }"
           >
-            <b class="num">{{ s.count }}</b>
+            <b class="num km-num">{{ s.count }}</b>
             <div class="m-pill">
               <i
                 class="m-fill"
@@ -449,7 +463,7 @@ onBeforeUnmount(() => {
             class="weak-item"
             @click="practiceTag(row.tag_name)"
           >
-            <span class="w-rank num">{{ i + 1 }}</span>
+            <span class="w-rank num km-num">{{ i + 1 }}</span>
             <span class="w-name">
               <b>{{ row.tag_name }}</b>
               <span>错 {{ row.wrong_count }} 次 · 关联 {{ row.mistake_count }} 题</span>
@@ -479,7 +493,7 @@ onBeforeUnmount(() => {
           <h3 class="panel-title">复习负荷预报</h3>
           <span class="cap">未来 30 天到期分布，哪天堆多了提前匀开</span>
           <span v-if="forecast.overdue" class="fc-overdue"
-            >逾期 <b class="num">{{ forecast.overdue }}</b> 题</span
+            >逾期 <b class="num km-num">{{ forecast.overdue }}</b> 题</span
           >
         </div>
         <div class="fc-bars">
@@ -496,7 +510,7 @@ onBeforeUnmount(() => {
                   (c.count ? Math.max(6, Math.round((c.count / forecastMax) * 64)) : 4) + 'px',
               }"
             ></i>
-            <span class="fc-label num">{{ c.label }}</span>
+            <span class="fc-label num km-num">{{ c.label }}</span>
           </div>
         </div>
       </GlassCard>
@@ -529,11 +543,11 @@ onBeforeUnmount(() => {
           <p class="rp-summary"><MathText :text="report.summary" /></p>
           <div class="rp-clusters">
             <div v-for="(c, i) in report.clusters" :key="i" class="rp-cluster">
-              <span class="rp-rank num">{{ i + 1 }}</span>
+              <span class="rp-rank num km-num">{{ i + 1 }}</span>
               <div class="rp-body">
                 <div class="rp-line">
                   <b class="serif">{{ c.cause }}</b>
-                  <span class="rp-count num">{{ c.count }} 题</span>
+                  <span class="rp-count num km-num">{{ c.count }} 题</span>
                 </div>
                 <p class="rp-advice"><MathText :text="c.advice" /></p>
                 <div v-if="c.tags && c.tags.length" class="rp-tags">
@@ -589,7 +603,7 @@ onBeforeUnmount(() => {
           </svg>
         </div>
         <div v-if="mockTrend.length" class="mk-meta">
-          <span v-for="(m, i) in mockTrend" :key="i" class="mk-chip num">
+          <span v-for="(m, i) in mockTrend" :key="i" class="mk-chip num km-num">
             {{ m.exam_year || '—' }} · {{ m.score }} 分 · {{ m.correct }}/{{ m.total }}
           </span>
         </div>
@@ -619,15 +633,15 @@ onBeforeUnmount(() => {
             />
           </svg>
           <div class="donut-center">
-            <div class="donut-total num">{{ typeDonut.total }}</div>
+            <div class="donut-total num km-num">{{ typeDonut.total }}</div>
             <div class="donut-total-label">总题数</div>
           </div>
           <div class="donut-legend">
             <div v-for="seg in typeDonut.segs" :key="seg.name" class="legend-item">
               <span class="legend-dot" :style="{ background: seg.color }"></span>
               <span class="legend-name">{{ seg.name }}</span>
-              <span class="legend-num num">{{ seg.count }}</span>
-              <span class="legend-pct num">{{ seg.percent }}%</span>
+              <span class="legend-num num km-num">{{ seg.count }}</span>
+              <span class="legend-pct num km-num">{{ seg.percent }}%</span>
             </div>
           </div>
         </div>
@@ -647,7 +661,7 @@ onBeforeUnmount(() => {
                 }"
               ></i
             ></span>
-            <span class="s-nums num">{{ s.count }} 题</span>
+            <span class="s-nums num km-num">{{ s.count }} 题</span>
           </div>
         </div>
         <UiEmpty v-else text="暂无题目来源数据" icon="tag" />
@@ -673,7 +687,7 @@ onBeforeUnmount(() => {
               }"
             ></i>
           </span>
-          <span class="s-nums num">
+          <span class="s-nums num km-num">
             <b>{{ s.count }}</b> 题
             <em>复习 {{ s.review_count || 0 }}</em>
             <em :class="{ good: (s.accuracy || 0) >= 70, warn: (s.accuracy || 0) < 50 }"

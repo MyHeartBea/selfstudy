@@ -189,10 +189,13 @@
 /* ③ 四角取景框：默认在框外并透明，悬停归位 */
 .km-live__corner {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid var(--km-accent-line);
+  /* 加大加实：16→22px、1.5→2px、半透明→实色。
+     四角是"选择感"最直接的信号，太细太淡就完全看不出（用户两轮反馈）。 */
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--km-accent);
   opacity: 0;
+  filter: drop-shadow(0 1px 3px hsl(var(--h), 60%, 30%, 0.35));
   z-index: 3;
   pointer-events: none;
   transition:
@@ -230,7 +233,11 @@
 .km-live:hover .km-live__corner,
 .km-live:focus-within .km-live__corner {
   opacity: 1;
-  transform: translate(0, 0);
+  /* 归位后再向内收 2px：像取景器合焦，比单纯"出现在角落"有动作感 */
+  transform: translate(0, 0) scale(1);
+  transition:
+    opacity 0.3s var(--ease),
+    transform 0.55s cubic-bezier(0.22, 1.12, 0.36, 1);
 }
 
 /* ④ 扫描线：22% 高的柔光带循环下滑。用 filter 而不是 mix-blend-mode，
