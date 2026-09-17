@@ -42,6 +42,6 @@ const loading = ref(true)
     <component :is="Component" />
   </RouterView>
 
-  <!-- 启动页：覆盖一切，结束后卸载 -->
-  <InkLoader v-if="loading" :min-duration="2100" @done="loading = false" />
+  <!-- 启动页：校准台。整块向上抽走后卸载（转场对齐 atlas 参考稿） -->
+  <InkLoader v-if="loading" @done="loading = false" />
 </template>

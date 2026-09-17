@@ -1,84 +1,140 @@
 /**
- * 启动页单测（happy-dom）
+ * 启动页（校准台）单测 —— 对齐 atlas 参考稿后的行为
  *
- * 这里验的是"组件契约"，不是动画观感（观感由真浏览器像素校验负责）：
- *   1. 三个阶段的类名会随状态切换
- *   2. 默认 props 下会走完流程并 emit done
- *   3. 任意键可以跳过（这是每天开很多次的工具，跳过必须真的有效）
- *   4. 卸载后不留副作用（body overflow 复原、事件解绑）
- *
- * 注意：harness 默认在 happy-dom 里跑，没有 requestAnimationFrame 的稳定节拍，
- * 所以对时序断言一律用 vi.useFakeTimers + 手动推进，避免 flaky。
+ * 旧测试失败的原因**不是代码坏了**，而是它断言的是旧契约：
+ *   旧版：rest → inking → opening 三段 + 圆形遮罩揭幕
+ *   新版：00 → 100 缓出计数 1250ms + 三行阶段点亮 + **整块向上抽走** translateY(-101%)
+ * 所以这里断言新契约，而不是迁就旧断言。
  */
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 
 import InkLoader from '../src/app/InkLoader.vue'
 
-describe('InkLoader 研墨开场', () => {
+/** 用假定时器驱动组件内部的 requestAnimationFrame 循环 */
+function rafWithFakeTimers() {
+  let id = 0
+  const cbs = new Map()
+  globalThis.requestAnimationFrame = (cb) => {
+    id += 1
+    cbs.set(id, cb)
+    return id
+  }
+  globalThis.cancelAnimationFrame = (i) => cbs.delete(i)
+  return {
+    /** 推进一帧并 flush DOM（rAF 改了 ref，DOM 要等 nextTick 才更新） */
+    async tick(ms = 16) {
+      vi.advanceTimersByTime(ms)
+      const run = [...cbs.entries()]
+      cbs.clear()
+      run.forEach(([, cb]) => cb(performance.now()))
+      await nextTick()
+    },
+  }
+}
+
+describe('InkLoader 校准台', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    // 关键：让 performance.now() 跟着**假定时器**走。
+    // 组件用真实时间差计算进度（这是对的产品行为，因为帧率不可控）；
+    // 所以测试必须 mock 时间源，而不是让组件去迁就假定时器。
+    vi.spyOn(performance, 'now').mockImplementation(() => vi.getMockedSystemTime() ?? Date.now())
     document.body.style.overflow = ''
-    document.body.className = ''
+    document.body.classList.remove('ready')
   })
-
   afterEach(() => {
     vi.useRealTimers()
-    document.body.innerHTML = ''
     document.body.style.overflow = ''
-    document.body.className = ''
+    document.body.classList.remove('ready')
   })
 
-  it('挂载后进入第一段（rest），并锁住滚动', () => {
-    const wrapper = mount(InkLoader)
-    expect(wrapper.classes()).toContain('ink-loader')
-    expect(wrapper.classes()).toContain('rest')
+  it('挂载即锁滚动，并显示两位读数与三行阶段', async () => {
+    const f = rafWithFakeTimers()
+    const w = mount(InkLoader)
     expect(document.body.style.overflow).toBe('hidden')
-    wrapper.unmount()
+    expect(w.find('.num').text()).toBe('00')
+    expect(w.findAll('.steps span')).toHaveLength(3)
+    await f.tick()
+    w.unmount()
   })
 
-  it('700ms 后进入第二段（inking），读数不再是 000 之外的空值', async () => {
-    const wrapper = mount(InkLoader)
-    vi.advanceTimersByTime(760)
-    await wrapper.vm.$nextTick()
-    expect(wrapper.classes()).toContain('inking')
-    // 读数始终是 3 位数字（等宽对齐是视觉要求）
-    expect(wrapper.find('.digits').text()).toMatch(/^\d{3}$/)
-    wrapper.unmount()
+  it('计数随时间增长（缓出），且当前阶段被点亮', async () => {
+    const f = rafWithFakeTimers()
+    const w = mount(InkLoader)
+    for (let i = 0; i < 32; i++) await f.tick(16) // 约 500ms / 1250ms
+    const mid = Number(w.find('.num').text())
+    expect(mid).toBeGreaterThan(0)
+    expect(mid).toBeLessThan(100)
+    expect(w.findAll('.steps span.on')).toHaveLength(1)
+    w.unmount()
   })
 
-  it('跳过路径会 emit done、解锁滚动并标记跳过', async () => {
-    // 说明：这里刻意只验**同步可控**的路径。
-    // "自然跑完"依赖 document.fonts.ready + rAF 节拍，在 happy-dom + fake timers 下不稳定，
-    // 那条链路由真浏览器验证（无头 Chrome 实测：rest 0.9s / inking 1.4s / opening 3.5s / 卸载）。
-    const wrapper = mount(InkLoader, { props: { minDuration: 99999 } })
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    vi.advanceTimersByTime(1000)
-    expect(wrapper.emitted('done')).toBeTruthy()
+  it('走完后加 .done（触发向上抽走）、解锁滚动、标记 body.ready', async () => {
+    const f = rafWithFakeTimers()
+    const w = mount(InkLoader)
+    for (let i = 0; i < 100; i++) await f.tick(16)
+    await vi.advanceTimersByTimeAsync(220) // finish() 内的 160ms 延迟
+    expect(w.find('.loader').classes()).toContain('done')
+    expect(document.body.style.overflow).toBe('')
     expect(document.body.classList.contains('ready')).toBe(true)
-    expect(document.body.style.overflow).toBe('')
-    // 跳过会留下可观测标记，便于在浏览器里确认走的是跳过路径
-    expect(document.documentElement.dataset.loaderSkipped).toBe('1')
-    wrapper.unmount()
-    delete document.documentElement.dataset.loaderSkipped
+    expect(w.find('.num').text()).toBe('100')
+    w.unmount()
   })
 
-  it('卸载后清理：overflow 复原、键盘监听解绑', () => {
-    const wrapper = mount(InkLoader, { props: { minDuration: 99999 } })
-    wrapper.unmount()
-    expect(document.body.style.overflow).toBe('')
-    // 解绑后按键不应再触发 done（已卸载，emitted 不再累积）
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
-    expect(wrapper.emitted('done')).toBeFalsy()
+  it('抽走 1200ms 后才 emit done（保留转场观感，不瞬间消失）', async () => {
+    const f = rafWithFakeTimers()
+    const w = mount(InkLoader)
+    for (let i = 0; i < 100; i++) await f.tick(16)
+    await vi.advanceTimersByTimeAsync(220)
+    expect(w.emitted('done')).toBeFalsy()
+    await vi.advanceTimersByTimeAsync(1300)
+    expect(w.emitted('done')).toHaveLength(1)
+    w.unmount()
   })
 
-  it('无障碍：带 progressbar 语义与进度值', () => {
-    const wrapper = mount(InkLoader)
-    const el = wrapper.find('[role="progressbar"]')
-    expect(el.exists()).toBe(true)
-    expect(el.attributes('aria-valuemin')).toBe('0')
-    expect(el.attributes('aria-valuemax')).toBe('100')
-    expect(Number(el.attributes('aria-valuenow'))).toBeGreaterThanOrEqual(0)
-    wrapper.unmount()
+  it('任意键可跳过：直接到 100 并抽走', async () => {
+    const f = rafWithFakeTimers()
+    const w = mount(InkLoader)
+    f.tick(16)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await w.vm.$nextTick()
+    expect(w.find('.num').text()).toBe('100')
+    expect(w.find('.loader').classes()).toContain('done')
+    w.unmount()
+  })
+
+  it('rAF 被节流（完全不触发）时，进度仍由兜底定时器推进并正常结束', async () => {
+    // 这是本次修的真问题：无头/后台标签页里 rAF 可能 3 秒只触发几次，
+    // 靠它驱动时长动画会卡住。现在时间来源是 Date.now + 100ms 兜底定时器。
+    rafWithFakeTimers() // 只装 rAF 桩；本用例刻意**不**执行它
+    const w = mount(InkLoader)
+    // 只推进定时器，不执行 rAF 回调 —— 模拟 rAF 被完全节流
+    for (let i = 0; i < 16; i++) {
+      await vi.advanceTimersByTimeAsync(100)
+      await nextTick()
+    }
+    expect(w.find('.num').text()).toBe('100')
+    expect(w.find('.loader').classes()).toContain('done')
+    w.unmount()
+  })
+
+  it('卸载时解锁滚动（异常路径不锁死页面）', async () => {
+    const f = rafWithFakeTimers()
+    const w = mount(InkLoader)
+    f.tick(16)
+    w.unmount()
+    expect(document.body.style.overflow).toBe('')
+  })
+
+  it('可访问性：progressbar 语义 + 阶段文本对辅助技术隐藏', async () => {
+    const f = rafWithFakeTimers()
+    const w = mount(InkLoader)
+    expect(w.attributes('role')).toBe('progressbar')
+    expect(w.attributes('aria-label')).toBe('正在校准观测站')
+    expect(w.find('.steps').attributes('aria-hidden')).toBe('true')
+    await f.tick()
+    w.unmount()
   })
 })

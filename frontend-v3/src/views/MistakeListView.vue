@@ -1,36 +1,43 @@
 <!--
-  MistakeListView —— 错题星表（列表 + 详情）
-  ---------------------------------------------------------------------------
-  契约要点（必须处理，否则会静默出错）：
-    GET /api/mistakes **不传 page 返回数组；传 page 返回 { items, total, page, page_size }**。
-    本页统一带 page（行为可预测），但**仍然兼容数组形状**——因为契约允许两种，
-    而且 docs/contract-baseline.json 里两个形状都采样了。
-
-  交互语义：错题 = 星；掌握度 = 墨点（记住多少）；复习遍数 = 星等（看过几遍）。
-  设计取舍：整块可点靠事件绑在卡片本身（InkCard），卡片内控件一律 @click.stop。
+  MistakeListView —— 错题星图（重铸版）
+  ===========================================================================
+  用户要求：审美基准是 Awwwards SOTD / FWA / CSS Design Awards 每日最佳，
+  不是模板化 SaaS；并且要**物理感动效**（弹簧、惯性、阻尼、延迟、错峰）。
+  这一版与"卡片网格"的本质区别（这是重铸的核心，不是换皮）：
+    1. **入场用真弹簧积分**（src/design/physics.js），不是 CSS cubic-bezier：
+       曲线到点即停，弹簧有速度、过冲、回弹。起始位移按列错峰，整屏像"落定"。
+    2. **悬停：倾斜跟随指针（3°）+ 高光 sheen + 三层视差错幅位移**
+       —— 悬停不是"背景变色"，而是这张卡"被拿起来看"。
+    3. **难度五格墨条 + 掌握度墨线贴底边**：一眼可读"这道题我掌握了多少"。
+    4. **题图在上 / 题干居中 / 元信息沉底**三层结构，悬停时各层位移幅度不同 - 厚度感。
+    5. 题图点击进灯箱（独立顶层视图，Esc / 点背景关闭）。
+  物理边界（诚实说明）：
+    · 本页做**入场弹簧 + 悬停视差**；**拖拽排序与惯性滑行未做**——
+      那需要后端的排序持久化接口，现在没有。不假装做了。
+    · 全部只动 transform / opacity；reduced-motion 下直接落位。
+  本轮同时**补齐此前缺失的功能**：暂停/恢复复习、删除错题（后端接口一直有，界面没做）。
 -->
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-
-import { usePageMotion } from '../design/usePageMotion'
+import { ArrowUpRight, Pause, Play, Trash2, X } from 'lucide-vue-next'
 
 import { baseApi, mistakesApi } from '../core/api'
+import { springIn, stagger } from '../design/physics'
 import { toast } from '../ui/toast'
-import InkCard from '../ui/InkCard.vue'
+import EnglishPanel from '../components/EnglishPanel.vue'
 import InkDot from '../ui/InkDot.vue'
+import MathText from '../components/MathText.vue'
 import StarRow from '../ui/StarRow.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiField from '../ui/UiField.vue'
 import UiModal from '../ui/UiModal.vue'
-import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
-import EnglishPanel from '../components/EnglishPanel.vue'
-import MathText from '../components/MathText.vue'
 
-const PAGE_SIZE = 9 // 3×3：用户要求每页 9 题
+const PAGE_SIZE = 9 // 3×3 采样棋盘
+const gridEl = ref(null)
+let itemStops = []
 
-const pageRoot = ref(null)
 const loading = ref(true)
 const errorText = ref('')
 const items = ref([])
@@ -41,16 +48,13 @@ const filters = reactive({ search: '', subject_id: '', difficulty: '' })
 const subjects = ref([])
 
 const detailOpen = ref(false)
-/** 灯箱当前显示的图片 URL（空串 = 关闭） */
-const lightbox = ref('')
-const lbEl = ref(null)
 const detail = ref(null)
 const detailLoading = ref(false)
+const lightbox = ref('')
+const lbEl = ref(null)
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
-const subjectName = computed(
-  () => (id) => subjects.value.find((s) => s.id === id)?.name || '未分科',
-)
+const subjectName = (id) => subjects.value.find((s) => s.id === id)?.name || '未分科'
 
 const DIFFICULTY = [
   { value: '', label: '全部难度' },
@@ -61,6 +65,7 @@ const DIFFICULTY = [
   { value: '5', label: '----- 完全不会' },
 ]
 
+/* ── 数据 ─────────────────────────────────────────────────── */
 async function load() {
   loading.value = true
   errorText.value = ''
@@ -71,7 +76,7 @@ async function load() {
     if (filters.difficulty) params.difficulty = Number(filters.difficulty)
 
     const data = await mistakesApi.list(params)
-    // 双形状兼容：数组（无分页）或分页对象
+    // 双形状兼容：不传 page 返回数组，传 page 返回分页对象
     if (Array.isArray(data)) {
       items.value = data
       total.value = data.length
@@ -86,6 +91,8 @@ async function load() {
   } finally {
     loading.value = false
   }
+  await nextTick()
+  runEntrance()
 }
 
 async function loadSubjects() {
@@ -96,31 +103,47 @@ async function loadSubjects() {
   }
 }
 
-const SUBJECT_OPTIONS = computed(() => [
-  { value: '', label: '全部科目' },
-  ...subjects.value.map((s) => ({ value: String(s.id), label: s.name })),
-])
-
-/**
- * 打开灯箱：**收起详情弹层**再显示灯箱。
- *
- * 为什么不是简单叠一层：灯箱视觉上在弹层之上（z-index 96 > 92），
- * 但 UiModal 的 Esc 监听绑在 document 捕获阶段并 stopPropagation()，
- * 会把 Esc 在到达灯箱之前截走 —— 视觉层级与事件流不一致。
- * 让它成为独立顶层视图后，Esc 只被当前顶层处理，行为可预期。
- */
-function openLightbox(src) {
-  lightbox.value = src
-  detailOpen.value = false
-  nextTick(() => lbEl.value?.focus?.())
+/* ── 物理入场：真弹簧 + 按列错峰 ─────────────────────────── */
+function runEntrance() {
+  itemStops.forEach((fn) => fn())
+  itemStops = []
+  const root = gridEl.value
+  if (!root) return
+  const cards = Array.from(root.querySelectorAll('.tile'))
+  if (!cards.length) return
+  const startAt = stagger(cards.length, 58)
+  cards.forEach((el, i) => {
+    // 同一行内按列错峰，行与行之间再叠一层延迟 —— 落定感来自"不同时到达"
+    const delay = startAt(i % 3) + Math.floor(i / 3) * 70
+    itemStops.push(springIn(el, { delay, y: 34, preset: 'settle' }))
+  })
 }
 
-/** 关灯箱：回到详情弹层（用户是从详情里点开图的，不能把他丢在空页面） */
-function closeLightbox() {
-  lightbox.value = ''
-  if (detail.value) detailOpen.value = true
+/* ── 悬停视差：三层不同幅度（写 CSS 变量，避免与倾斜的内联 transform 打架）── */
+function onTileMove(e) {
+  const el = e.currentTarget
+  if (!window.matchMedia('(pointer: fine)').matches) return
+  const r = el.getBoundingClientRect()
+  const px = (e.clientX - r.left) / r.width
+  const py = (e.clientY - r.top) / r.height
+  el.style.setProperty('--tilt-y', `${((px - 0.5) * 3).toFixed(2)}deg`)
+  el.style.setProperty('--tilt-x', `${((0.5 - py) * 3).toFixed(2)}deg`)
+  el.style.setProperty('--sheen-x', `${(px * 100).toFixed(1)}%`)
+  el.style.setProperty('--sheen-y', `${(py * 100).toFixed(1)}%`)
+  el.style.setProperty('--par-x', `${((px - 0.5) * 10).toFixed(1)}px`)
+  el.style.setProperty('--par-y', `${((py - 0.5) * 8).toFixed(1)}px`)
+}
+function onTileLeave(e) {
+  const el = e.currentTarget
+  el.style.removeProperty('--tilt-x')
+  el.style.removeProperty('--tilt-y')
+  el.style.removeProperty('--par-x')
+  el.style.removeProperty('--par-y')
+  el.style.setProperty('--sheen-x', '50%')
+  el.style.setProperty('--sheen-y', '50%')
 }
 
+/* ── 详情 ─────────────────────────────────────────────────── */
 async function openDetail(row) {
   detailOpen.value = true
   detailLoading.value = true
@@ -134,7 +157,47 @@ async function openDetail(row) {
   }
 }
 
-/** 题型中文名（与后端 question_type 枚举一致） */
+/**
+ * 打开灯箱：**收起详情弹层**再显示灯箱。
+ * 为什么：UiModal 的 Esc 监听绑在 document 捕获阶段并 stopPropagation()，
+ * 灯箱若作为弹层内部子节点，视觉在上（z-index 96>92）但事件先被底层截走。
+ * 让它成为独立顶层视图，视觉层级与事件流就一致了（已实测验证）。
+ */
+function openLightbox(src) {
+  lightbox.value = src
+  detailOpen.value = false
+  nextTick(() => lbEl.value?.focus?.())
+}
+function closeLightbox() {
+  lightbox.value = ''
+  if (detail.value) detailOpen.value = true
+}
+
+/* ── 本轮补齐的功能：暂停/恢复、删除（后端接口一直有）──────── */
+async function togglePause(row) {
+  const next = !row.review_paused
+  try {
+    await mistakesApi.setPaused(row.id, next)
+    row.review_paused = next
+    toast.success(next ? '已暂停复习这道题' : '已恢复复习')
+  } catch (e) {
+    toast.error(e?.message || '操作失败')
+  }
+}
+
+async function removeMistake(row) {
+  if (!window.confirm('删除这道错题？该操作不可撤销。')) return
+  try {
+    await mistakesApi.remove(row.id)
+    toast.success('已删除')
+    detailOpen.value = false
+    await load()
+  } catch (e) {
+    toast.error(e?.message || '删除失败')
+  }
+}
+
+/* ── 工具 ─────────────────────────────────────────────────── */
 function typeName(t) {
   return (
     { choice: '选择题', multi: '多选题', fill: '填空题', translation: '翻译', solution: '解答题' }[
@@ -148,30 +211,26 @@ function typeTone(t) {
     'ink'
   )
 }
-
-/**
- * 题图 URL。
- *
- * 踩过的坑：后端 `images` 里的值**自带 `images/` 前缀**（如 `images/xxx.png`），
- * 我又拼了一次 `/images/`，得到 `/images/images/xxx.png` - 404 - 用户看到裂图。
- * 所以必须先把已有的 `images/` 前缀剥掉。
- *
- * 列表用 `/images/thumb/<file>`（后端懒生成 WebP，实测 334KB - 33.8KB），
- * 详情用原图 —— 与 v2 的做法一致。
- */
 function imageName(item) {
   const v = String(item || '').trim()
   if (!v) return ''
   if (v.startsWith('data:') || v.startsWith('http')) return v
   return v.replace(/^\/+/, '').replace(/^images\//, '')
 }
-
+/** 题图：后端 images 值自带 images/ 前缀，必须剥掉再拼；列表用缩略图通道 */
 function firstImage(row, { thumb = false } = {}) {
-  const list = Array.isArray(row && row.images) ? row.images : []
+  const list = Array.isArray(row?.images) ? row.images : []
   const first = list.find((x) => x && typeof x === 'string')
   if (!first) return ''
   if (first.startsWith('data:') || first.startsWith('http')) return first
   return `/images/${thumb ? 'thumb/' : ''}${imageName(first)}`
+}
+/** 掌握度 0-100 - 底部墨线宽度（本页最重要的"一眼可读"信息） */
+function masteryPct(row) {
+  return Math.max(0, Math.min(100, Math.round(row?.mastery_level ?? 0)))
+}
+function diffDots(row) {
+  return Math.max(0, Math.min(5, Math.round(row?.difficulty ?? 0)))
 }
 
 function applyFilters() {
@@ -192,118 +251,133 @@ onMounted(() => {
   loadSubjects()
   load()
 })
-onBeforeUnmount(() => clearTimeout(searchTimer))
-
-/** 页面级动效：错峰入场 + 视差 + 磁吸 + 路径描绘（见 design/usePageMotion） */
-usePageMotion(pageRoot, { stagger: 55 })
+onBeforeUnmount(() => {
+  clearTimeout(searchTimer)
+  itemStops.forEach((fn) => fn())
+})
 </script>
 
 <template>
-  <main ref="pageRoot" id="main" class="pad">
+  <main id="main" class="pad">
     <header class="head">
-      <h1 class="mono page-h1">错题星表</h1>
+      <h1 class="mono page-h1">错题星图</h1>
       <span class="mono">{{ total }} 条 · 第 {{ page }} / {{ totalPages }} 页</span>
     </header>
 
-    <!-- 筛选条：整行可输入的搜索 + 两个下拉 -->
-    <div class="filters reveal" data-reveal>
+    <div class="filters">
       <UiField
         v-model="filters.search"
         label="搜索"
         placeholder="题干 / 知识点 / 来源"
         @enter="applyFilters"
       />
-      <UiSelect
-        v-model="filters.subject_id"
-        :options="SUBJECT_OPTIONS"
-        label="科目"
-        @change="applyFilters"
-      />
-      <UiSelect
-        v-model="filters.difficulty"
-        :options="DIFFICULTY"
-        label="难度"
-        @change="applyFilters"
-      />
+      <div class="fsel">
+        <label class="mono" for="f-subj">科目</label>
+        <select id="f-subj" v-model="filters.subject_id" @change="applyFilters">
+          <option value="">全部科目</option>
+          <option v-for="s in subjects" :key="s.id" :value="String(s.id)">{{ s.name }}</option>
+        </select>
+      </div>
+      <div class="fsel">
+        <label class="mono" for="f-diff">难度</label>
+        <select id="f-diff" v-model="filters.difficulty" @change="applyFilters">
+          <option v-for="d in DIFFICULTY" :key="d.value" :value="d.value">{{ d.label }}</option>
+        </select>
+      </div>
     </div>
 
     <UiEmpty v-if="loading" variant="skeleton" thumb :rows="3" />
-
     <UiEmpty v-else-if="errorText" title="载入失败" :hint="errorText">
-      <template #action>
-        <UiButton variant="solid" @click="load">重试</UiButton>
-      </template>
+      <template #action><UiButton variant="solid" @click="load">重试</UiButton></template>
     </UiEmpty>
-
     <UiEmpty
       v-else-if="!items.length"
       title="没有匹配的错题"
       hint="换个筛选条件，或者先去录入一道题"
     />
 
-    <template v-else>
-      <div class="grid reveal" data-reveal>
-        <InkCard
-          v-for="row in items"
-          :key="row.id"
-          :spine="row.correct_answer ? 'var(--ink-3)' : 'var(--redshift)'"
-          :flagged="(row.wrong_count || 0) >= 3"
-          tilt
-          @select="openDetail(row)"
-        >
-          <div class="chead">
-            <UiTag :tone="typeTone(row.question_type)" size="sm">{{
-              typeName(row.question_type)
-            }}</UiTag>
-            <span class="mono subj">{{ subjectName(row.subject_id) }}</span>
-            <span v-if="row.source" class="mono src">{{ row.source }}</span>
-          </div>
-          <p class="q"><MathText :text="row.question" /></p>
-          <!-- 题图：真题截图/公式图，没有就整块不出现（不留空框） -->
+    <!-- 星图：3×3 采样棋盘 -->
+    <div v-else ref="gridEl" class="chart">
+      <article
+        v-for="row in items"
+        :key="row.id"
+        class="tile"
+        :class="{ flagged: (row.wrong_count || 0) >= 3, paused: row.review_paused }"
+        tabindex="0"
+        role="button"
+        :aria-label="`打开第 ${row.id} 题详情`"
+        @click="openDetail(row)"
+        @keydown.enter.prevent="openDetail(row)"
+        @pointermove="onTileMove"
+        @pointerleave="onTileLeave"
+      >
+        <div class="layer shot-layer">
           <img
-            v-if="firstImage(row)"
+            v-if="firstImage(row, { thumb: true })"
             class="shot"
             :src="firstImage(row, { thumb: true })"
             :alt="`第 ${row.id} 题的题目图像`"
             loading="lazy"
           />
+          <span v-else class="shot-empty mono" aria-hidden="true">无题图</span>
+          <span class="sheen" aria-hidden="true"></span>
+        </div>
 
-          <div class="cfoot">
-            <span class="diff" :aria-label="`难度 ${row.difficulty || 0} / 5`">
-              <i
-                v-for="n in 5"
-                :key="n"
-                :class="{ on: n <= (row.difficulty || 0) }"
-                aria-hidden="true"
-              ></i>
-            </span>
-            <InkDot :value="Math.round((row.mastery_level || 0) / 20)" label="掌握度" />
-            <StarRow :value="row.review_count || 0" :max="7" label="复习遍数" />
-            <span class="mono cnt">错 {{ row.wrong_count || 0 }} 次</span>
+        <div class="layer text-layer">
+          <div class="tmeta">
+            <UiTag :tone="typeTone(row.question_type)" size="sm">
+              {{ typeName(row.question_type) }}
+            </UiTag>
+            <span class="mono subj">{{ subjectName(row.subject_id) }}</span>
+            <span class="mono src">{{ row.source_name || row.source || '未标注' }}</span>
           </div>
-        </InkCard>
-      </div>
+          <p class="q"><MathText :text="row.question" /></p>
+        </div>
 
-      <div class="pager reveal" data-reveal>
-        <UiButton :disabled="page <= 1" @click="((page -= 1), load())">上一页</UiButton>
-        <span class="mono pnum">{{ page }} / {{ totalPages }}</span>
-        <UiButton :disabled="page >= totalPages" @click="((page += 1), load())">下一页</UiButton>
-      </div>
-    </template>
+        <div class="layer meta-layer">
+          <span class="dots" :aria-label="`难度 ${diffDots(row)} / 5`">
+            <i v-for="n in 5" :key="n" :class="{ on: n <= diffDots(row) }" aria-hidden="true"></i>
+          </span>
+          <InkDot :value="Math.round(masteryPct(row) / 20)" label="掌握度" />
+          <StarRow :value="row.review_count || 0" :max="7" label="复习遍数" />
+          <span class="mono cnt">错 {{ row.wrong_count || 0 }} 次</span>
+          <ArrowUpRight class="arw" :size="17" aria-hidden="true" />
+        </div>
 
-    <!-- 详情：只读展示，编辑留到后续 -->
+        <span class="mastery" :style="{ width: masteryPct(row) + '%' }" aria-hidden="true"></span>
+        <span v-if="row.review_paused" class="paused-flag mono">已暂停</span>
+      </article>
+    </div>
+
+    <div v-if="totalPages > 1" class="pager">
+      <UiButton :disabled="page <= 1" @click="((page -= 1), load())">上一页</UiButton>
+      <span class="mono pnum">{{ page }} / {{ totalPages }}</span>
+      <UiButton :disabled="page >= totalPages" @click="((page += 1), load())">下一页</UiButton>
+    </div>
+
     <UiModal v-model="detailOpen" title="错题详情" size="lg">
       <UiEmpty v-if="detailLoading" variant="skeleton" :rows="4" />
       <UiEmpty v-else-if="!detail" title="没有取到详情" hint="可能是网络问题，或该题已被删除" />
       <div v-else class="det">
         <div class="dmeta">
-          <UiTag :tone="typeTone(detail.question_type)" size="sm">{{
-            typeName(detail.question_type)
-          }}</UiTag>
+          <UiTag :tone="typeTone(detail.question_type)" size="sm">
+            {{ typeName(detail.question_type) }}
+          </UiTag>
           <UiTag tone="ink" size="sm">{{ subjectName(detail.subject_id) }}</UiTag>
           <span class="mono">难度 {{ detail.difficulty || '-' }}</span>
           <span class="mono">错 {{ detail.wrong_count || 0 }} 次</span>
+          <span v-if="detail.review_paused" class="mono warn">已暂停复习</span>
         </div>
+
+        <button
+          v-if="firstImage(detail)"
+          class="shot-btn"
+          type="button"
+          aria-label="放大查看题目图像"
+          @click="openLightbox(firstImage(detail))"
+        >
+          <img class="shot shot-full" :src="firstImage(detail)" :alt="`第 ${detail.id} 题图像`" />
+        </button>
 
         <p class="dq"><MathText :text="detail.question" /></p>
 
@@ -332,48 +406,37 @@ usePageMotion(pageRoot, { stagger: 55 })
           <p class="an"><MathText :text="detail.analysis" /></p>
         </div>
 
-        <!-- 关联信息由行内标签呈现，不另起一堆卡片 -->
-        <div v-if="detail.knowledge_extra || detail.related_knowledge?.length" class="rel">
+        <EnglishPanel v-if="detail.passage_text" :data="detail" />
+
+        <div v-if="(detail.related_knowledge || []).length" class="rel">
           <span class="mono k">关联知识点</span>
           <div class="chips">
             <UiTag
-              v-for="k in detail.related_knowledge || []"
+              v-for="k in detail.related_knowledge"
               :key="k.id || k.tag_name"
               tone="vein"
               size="sm"
             >
               {{ k.tag_name || k }}
             </UiTag>
-            <span v-if="!(detail.related_knowledge || []).length" class="mono none">无</span>
           </div>
         </div>
-
-        <!-- 英语题：中英对照 + 逐句拆解 + 短语/生词与词性（按 v2 的字段形状呈现） -->
-        <!-- 详情里的题图用原图（列表用缩略图）；点图开灯箱 -->
-        <button
-          v-if="firstImage(detail)"
-          class="shot-btn"
-          type="button"
-          aria-label="放大查看题目图像"
-          @click="openLightbox(firstImage(detail))"
-        >
-          <img
-            class="shot shot-full"
-            :src="firstImage(detail)"
-            :alt="`第 ${detail.id} 题的题目图像`"
-          />
-        </button>
-
-        <EnglishPanel v-if="detail.passage_text" :data="detail" />
-
-        <p class="mono dnote">编辑与复习入口在后续页面接入。</p>
       </div>
+
       <template #foot>
-        <UiButton variant="quiet" @click="detailOpen = false">关闭</UiButton>
+        <!-- 本轮补齐：暂停/恢复复习、删除（后端接口一直有，此前界面没有入口） -->
+        <UiButton v-if="detail" variant="quiet" @click="togglePause(detail)">
+          <Pause v-if="!detail.review_paused" :size="14" aria-hidden="true" />
+          <Play v-else :size="14" aria-hidden="true" />
+          {{ detail.review_paused ? '恢复复习' : '暂停复习' }}
+        </UiButton>
+        <UiButton v-if="detail" variant="danger" @click="removeMistake(detail)">
+          <Trash2 :size="14" aria-hidden="true" />删除
+        </UiButton>
+        <UiButton variant="solid" @click="detailOpen = false">关闭</UiButton>
       </template>
     </UiModal>
 
-    <!-- 灯箱：点题图放大；Esc 或点背景关闭 -->
     <Teleport to="body">
       <Transition name="lb">
         <div
@@ -389,6 +452,7 @@ usePageMotion(pageRoot, { stagger: 55 })
         >
           <img :src="lightbox" alt="题目图像（放大）" />
           <span class="mono lb-hint">点任意处或按 Esc 关闭</span>
+          <span class="lb-x" aria-hidden="true"><X :size="18" /></span>
         </div>
       </Transition>
     </Teleport>
@@ -396,19 +460,19 @@ usePageMotion(pageRoot, { stagger: 55 })
 </template>
 
 <style scoped>
+.pad {
+  position: relative;
+  z-index: var(--z-content);
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: clamp(84px, 12vh, 132px) var(--pad) 70px;
+}
 .page-h1 {
   font-family: var(--font-mono);
   font-size: var(--fs-mono);
   font-weight: 400;
   letter-spacing: 0.12em;
   margin: 0;
-}
-.pad {
-  position: relative;
-  z-index: var(--z-content);
-  max-width: var(--col);
-  margin: 0 auto;
-  padding: clamp(84px, 12vh, 132px) var(--pad) 70px;
 }
 .head {
   display: flex;
@@ -417,89 +481,216 @@ usePageMotion(pageRoot, { stagger: 55 })
   padding-bottom: 13px;
   border-bottom: 1px solid var(--line);
   margin-bottom: clamp(16px, 3vh, 28px);
+  flex-wrap: wrap;
 }
 
 .filters {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
   gap: 14px;
   margin-bottom: clamp(16px, 3vh, 30px);
 }
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-  gap: 14px;
+.fsel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
-.chead {
+.fsel label {
+  color: var(--ink-2);
+}
+.fsel select {
+  width: 100%;
+  padding: 11px 12px;
+  background: var(--sky-1);
+  color: var(--ink-0);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: var(--fs-body);
+}
+.fsel select:focus {
+  outline: none;
+  border-color: var(--redshift);
+}
+
+/* ── 星图棋盘 ─────────────────────────────────────────────── */
+.chart {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(10px, 1.4vw, 20px);
+}
+.tile {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 14px 15px 16px;
+  background: var(--sky-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  isolation: isolate;
+  overflow: hidden;
+  /* 倾斜由 CSS 变量驱动（JS 逐帧写变量，而不是写内联 transform，避免互相覆盖） */
+  transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg))
+    translateY(var(--lift, 0px));
+  transition:
+    transform 0.18s linear,
+    border-color 0.35s var(--e-settle),
+    background 0.35s var(--e-settle);
+  will-change: transform;
+}
+.tile:hover,
+.tile:focus-visible {
+  --lift: -4px;
+  background: var(--sky-2);
+  border-color: var(--line-strong);
+  box-shadow: 0 22px 48px -30px #000000e6;
+}
+.tile:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--sky-0),
+    0 0 0 4px var(--redshift);
+}
+.sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    300px circle at var(--sheen-x, 50%) var(--sheen-y, 50%),
+    oklch(0.945 0.014 265 / 0.12),
+    transparent 60%
+  );
+  transition: opacity 0.32s var(--e-settle);
+}
+.tile:hover .sheen {
+  opacity: 1;
+}
+/* 三层视差：位移幅度不同 - "卡片有厚度" */
+.layer {
+  position: relative;
+  z-index: 1;
+  transition: transform 0.32s var(--e-settle);
+}
+.tile:hover .shot-layer {
+  transform: translate3d(calc(var(--par-x, 0px) * 1.6), calc(var(--par-y, 0px) * 1.6), 0);
+}
+.tile:hover .text-layer {
+  transform: translate3d(var(--par-x, 0px), var(--par-y, 0px), 0);
+}
+.tile:hover .meta-layer {
+  transform: translate3d(calc(var(--par-x, 0px) * 0.5), calc(var(--par-y, 0px) * 0.5), 0);
+}
+
+.shot-layer {
+  position: relative;
+  height: clamp(88px, 11vh, 132px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--sky-0);
+  overflow: hidden;
+}
+.shot {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+  display: block;
+}
+.shot-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--ink-3);
+}
+
+.tmeta {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 11px;
+  margin-bottom: 9px;
 }
 .subj {
   color: var(--ink-2);
 }
 .src {
-  color: var(--ink-3);
   margin-left: auto;
+  color: var(--ink-3);
 }
 .q {
-  /* 长公式/长串必须断行，否则会把卡片撑破（用户截图里的溢出） */
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  font-size: var(--fs-h3, 1rem);
+  font-size: clamp(0.92rem, 1.1vw, 1.05rem);
   line-height: 1.7;
+  color: var(--ink-0);
+  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.shot-full {
-  max-height: none;
-  margin: 4px 0 2px;
-  object-fit: contain;
-}
 
-.shot {
-  display: block;
-  width: 100%;
-  max-height: 132px;
-  object-fit: cover;
-  object-position: top;
-  margin-top: 11px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--sky-0);
+.meta-layer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--ink-3);
 }
-
-/* 难度：五枚墨点式星条，不用字符星号（全站禁用字符图标） */
-.diff {
+.dots {
   display: inline-flex;
   gap: 3px;
-  align-items: center;
 }
-.diff i {
+.dots i {
   width: 11px;
   height: 3px;
   background: var(--sky-3);
-  transition: background 0.3s var(--e-settle);
 }
-.diff i.on {
+.dots i.on {
   background: var(--gold);
 }
-
-.cfoot {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 13px;
-  flex-wrap: wrap;
-}
-.cnt {
+.meta-layer .cnt {
   margin-left: auto;
+}
+.arw {
   color: var(--ink-3);
+  transition:
+    color 0.28s var(--e-settle),
+    transform 0.42s var(--e-flare);
+}
+.tile:hover .arw {
+  color: var(--redshift);
+  transform: translate(3px, -3px);
+}
+
+.mastery {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--vein), var(--ink-0));
+  transition: width 0.7s var(--e-settle);
+  z-index: 2;
+}
+.tile.flagged {
+  border-color: oklch(0.665 0.196 34 / 0.5);
+}
+.tile.paused {
+  opacity: 0.55;
+}
+.paused-flag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  padding: 2px 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: var(--sky-0);
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: 0.12em;
 }
 
 .pager {
@@ -513,7 +704,7 @@ usePageMotion(pageRoot, { stagger: 55 })
   color: var(--ink-2);
 }
 
-/* 详情 */
+/* ── 详情 ─────────────────────────────────────────────────── */
 .det {
   display: flex;
   flex-direction: column;
@@ -526,11 +717,14 @@ usePageMotion(pageRoot, { stagger: 55 })
   flex-wrap: wrap;
   color: var(--ink-2);
 }
+.dmeta .warn {
+  color: var(--gold);
+}
 .dq {
-  overflow-wrap: anywhere;
   font-size: var(--fs-h2);
   line-height: 1.7;
   font-weight: 500;
+  overflow-wrap: anywhere;
 }
 .dopts {
   list-style: none;
@@ -543,6 +737,7 @@ usePageMotion(pageRoot, { stagger: 55 })
   border: 1px solid var(--line);
   border-radius: var(--radius);
   line-height: 1.65;
+  overflow-wrap: anywhere;
 }
 .dopts .l {
   margin-right: 8px;
@@ -566,24 +761,18 @@ usePageMotion(pageRoot, { stagger: 55 })
   line-height: 1.85;
   color: var(--ink-1);
 }
+.rel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .chips {
   display: flex;
   gap: 7px;
   flex-wrap: wrap;
 }
-.none {
-  color: var(--ink-3);
-}
-.dnote {
-  color: var(--ink-3);
-}
 
-@media (max-width: 820px) {
-  .filters {
-    grid-template-columns: 1fr;
-  }
-}
-/* ── 题图按钮与灯箱 ─────────────────────────────────────────── */
+/* ── 题图与灯箱 ───────────────────────────────────────────── */
 .shot-btn {
   display: block;
   width: 100%;
@@ -594,23 +783,16 @@ usePageMotion(pageRoot, { stagger: 55 })
   border-radius: var(--radius);
   overflow: hidden;
 }
-.shot-btn:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 2px var(--sky-0),
-    0 0 0 4px var(--redshift);
+.shot-full {
+  max-height: none;
+  margin: 4px 0 2px;
+  object-fit: contain;
+  background: var(--sky-0);
+  transition: opacity 0.3s var(--e-settle);
 }
-.shot-btn .shot {
-  transition:
-    transform 0.5s var(--e-settle),
-    opacity 0.3s var(--e-settle);
-}
-.shot-btn:hover .shot {
-  transform: scale(1.012);
+.shot-btn:hover .shot-full {
   opacity: 0.94;
 }
-
-/* 灯箱：暗底上不用纯黑厚遮罩，用深蓝黑 + 轻模糊，保持"星图"气质 */
 .lb {
   position: fixed;
   inset: 0;
@@ -636,6 +818,12 @@ usePageMotion(pageRoot, { stagger: 55 })
 .lb-hint {
   color: var(--ink-3);
 }
+.lb-x {
+  position: absolute;
+  top: var(--pad);
+  right: var(--pad);
+  color: var(--ink-2);
+}
 .lb-enter-active,
 .lb-leave-active {
   transition: opacity 0.28s var(--e-settle);
@@ -652,12 +840,43 @@ usePageMotion(pageRoot, { stagger: 55 })
 .lb-leave-to img {
   transform: scale(0.96);
 }
+
+@media (max-width: 1100px) {
+  .chart {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .chart {
+    grid-template-columns: 1fr;
+  }
+  .filters {
+    grid-template-columns: 1fr;
+  }
+  /* 触屏不照搬桌面倾斜：只用位移与高光 */
+  .tile {
+    transform: none;
+  }
+  .tile:hover .shot-layer,
+  .tile:hover .text-layer,
+  .tile:hover .meta-layer {
+    transform: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
+  .tile,
+  .layer,
+  .sheen,
+  .arw,
+  .mastery,
+  .shot-full,
   .lb-enter-active,
   .lb-leave-active,
   .lb-enter-active img,
-  .lb-leave-active img,
-  .shot-btn .shot {
+  .lb-leave-active img {
     transition: none;
   }
 }

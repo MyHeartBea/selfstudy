@@ -182,7 +182,8 @@ function go(path) {
 
       <h1 class="title" :style="{ '--dx': drift + 'px' }">
         <span class="ln">未掌握的是暗</span>
-        <span class="ln">已掌握的是<em>光</em></span>
+        <span class="ln">已掌握的是<em class="thin">光</em></span>
+        <span class="ln">每题一颗<em>星</em></span>
       </h1>
 
       <div class="foot">
@@ -349,9 +350,10 @@ function go(path) {
 
 .title {
   margin: auto 0;
-  padding: clamp(20px, 4vh, 48px) 0;
+  padding: clamp(10px, 2vh, 26px) 0;
   font-weight: 500;
-  font-size: clamp(2.6rem, 9.4vw, 10.5rem);
+  /* 字号同时受 vw 与 vh 约束 —— 只按 vw 会在矮视口里把第三行挤出首屏（截图已暴露） */
+  font-size: min(8.2vw, 14.4vh, 9.2rem);
   line-height: 0.88;
   letter-spacing: -0.045em;
   transform: translate3d(var(--dx, 0px), 0, 0);
@@ -372,10 +374,22 @@ function go(path) {
 .title .ln:nth-child(2) {
   transition-delay: 0.74s;
 }
+.title .ln:nth-child(3) {
+  transition-delay: 0.86s;
+}
 .atlas.ready .title .ln {
   opacity: 1;
   transform: none;
 }
+/* "光"是稀薄的（细体 + 低亮度），"星"是具体的（红移色）—— 与隐喻一致 */
+.title .thin,
+.title em.thin {
+  font-style: normal;
+  font-weight: 300;
+  color: var(--ink-2);
+  text-shadow: none;
+}
+
 .title em {
   font-style: normal;
   color: var(--redshift);

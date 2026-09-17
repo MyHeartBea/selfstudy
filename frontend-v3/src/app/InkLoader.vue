@@ -1,23 +1,24 @@
-/* * 启动页 · 研墨开场（Ink Opening） *
---------------------------------------------------------------------------- * 三段式，共约
-2.6s。它不是"进度条动画"，而是一次有始有终的仪式： * * 第一段 静默（0-700ms） 纯黑 +
-一颗悬停的星点，什么都不给，先制造注意力。 * 第二段 落墨（700-2000ms）
-星点坠下并在纸上洇开（多尺度模糊 + 遮罩扩散）， * 同时浮出等宽读数。读数是真实进度，不是假动画。 *
-第三段 揭幕（2000-2600ms） 墨色铺满，沿斜向 clip-path 掀起，露出主界面。 * * 三条硬要求： * 1.
-可跳过：任意键 / 点击 / 触摸立即完成 —— 这是每天要开很多次的工具。 * 2.
-不阻塞：正常结束或安全网（4.5s）都会解锁滚动；出错也不会把人锁在加载页。 * 3.
-reduced-motion：直接不播，立刻进入主界面。 * * 真实进度来源（不是编的）： * - document.fonts.ready *
-- 首帧后 requestAnimationFrame 至少两帧（保证 WebGL 首帧已绘制） * - 外部传入的 ready 信号（阶段 3
-起接入首屏数据请求） */
+<!--
+  启动页 · 校准台（对齐 atlas 参考稿）
+  ---------------------------------------------------------------------------
+  用户指出："模版页还有一个进入首页后动画向上拉，然后出现首页的动态效果"
+  —— 参考稿的转场是**整块面板向上抽走**；我之前做的是圆形遮罩揭开，不是一回事。
+
+  参考稿的实现（已读其源码逐条对齐）：
+    进场：左下角一行 00 - 100，缓出 1-(1-p)^3，历时 1250ms
+          右下角三行「观测站上线 / 装载星表 / 校准完成」按进度逐行点亮
+          （p<0.34 - 第1行，<0.72 - 第2行，否则第3行）
+    转场：transform: translateY(-101%)，**1s 缓动**整块向上抽走
+    收尾：抽走后 1.2s 卸载组件；body.ready 触发首页入场
+    安全网：3400ms 强制结束；全程锁滚动
+
+  与旧版的差别（本次修改的核心）：
+    · 去掉圆形遮罩揭幕，改为**向上抽走**（translateY(-101%)）
+    · 读数固定在**左下**、步骤固定在**右下**（参考稿是底部左右分布，不是居中）
+    · 读数两位（参考稿 padStart(2, '0')）
+-->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-
-const props = defineProps({
-  /** 外部就绪信号：数据/资源准备好时置 true */
-  ready: { type: Boolean, default: true },
-  /** 最短展示时长（ms）：避免一闪而过反而显得廉价 */
-  minDuration: { type: Number, default: 2100 },
-})
 
 const emit = defineEmits(['done'])
 
@@ -25,446 +26,166 @@ const reduce =
   typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
 
 const progress = ref(0)
-const phase = ref(reduce ? 'opening' : 'rest')
-const finished = ref(false)
+const done = ref(false)
+const gone = ref(false)
+const stepIndex = ref(0)
+
+const STEPS = ['观测站上线', '装载星表', '校准完成']
+const DUR = 1250
 
 let raf = 0
-let startedAt = 0
-let safetyTimer = 0
-const elapsed = () => performance.now() - startedAt
+let hideTimer = 0
+let safety = 0
+let tickTimer = 0
+let finished = false
 
-/** 真实进度：字体 + 两帧绘制 + ready 信号，三者齐备才算 100 */
-async function measure() {
-  const checks = []
-  if (document.fonts && document.fonts.ready) checks.push(document.fonts.ready)
+const readout = computed(() => String(Math.round(progress.value)).padStart(2, '0'))
 
-  // 两帧：确保 WebGL 星点场已经画过第一帧
-  checks.push(
-    new Promise((resolve) => {
-      requestAnimationFrame(() => requestAnimationFrame(resolve))
-    }),
-  )
-
-  // 外部 ready（阶段 3 起由首屏数据驱动；默认 true 时立即通过）
-  checks.push(
-    new Promise((resolve) => {
-      if (props.ready) {
-        resolve()
-        return
-      }
-      const stop = setInterval(() => {
-        if (props.ready) {
-          clearInterval(stop)
-          resolve()
-        }
-      }, 60)
-    }),
-  )
-
-  await Promise.all(checks)
-}
-
-function finish(reason) {
-  if (finished.value) return
-  finished.value = true
-  progress.value = 100
-  phase.value = 'opening'
-  if (reason === 'manual') document.documentElement.dataset.loaderSkipped = '1'
-  // 揭幕动画时长需与 CSS 里 .ink-loader.opening 的 transition 一致
-  const wait = reduce ? 0 : 620
-  setTimeout(() => {
-    document.body.classList.add('ready')
-    document.body.style.overflow = ''
+/** 结束：加 .done 让整块向上抽走，1.2s 后卸载（把控制权交回父组件） */
+function finish() {
+  if (finished) return
+  finished = true
+  done.value = true
+  document.body.style.overflow = ''
+  document.body.classList.add('ready')
+  hideTimer = setTimeout(() => {
+    gone.value = true
     emit('done')
-  }, wait)
+  }, 1200)
 }
 
+/** 任意键/点击：直接跳到 100 并抽走（保留转场观感，不是瞬间消失） */
 function skip() {
-  if (!finished.value) finish('manual')
-}
-
-function onKey() {
-  skip()
+  if (finished) return
+  progress.value = 100
+  stepIndex.value = 2
+  finish()
 }
 
 onMounted(() => {
   if (reduce) {
-    progress.value = 100
-    phase.value = 'opening'
     document.body.classList.add('ready')
     emit('done')
     return
   }
 
   document.body.style.overflow = 'hidden'
-  startedAt = performance.now()
-  // 第一段：静默 700ms，随后进入落墨
-  setTimeout(() => {
-    if (!finished.value) phase.value = 'inking'
-  }, 700)
+  window.addEventListener('keydown', skip)
+  window.addEventListener('pointerdown', skip)
+  // 安全网：任何异常都不能把用户锁在加载页
+  safety = setTimeout(skip, 3400)
 
-  window.addEventListener('keydown', onKey)
-  window.addEventListener('pointerdown', onKey)
-  // 安全网：任何异常都不能把人锁在加载页
-  safetyTimer = setTimeout(() => finish('safety'), 4500)
-
-  measure().then(() => {
-    // 进度只升不降，且不早于 minDuration 结束
-    const tick = () => {
-      const t = elapsed()
-      const soft = Math.min(18, (t / 700) * 18)
-      const real = 18 + 82 * Math.min(1, (t - 700) / Math.max(1, props.minDuration - 700))
-      const target = Math.min(100, Math.max(soft, props.ready ? real : soft))
-      progress.value = Math.max(progress.value, target)
-      if (progress.value < 100 && t < props.minDuration - 40) {
-        raf = requestAnimationFrame(tick)
-      } else {
-        finish('complete')
-      }
-    }
-    raf = requestAnimationFrame(tick)
-  })
+  /**
+   * 时间来源与重绘时机**分开**（两次踩坑后的结论）：
+   *   1. 曾用"每帧固定 +16ms"：帧率越高动画越快（headless 下 1.35s 就跑完，参考稿是 2.6s）
+   *   2. 改用 rAF 回调的 timestamp 减 performance.now()：**两者时间原点不同**，读数出现 -33；
+   *      而且 rAF 会被浏览器节流（实测无头下 3 秒只触发 7 次），进度直接卡住。
+   * 正解：用 Date.now() 决定"过了多久"（单调、不受节流影响），
+   * rAF 只负责重绘；并在每次重绘时夹紧 0..100，任何时间源异常都不会显示负数。
+   */
+  const t0 = Date.now()
+  const step = () => {
+    const p = Math.min(1, Math.max(0, (Date.now() - t0) / DUR))
+    const e = 1 - Math.pow(1 - p, 3) // 缓出，与参考稿一致
+    progress.value = Math.min(100, Math.max(0, e * 100))
+    stepIndex.value = p < 0.34 ? 0 : p < 0.72 ? 1 : 2
+    if (p < 1) raf = requestAnimationFrame(step)
+    else setTimeout(finish, 160)
+  }
+  raf = requestAnimationFrame(step)
+  // 兜底：即使 rAF 被完全节流，也用定时器继续推进（与安全网不同：它保证进度仍在走）
+  tickTimer = setInterval(() => {
+    if (!finished) step()
+  }, 100)
 })
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
-  clearTimeout(safetyTimer)
-  window.removeEventListener('keydown', onKey)
-  window.removeEventListener('pointerdown', onKey)
+  clearTimeout(hideTimer)
+  clearTimeout(safety)
+  clearInterval(tickTimer)
+  window.removeEventListener('keydown', skip)
+  window.removeEventListener('pointerdown', skip)
   document.body.style.overflow = ''
 })
-
-const readout = computed(() => String(Math.round(progress.value)).padStart(3, '0'))
-
-/* ── 目镜几何与读数（第二段"校准"的视觉核心） ───────────────────────────
-   旧版只有一颗点 + 一个数字，画面信息密度撑不起"装置"；这一版加入
-   望远镜十字丝 + 双向旋转刻度环 + 24 条角刻度，并把真实进度写成环形弧。 */
-const RING_R = 92
-const RING_C = 2 * Math.PI * RING_R
-const ringDash = computed(() => {
-  const on = (progress.value / 100) * RING_C
-  return `${on.toFixed(1)} ${(RING_C - on).toFixed(1)}`
-})
-/** 揭幕：以中心为原点的软边圆形遮罩半径（替代旧版硬边斜切） */
-const revealR = computed(() => `${8 + progress.value * 1.5}vmax`)
-const phaseLabel = computed(() => {
-  if (phase.value === 'opening') return '就绪'
-  if (phase.value === 'calibrating') return progress.value > 66 ? '装载星表' : '对准赤经'
-  return '观测站上线'
-})
-const TICKS = Array.from({ length: 24 }, (_, i) => i * 15)
 </script>
 
 <template>
   <div
-    class="ink-loader"
-    :class="phase"
+    v-if="!gone"
+    class="loader"
+    :class="{ done }"
     role="progressbar"
     :aria-valuenow="Math.round(progress)"
     aria-valuemin="0"
     aria-valuemax="100"
     aria-label="正在校准观测站"
-    :style="{ '--reveal': revealR, '--p': progress / 100 }"
   >
-    <!-- 黑场背景：以中心为原点的软边圆形透明区，随进度向外扩散，露出下面的星点场。
-         刻意**不用**独立的不透明遮罩层压在目镜之上 —— 那样会把刻度环整个盖住（已踩过）。 -->
-    <span class="veil" aria-hidden="true"></span>
-
-    <!-- 目镜：十字丝 + 双向旋转刻度环 + 角刻度 -->
-    <div class="optic" aria-hidden="true">
-      <svg class="reticle" viewBox="0 0 240 240" width="240" height="240">
-        <g class="ticks">
-          <line
-            v-for="(a, i) in TICKS"
-            :key="a"
-            :x1="120"
-            :y1="i % 2 ? 6 : 2"
-            :x2="120"
-            :y2="i % 2 ? 14 : 20"
-            :transform="`rotate(${a} 120 120)`"
-          />
-        </g>
-        <g class="ring-in">
-          <circle cx="120" cy="120" r="62" />
-          <line x1="120" y1="52" x2="120" y2="62" />
-        </g>
-        <g class="ring-out">
-          <circle cx="120" cy="120" r="92" class="track" />
-          <circle cx="120" cy="120" r="92" class="prog" :stroke-dasharray="ringDash" />
-          <line x1="120" y1="24" x2="120" y2="36" />
-        </g>
-        <g class="cross">
-          <line x1="120" y1="86" x2="120" y2="104" />
-          <line x1="120" y1="136" x2="120" y2="154" />
-          <line x1="86" y1="120" x2="104" y2="120" />
-          <line x1="136" y1="120" x2="154" y2="120" />
-        </g>
-      </svg>
-      <span class="seed"></span>
-      <span class="halo"></span>
+    <div class="left">
+      <div class="mono brand">研错本 · 夜航星图</div>
+      <div class="num">{{ readout }}</div>
     </div>
 
-    <!-- HUD 四角读数 -->
-    <div class="hud">
-      <span class="corner tl mono">研错本 · 夜航星图</span>
-      <span class="corner tr mono">NOCTURNAL ATLAS</span>
-      <span class="corner bl mono"><i class="live"></i>{{ phaseLabel }}</span>
-      <span class="corner br mono">任意键跳过</span>
-      <span class="digits num">{{ readout }}</span>
+    <div class="steps mono" aria-hidden="true">
+      <span v-for="(s, i) in STEPS" :key="s" :class="{ on: i === stepIndex }">{{ s }}</span>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 启动页样式（重做版）—— 只保留仍然有效的部分。
-   被删掉的旧写法（保留说明以防回退）：
-     · `.veil` 作为独立整屏不透明层 —— 它排在目镜之后，会把刻度环整个盖住。
-       正确做法：遮罩即启动页自身的背景（见下 `.ink-loader::before`），目镜自然浮在其上。
-     · 旧版硬边斜切 `clip-path` 揭幕 —— 观感像"切一刀"，改为软边圆形扩散。 */
-
-/* ── 黑场背景：软边圆形透明区，随 --reveal 扩散 ────────────────────── */
-.ink-loader::before {
-  content: '';
-  position: absolute;
+/* 整块面板：底部左右分布（左读数、右阶段），与参考稿一致 */
+.loader {
+  position: fixed;
   inset: 0;
+  z-index: var(--z-loader);
   background: var(--sky-0);
-  -webkit-mask-image: radial-gradient(
-    circle var(--reveal) at 50% 50%,
-    transparent 0 62%,
-    #000 100%
-  );
-  mask-image: radial-gradient(circle var(--reveal) at 50% 50%, transparent 0 62%, #000 100%);
-  pointer-events: none;
-  transition:
-    -webkit-mask-image 0.14s linear,
-    mask-image 0.14s linear;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: var(--pad);
+  /* 转场：整块向上抽走（参考稿的 ease2 用本项目的 settle 曲线） */
+  transition: transform 1s var(--e-settle);
+  cursor: pointer;
 }
-/* 静默段还没有扩散，整屏保持黑场 */
-.ink-loader.rest::before {
-  -webkit-mask-image: none;
-  mask-image: none;
+.loader.done {
+  transform: translateY(-101%);
 }
 
-/* ── 目镜：十字丝 + 双向旋转刻度环 + 角刻度 ───────────────────────── */
-.optic {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 240px;
-  height: 240px;
-  margin: -120px 0 0 -120px;
-  display: grid;
-  place-items: center;
-  transition:
-    opacity 0.5s var(--e-settle),
-    transform 0.7s var(--e-settle);
-  z-index: 2;
+.left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.ink-loader.opening .optic {
-  opacity: 0;
-  transform: scale(1.35);
-}
-/* 揭幕期间立刻收起所有前景信息（HUD / 读数 / 星点），
-   否则那 0.5s 的淡出里读数会叠在已经露出的首页内容上 —— 截图确认过这个瑕疵 */
-.ink-loader.opening .hud,
-.ink-loader.opening .optic,
-.ink-loader.opening .seed {
-  opacity: 0;
-  transition: opacity 0.22s linear;
-}
-.ink-loader.rest .reticle {
-  opacity: 0;
-}
-.reticle {
-  position: absolute;
-  inset: 0;
-  transition: opacity 0.6s var(--e-settle);
-}
-.ticks line {
-  stroke: var(--ink-3);
-  stroke-width: 1;
-  opacity: 0.75;
-}
-.ring-in circle,
-.ring-out circle {
-  fill: none;
-  stroke: var(--line-strong);
-  stroke-width: 1;
-}
-.ring-out .track {
-  stroke: var(--line);
-}
-.ring-out .prog {
-  stroke: var(--redshift);
-  stroke-width: 2;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 6px oklch(0.665 0.196 34 / 0.6));
-  transform: rotate(-90deg);
-  transform-origin: 120px 120px;
-}
-.ring-in line,
-.ring-out line {
-  stroke: var(--vein);
-  stroke-width: 2;
-}
-.cross line {
-  stroke: var(--ink-1);
-  stroke-width: 1;
-  opacity: 0.9;
-}
-/* 双向旋转：内圈顺时针 26s、外圈逆时针 40s —— 仪器在扫天 */
-.ring-in {
-  transform-origin: 120px 120px;
-  animation: spin-cw 26s linear infinite;
-}
-.ring-out {
-  transform-origin: 120px 120px;
-  animation: spin-ccw 40s linear infinite;
-}
-@keyframes spin-cw {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes spin-ccw {
-  to {
-    transform: rotate(-360deg);
-  }
-}
-
-/* ── 中心星点 + 墨晕 ─────────────────────────────────────────────── */
-.seed {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ink-0);
-  box-shadow: 0 0 14px 3px oklch(0.945 0.014 265 / 0.6);
-  animation: seed 2.6s var(--e-drift) infinite;
-  z-index: 3;
-}
-@keyframes seed {
-  0%,
-  100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.25);
-  }
-}
-/* 墨晕：随进度增强的柔光，与刻度环进度同步 */
-.halo {
-  position: absolute;
-  width: 46vmax;
-  height: 46vmax;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    oklch(0.945 0.014 265 / 0.18) 0 16%,
-    oklch(0.665 0.196 34 / 0.12) 32%,
-    transparent 60%
-  );
-  filter: blur(34px);
-  opacity: calc(0.22 + var(--p, 0) * 0.78);
-  pointer-events: none;
-  z-index: 1;
-}
-.ink-loader.rest .halo {
-  opacity: 0;
-}
-
-/* ── HUD 四角读数 ───────────────────────────────────────────────── */
-.hud {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 4;
-}
-.corner {
-  position: absolute;
+.brand {
   color: var(--ink-2);
 }
-.tl {
-  left: var(--pad);
-  top: var(--pad);
-}
-.tr {
-  right: var(--pad);
-  top: var(--pad);
-}
-.bl {
-  left: var(--pad);
-  bottom: var(--pad);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-0);
-}
-.br {
-  right: var(--pad);
-  bottom: var(--pad);
-  color: var(--ink-3);
-}
-.live {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--vein);
-  animation: ping 2.2s var(--e-settle) infinite;
-}
-@keyframes ping {
-  0% {
-    box-shadow: 0 0 0 0 oklch(0.775 0.098 200 / 0.5);
-  }
-  70% {
-    box-shadow: 0 0 0 9px oklch(0.775 0.098 200 / 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 oklch(0.775 0.098 200 / 0);
-  }
-}
-/* 巨型读数：底部居中，与刻度环同一数值 */
-.digits {
-  position: absolute;
-  left: 50%;
-  bottom: calc(var(--pad) + 6px);
-  transform: translateX(-50%);
+.num {
   font-family: var(--font-mono);
   font-weight: 300;
-  font-size: clamp(2rem, 6vw, 4.4rem);
+  font-size: clamp(2.6rem, 8vw, 7rem);
   line-height: 0.85;
   letter-spacing: -0.05em;
   color: var(--ink-0);
-  mix-blend-mode: difference;
 }
 
-@media (max-width: 640px) {
-  .tr,
-  .br {
-    display: none;
-  }
-  .optic {
-    width: 190px;
-    height: 190px;
-    margin: -95px 0 0 -95px;
-  }
-  .reticle {
-    width: 190px;
-    height: 190px;
-  }
+.steps {
+  display: grid;
+  gap: 6px;
+  text-align: right;
+}
+.steps span {
+  color: var(--ink-3);
+  transition: color 0.35s var(--e-settle);
+}
+/* 当前阶段点亮：与参考稿的逐行点亮同义 */
+.steps span.on {
+  color: var(--ink-0);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .seed,
-  .ring-in,
-  .ring-out,
-  .live {
-    animation: none;
-  }
-  .ink-loader::before {
-    display: none;
+  .loader {
+    transition: none;
   }
 }
 </style>

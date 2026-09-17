@@ -187,6 +187,22 @@ export const mistakesApi = {
 
   /** 批量删除：POST /api/mistakes/batch { ids, action } */
   batch: (ids, action = 'delete') => unwrap(client.post('/mistakes/batch', { ids, action })),
+
+  /**
+   * 暂停 / 恢复某题的复习。
+   * 契约：POST /api/mistakes/{id}/pause 与 /resume（无 body，返回更新后的题目）
+   * 用途：超纲、暂不考的题先移出复习队列，但不删除。
+   */
+  setPaused: (id, paused) => unwrap(client.post(`/mistakes/${id}/${paused ? 'pause' : 'resume'}`)),
+
+  /** 删除：DELETE /api/mistakes/{id} */
+  remove: (id) => unwrap(client.delete(`/mistakes/${id}`)),
+
+  /** 全量更新：PUT /api/mistakes/{id}（字段同创建） */
+  update: (id, payload) => unwrap(client.put(`/mistakes/${id}`, payload)),
+
+  /** 改来源类型：POST /api/mistakes/{id}/source-type body { source_type, source_name?, source_year? } */
+  setSourceType: (id, payload) => unwrap(client.post(`/mistakes/${id}/source-type`, payload)),
 }
 
 /* ────────────────────────────── 知识点 ────────────────────────────── */

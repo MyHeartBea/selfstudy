@@ -10,18 +10,17 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
-    // 首页 = 成册（用户要求：启动动画结束后直达成册，并把成册改名为首页）。
-    // 直接渲染 StatsView，**不额外跳一次路由** —— 少一跳就少一次闪烁，
-    // 也避免"启动页 + 旧首页 + 目标页"三者交替出现。
+    // 首页 = 夜航星图（连续滚动叙事：首屏 - 宣言 - 今晚星表 - 天文台 - 科目星群 - 收束）。
+    // 用户要求形态照 atlas 参考稿 —— 首页不再是一张数据看板。
     path: '/',
     name: 'home',
-    component: () => import('../views/StatsView.vue'),
+    component: () => import('../views/AtlasHome.vue'),
   },
   {
-    // 观测台（原 AtlasHome）保留原地址，但它不再是首页。
-    path: '/atlas',
-    name: 'atlas',
-    component: () => import('../views/AtlasHome.vue'),
+    // 成册（学习统计）保留在 /stats：它是"数据断面"，不是首页
+    path: '/stats',
+    name: 'stats',
+    component: () => import('../views/StatsView.vue'),
   },
   {
     // 活体规范页：令牌 / 材质 / 动效原语的可交互规格表
@@ -52,11 +51,6 @@ const routes = [
     path: '/knowledge',
     name: 'knowledge',
     component: () => import('../views/KnowledgeView.vue'),
-  },
-  {
-    // 成册现在是首页（/）。保留 /stats 作为别名，旧链接不失效。
-    path: '/stats',
-    redirect: '/',
   },
   {
     // 生词本（闪卡快刷 + 词表）
