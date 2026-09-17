@@ -27,7 +27,7 @@ import ConfirmHost from './ui/ConfirmHost.vue'
 import BootCalibration from './ui/BootCalibration.vue'
 import AppCursor from './ui/AppCursor.vue'
 import { useRouter } from 'vue-router'
-import { navIndexOf } from './router'
+import { initPageFlip } from './composables/pageFlip'
 import {
   bindScrollMotion,
   magnetic,
@@ -43,18 +43,8 @@ useGrain()
 const booting = ref(true)
 const router = useRouter()
 
-/**
- * 换页方向：'right' 表示新页在当前页右边（当前页向左滑出）。
- * 由导航顺序（NAV_ORDER）决定 —— 见 router/index.js 的注释。
- */
-const pageDir = ref('next')
-router.beforeEach((to, from) => {
-  if (!from.name) return true
-  // 注意方向语义：next 表示"新页在当前页右边"。
-  // 实测发现第一版方向反了 —— 所以这里用 `>` 取 next，`<=` 取 prev。
-  pageDir.value = navIndexOf(to.name) > navIndexOf(from.name) ? 'next' : 'prev'
-  return true
-})
+// 换页方向由 composables/pageFlip.js 管理（转场发生在 AppLayout 内部）
+initPageFlip(router)
 
 let magnets = []
 let unbindScroll = null
@@ -118,12 +108,12 @@ function onBootDone() {
         （这是用户实测反馈过的问题）。
       · 只动 transform / opacity / filter
   -->
-  <RouterView v-slot="{ Component, route }">
-    <!-- 不用 mode="out-in"：翻书需要两页同时存在（一页转走、另一页露出） -->
-    <Transition :name="`km-flip-${pageDir}`">
-      <component :is="Component" :key="route.path" />
-    </Transition>
-  </RouterView>
+  <!--
+    这里**不做转场**：本层 RouterView 渲染的是 AppLayout（外壳，含顶部导航栏），
+    在外层做翻书会把整个外壳翻过去，而且 :key 会让外壳每次换页重建。
+    翻书转场放在 AppLayout 内部的 RouterView（那里才是真正的页面组件）。
+  -->
+  <RouterView />
   <ToastHost />
   <ConfirmHost />
   <AppCursor />
@@ -132,108 +122,4 @@ function onBootDone() {
 
 <style>
 /* 全局（不能用 scoped：Transition 的类名要作用在根元素上） */
-/*
-  换页动画：**3D 翻书**
-  ---------------------------------------------------------------------------
-  上一版的两个问题（用户实测反馈）：
-    1) 方向反了 —— 已在 beforeEach 里反过来（见脚本注释）
-    2) "单纯的黑屏，没有翻书感" —— 根因是用了 mode="out-in"：
-       旧页先淡出到 opacity:0、新页才进，中间那段屏幕上什么都没有 = 黑屏；
-       而且逐一进出根本不可能产生翻书观感，因为翻书的关键是**两页同时存在**：
-       一页转走，另一页在下面露出来。
-
-  这一版的要点：
-    · 两页**同时**存在（去掉 out-in）
-    · 离开的那页绕**书脊**（左/右边缘）做 rotateY 转走，并轻微暗化 —— 像纸被翻过去
-    · 进入的那页在下方**轻微反向**起手，转走的那页掀开后它正好显露
-    · 容器加 perspective，否则 rotateY 只会把页面压扁，没有立体感
-    · backface-visibility: hidden 避免旋转过 90° 后出现镜像内容
-*/
-/* 每一页都带自己的透视（无需外层容器，避免破坏既有布局） */
-.km-flip-next-leave-active,
-.km-flip-next-enter-active,
-.km-flip-prev-leave-active,
-.km-flip-prev-enter-active {
-  will-change: transform, opacity;
-  backface-visibility: hidden;
-}
-
-/* ── 往右翻（新页在右侧）：当前页绕**左边缘**（书脊）向左转走 ────────── */
-.km-flip-next-leave-active {
-  position: relative;
-  z-index: 2;
-  transform-origin: left center;
-  transform: perspective(1800px) rotateY(0deg);
-  transition:
-    transform 0.62s cubic-bezier(0.42, 0, 0.24, 1),
-    opacity 0.62s linear,
-    filter 0.62s linear;
-}
-.km-flip-next-leave-to {
-  transform: perspective(1800px) rotateY(-96deg) translateZ(0);
-  opacity: 0.35;
-  filter: brightness(0.55);
-}
-/* 新页在下面：轻微反向起手，掀开后显露 */
-.km-flip-next-enter-active {
-  position: relative;
-  z-index: 1;
-  transform-origin: right center;
-  transition:
-    transform 0.62s cubic-bezier(0.42, 0, 0.24, 1),
-    opacity 0.4s ease-out;
-}
-.km-flip-next-enter-from {
-  opacity: 0.25;
-  transform: perspective(1800px) rotateY(12deg) scale(0.985);
-}
-
-/* ── 往左翻（新页在左侧）：镜像 —— 当前页绕**右边缘**向右转走 ────────── */
-.km-flip-prev-leave-active {
-  position: relative;
-  z-index: 2;
-  transform-origin: right center;
-  transform: perspective(1800px) rotateY(0deg);
-  transition:
-    transform 0.62s cubic-bezier(0.42, 0, 0.24, 1),
-    opacity 0.62s linear,
-    filter 0.62s linear;
-}
-.km-flip-prev-leave-to {
-  transform: perspective(1800px) rotateY(96deg) translateZ(0);
-  opacity: 0.35;
-  filter: brightness(0.55);
-}
-.km-flip-prev-enter-active {
-  position: relative;
-  z-index: 1;
-  transform-origin: left center;
-  transition:
-    transform 0.62s cubic-bezier(0.42, 0, 0.24, 1),
-    opacity 0.4s ease-out;
-}
-.km-flip-prev-enter-from {
-  opacity: 0.25;
-  transform: perspective(1800px) rotateY(-12deg) scale(0.985);
-}
-
-/* 减弱动效：不做转场，直接切换 */
-@media (prefers-reduced-motion: reduce) {
-  .km-flip-next-leave-active,
-  .km-flip-next-enter-active,
-  .km-flip-prev-leave-active,
-  .km-flip-prev-enter-active {
-    transition: none;
-  }
-  .km-flip-next-enter-from,
-  .km-flip-prev-enter-from {
-    opacity: 1;
-    transform: none;
-  }
-  .km-flip-next-leave-to,
-  .km-flip-prev-leave-to {
-    opacity: 0;
-    transform: none;
-  }
-}
 </style>

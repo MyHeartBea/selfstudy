@@ -14,6 +14,7 @@ import './styles/base.css'
 import './styles/km-motion.css'
 import './styles/km-live.css'
 import './styles/km-editorial.css'
+import './styles/km-flip.css'
 
 const app = createApp(App)
 app.directive('reveal', reveal)

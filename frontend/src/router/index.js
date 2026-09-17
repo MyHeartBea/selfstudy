@@ -108,18 +108,21 @@ export default router
  * 数组顺序与导航栏一致。
  */
 export const NAV_ORDER = [
-  'home',
+  // 必须与**真实路由名**一致。第一版写了 home / mistakes / papers / subjects / design，
+  // 而这些名字路由里并不存在 —— navIndexOf() 对未知名字返回数组长度，
+  // 于是任意两页都算同一个编号、方向判断恒为 prev（这就是"方向反了"的真因）。
   'stats',
   'review',
   'capture',
-  'mistakes',
+  'mistake-list',
   'vocab',
   'knowledge',
   'formulas',
-  'papers',
+  'paper-bank',
   'practice',
-  'subjects',
-  'design',
+  'subject-guide',
+  'design-gallery',
+  'mistake-edit',
 ]
 
 /** 取某个路由在导航顺序里的编号；未知路由排到最后 */

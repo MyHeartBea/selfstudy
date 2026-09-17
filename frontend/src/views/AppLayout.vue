@@ -6,6 +6,7 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { pageDir } from '../composables/pageFlip'
 
 import { loadBaseData } from '../composables/useBaseData'
 import request from '../api/request'
@@ -306,12 +307,13 @@ onUnmounted(() => {
     </Transition>
 
     <main class="deck">
-      <router-view v-slot="{ Component }">
-        <!-- duration 显式声明：后台标签页 transitionend 会被浏览器推迟，JS 计时兜底保证路由切换不被卡住 -->
-        <Transition name="route" mode="out-in" :duration="{ enter: 320, leave: 180 }">
-          <component :is="Component" :key="route.fullPath" />
-        </Transition>
-      </router-view>
+      <div class="km-page-stack">
+        <router-view v-slot="{ Component, route }">
+          <Transition :name="`km-flip-${pageDir}`">
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </router-view>
+      </div>
     </main>
 
     <CommandPalette />

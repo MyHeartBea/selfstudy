@@ -1,0 +1,118 @@
+/* ============================================================================
+   换页动画：3D 翻书（styles/km-flip.css）
+   ----------------------------------------------------------------------------
+   为什么是全局文件：转场的 enter/leave 类必须作用在**页面组件的根元素**上，
+   而页面渲染在 AppLayout 内部（AppLayout 是 scoped 组件），
+   放 scoped 里类名会带 [data-v-xxx]、匹配不到页面根元素。
+
+   踩过的坑（都来自实测反馈，写在这里避免走回头路）：
+     1) 方向反了 -> 用 navIndexOf 的 > 判定 next/prev（见 composables/pageFlip.js）
+     2) "单纯的黑屏" -> 根因是 mode="out-in"：旧页先淡到全黑、新页才进。
+        翻书必须两页**同时存在**，所以不用 out-in。
+     3) "翻完没有紧接着出现内容" -> 两个原因：
+        · 离开页没脱离文档流，与进入页上下堆叠（新页被挤到下面）
+        · 两页都是透明底，旋转时透出背景，不像"纸"
+        修法：.km-page-stack 建定位上下文 + 离开页 absolute + 两页给不透明底。
+     4) 转场包在了外层 RouterView 上 -> 那是 AppLayout（含顶部导航栏），
+        等于把整个外壳翻过去；正解是包在内层 RouterView（真正的页面）。
+   ========================================================================== */
+
+/* 定位上下文：没有它，离开页会留在文档流里把新页挤下去 */
+.km-page-stack {
+  position: relative;
+  isolation: isolate;
+  min-height: 60svh;
+}
+
+.km-flip-next-leave-active,
+.km-flip-next-enter-active,
+.km-flip-prev-leave-active,
+.km-flip-prev-enter-active {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  /* 两页都要是"纸"：不透明底，翻动时不会透出背景 */
+  background: var(--bg);
+}
+
+/* ── 往右翻（新页在右侧）：当前页绕**左边缘**（书脊）向左转走 ────────── */
+.km-flip-next-leave-active {
+  /* 脱离文档流并与进入页重叠 —— 这是"翻完能看到新页"的关键 */
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  transform-origin: left center;
+  transform: perspective(1800px) rotateY(0deg);
+  transition:
+    transform 0.6s cubic-bezier(0.42, 0, 0.24, 1),
+    opacity 0.6s linear,
+    filter 0.6s linear;
+}
+.km-flip-next-leave-to {
+  transform: perspective(1800px) rotateY(-96deg);
+  opacity: 0.3;
+  filter: brightness(0.55);
+}
+.km-flip-next-enter-active {
+  position: relative;
+  z-index: 1;
+  transform-origin: right center;
+  transition:
+    transform 0.6s cubic-bezier(0.42, 0, 0.24, 1),
+    opacity 0.3s ease-out;
+}
+.km-flip-next-enter-from {
+  opacity: 0.55;
+  transform: perspective(1800px) rotateY(9deg) scale(0.992);
+}
+
+/* ── 往左翻（新页在左侧）：镜像 —— 当前页绕**右边缘**向右转走 ────────── */
+.km-flip-prev-leave-active {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  transform-origin: right center;
+  transform: perspective(1800px) rotateY(0deg);
+  transition:
+    transform 0.6s cubic-bezier(0.42, 0, 0.24, 1),
+    opacity 0.6s linear,
+    filter 0.6s linear;
+}
+.km-flip-prev-leave-to {
+  transform: perspective(1800px) rotateY(96deg);
+  opacity: 0.3;
+  filter: brightness(0.55);
+}
+.km-flip-prev-enter-active {
+  position: relative;
+  z-index: 1;
+  transform-origin: left center;
+  transition:
+    transform 0.6s cubic-bezier(0.42, 0, 0.24, 1),
+    opacity 0.3s ease-out;
+}
+.km-flip-prev-enter-from {
+  opacity: 0.55;
+  transform: perspective(1800px) rotateY(-9deg) scale(0.992);
+}
+
+/* 减弱动效：不做转场，直接切换 */
+@media (prefers-reduced-motion: reduce) {
+  .km-flip-next-leave-active,
+  .km-flip-next-enter-active,
+  .km-flip-prev-leave-active,
+  .km-flip-prev-enter-active {
+    transition: none;
+    position: static;
+    background: none;
+  }
+  .km-flip-next-enter-from,
+  .km-flip-prev-enter-from {
+    opacity: 1;
+    transform: none;
+  }
+  .km-flip-next-leave-to,
+  .km-flip-prev-leave-to {
+    opacity: 0;
+    transform: none;
+  }
+}
