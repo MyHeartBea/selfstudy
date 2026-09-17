@@ -307,13 +307,11 @@ onUnmounted(() => {
     </Transition>
 
     <main class="deck">
-      <div class="km-page-stack">
-        <router-view v-slot="{ Component, route }">
-          <Transition :name="`km-flip-${pageDir}`">
-            <component :is="Component" :key="route.path" />
-          </Transition>
-        </router-view>
-      </div>
+      <router-view v-slot="{ Component, route }">
+        <Transition :name="`km-flip-${pageDir}`" mode="out-in">
+          <component :is="Component" :key="route.path" />
+        </Transition>
+      </router-view>
     </main>
 
     <CommandPalette />

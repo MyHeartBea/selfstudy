@@ -65,45 +65,52 @@ function reduced() {
  * JS 写内联 transform 则稳定生效。
  */
 function burstParticles() {
-  const host = rootEl.value?.querySelector('.boot__burst')
-  if (!host) return
+  // 每个半屏的粒子层**各自**创建粒子：
+  // 只做一份再复制，动画时分身同步，看起来仍像"一层"；
+  // 各自随机后，撕裂时两半的轨迹不同 —— 符合"屏幕被撕开"的直觉。
+  const hosts = Array.from(rootEl.value?.querySelectorAll('.boot__burst') || [])
+  if (!hosts.length) return
+
   const cx = window.innerWidth / 2
   const cy = window.innerHeight / 2
   // 三色：朱砂为主，少量琥珀与米白 —— 保持 v2 的配色语言
   const colors = ['var(--accent)', 'var(--gold)', 'var(--ink)']
-  const count = 44
+  const perHost = 26
 
   const parts = []
-  for (let i = 0; i < count; i++) {
-    const el = document.createElement('span')
-    el.className = 'boot__particle'
-    const size = 2 + Math.random() * 4
-    el.style.width = `${size.toFixed(1)}px`
-    el.style.height = `${size.toFixed(1)}px`
-    el.style.left = `${cx}px`
-    el.style.top = `${cy}px`
-    el.style.background = colors[i % colors.length]
-    host.appendChild(el)
+  hosts.forEach((host) => {
+    for (let i = 0; i < perHost; i++) {
+      const el = document.createElement('span')
+      el.className = 'boot__particle'
+      const size = 2 + Math.random() * 4
+      el.style.width = `${size.toFixed(1)}px`
+      el.style.height = `${size.toFixed(1)}px`
+      el.style.left = `${cx}px`
+      el.style.top = `${cy}px`
+      el.style.background = colors[Math.floor(Math.random() * colors.length)]
+      host.appendChild(el)
 
-    const angle = (i / count) * Math.PI * 2 + Math.random() * 0.35
-    const dist = 90 + Math.random() * 300
-    parts.push({
-      el,
-      dx: Math.cos(angle) * dist,
-      dy: Math.sin(angle) * dist,
-      spin: (Math.random() - 0.5) * 240,
-    })
-  }
+      const angle = Math.random() * Math.PI * 2
+      const dist = 80 + Math.random() * 320
+      parts.push({
+        el,
+        dx: Math.cos(angle) * dist,
+        dy: Math.sin(angle) * dist,
+        spin: (Math.random() - 0.5) * 240,
+      })
+    }
+  })
 
   runAnim(1150, (p) => {
     const e = 1 - Math.pow(1 - p, 2.2) // 缓出：一开始快，逐渐减速
     const fade = p < 0.25 ? p / 0.25 : 1 - (p - 0.25) / 0.75
+    const op = Math.max(0, fade).toFixed(3)
     parts.forEach((q) => {
       const x = q.dx * e
       const y = q.dy * e
       const sc = 1 - e * 0.55
       q.el.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0) scale(${sc.toFixed(3)}) rotate(${(q.spin * e).toFixed(1)}deg)`
-      q.el.style.opacity = Math.max(0, fade).toFixed(3)
+      q.el.style.opacity = op
     })
   }).then(() => {
     parts.forEach((q) => q.el.remove())
@@ -132,7 +139,9 @@ const easeOut = (p) => 1 - Math.pow(1 - p, 3)
 async function startSpin() {
   if (phase.value !== 'boot') return
   phase.value = 'spin'
-  const dial = rootEl.value?.querySelector('.boot__dial')
+  // 用 querySelectorAll：两个半屏各有一个 dial，只取第一个会导致
+  // 下半屏的圆不转（用户实测反馈过）
+  const dials = Array.from(rootEl.value?.querySelectorAll('.boot__dial') || [])
   const halfTop = rootEl.value?.querySelector('.boot__half--top')
   const halfBot = rootEl.value?.querySelector('.boot__half--bottom')
 
@@ -141,10 +150,13 @@ async function startSpin() {
 
   // 2) 圆环转两圈 + 轻微放大（模拟"启动"的动作）
   await runAnim(SPIN_MS, (p) => {
-    if (!dial) return
+    if (!dials.length) return
     const deg = easeOut(p) * 720
     const scale = 1 + Math.sin(p * Math.PI) * 0.045
-    dial.style.transform = `translate(-50%, -50%) rotate(${deg.toFixed(1)}deg) scale(${scale.toFixed(3)})`
+    const tf = `translate(-50%, -50%) rotate(${deg.toFixed(1)}deg) scale(${scale.toFixed(3)})`
+    dials.forEach((d) => {
+      d.style.transform = tf
+    })
   })
 
   // 2) 撕裂：上半向上、下半向下
@@ -242,8 +254,10 @@ onBeforeUnmount(() => {
       <div class="boot__content">
         <span class="boot__frame"></span>
         <span class="boot__tear" aria-hidden="true"></span>
+        <div class="boot__burst" aria-hidden="true"></div>
         <!-- 撕裂线：各半屏各带一条，贴在自己那一侧的分界边上 -->
         <span class="boot__tear" aria-hidden="true"></span>
+        <div class="boot__burst" aria-hidden="true"></div>
         <svg class="boot__dial" viewBox="0 0 300 300" :style="{ '--p': progress / 100 }">
           <g class="boot__ticks">
             <line
@@ -342,9 +356,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
-
-    <!-- 粒子迸发层：到 100% 时由 JS 注入粒子 -->
-    <div class="boot__burst" aria-hidden="true"></div>
 
     <!-- 明显的进度条：横贯底部整宽，4px 高，朱砂填充 + 游标 -->
     <div class="boot__progress" aria-hidden="true">
