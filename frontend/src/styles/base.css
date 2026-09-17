@@ -67,9 +67,13 @@ img {
   max-width: 100%;
 }
 
+/* ── 选区高亮（用户点名要参考稿那种效果）────────────────────────────────
+   原来是 --accent-soft（朱砂 10% 透明），在米色底上几乎看不出来，
+   所以"像没有选中效果"。参考稿用的是**实心强调色**（#FF4D1C + 深色文字）。
+   这里按方案 A 用 v2 的朱砂作实心底，文字用近纸色保证对比度。 */
 ::selection {
-  background: var(--accent-soft);
-  color: var(--accent-ink);
+  background: var(--accent);
+  color: #fdfbf5;
 }
 
 /* 聚焦可达性 */
