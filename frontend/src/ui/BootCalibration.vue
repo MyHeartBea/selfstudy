@@ -137,10 +137,47 @@ onBeforeUnmount(() => {
     <!-- 扫描光带：给"校准"提供持续运动（周期 2.6s） -->
     <span class="boot__scan" aria-hidden="true"></span>
 
-    <!-- 中心主体：巨型印记（版式重心）+ 品牌字（逐字揭示） -->
+    <!-- 四角取景框：给版面加结构边界（否则全屏大留白会显得"没东西"） -->
+    <span class="boot__frame" aria-hidden="true"></span>
+
+    <!-- 外圈刻度环 + 弧线进度：仪表读数感。
+         刻度环绕整圈（--p 由进度驱动），弧线按真实进度描出（r=132，周长 829.4） -->
+    <svg
+      class="boot__dial"
+      viewBox="0 0 300 300"
+      aria-hidden="true"
+      :style="{ '--p': progress / 100 }"
+    >
+      <g class="boot__ticks">
+        <line
+          v-for="n in 36"
+          :key="n"
+          x1="150"
+          :y1="n % 3 === 0 ? 6 : 11"
+          x2="150"
+          y2="20"
+          :transform="`rotate(${(n - 1) * 10} 150 150)`"
+        />
+      </g>
+      <circle class="boot__track" cx="150" cy="150" r="132" />
+      <circle
+        class="boot__arc"
+        cx="150"
+        cy="150"
+        r="132"
+        :stroke-dasharray="829.4"
+        :stroke-dashoffset="829.4 * (1 - progress / 100)"
+      />
+    </svg>
+
+    <!-- 中心主体：巨型印记（版式重心）+ 品牌字（遮罩揭示） -->
     <div class="boot__core" aria-hidden="true">
       <span class="boot__seal">错</span>
-      <span class="boot__word"> <i>研</i><i>错</i><i>本</i> </span>
+      <span class="boot__word">
+        <i><b>研</b></i
+        ><i><b>错</b></i
+        ><i><b>本</b></i>
+      </span>
     </div>
 
     <div class="boot__left">
@@ -441,6 +478,118 @@ onBeforeUnmount(() => {
   }
   .boot__seal {
     opacity: 0.07;
+  }
+}
+/* ── 四角取景框 ────────────────────────────────────────────────────────
+   四个直角标记，用伪元素画（不额外加 DOM）。给版面一个"取景"的边界，
+   否则全屏大留白会显得"没东西"。 */
+.boot__frame {
+  position: absolute;
+  inset: clamp(16px, 2.6vw, 40px);
+  pointer-events: none;
+  opacity: 0.5;
+}
+.boot__frame::before,
+.boot__frame::after {
+  content: '';
+  position: absolute;
+  width: clamp(18px, 2.4vw, 34px);
+  height: clamp(18px, 2.4vw, 34px);
+  border: 1px solid var(--line-strong);
+}
+.boot__frame::before {
+  top: 0;
+  left: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+.boot__frame::after {
+  right: 0;
+  bottom: 0;
+  border-left: 0;
+  border-top: 0;
+}
+/* 另外两个角用内部元素补：这里用 box-shadow 的负向偏移不合适，
+   改为给 .boot__frame 加两条渐变线（避免再加 DOM） */
+.boot__frame {
+  background-image:
+    linear-gradient(var(--line-strong), var(--line-strong)),
+    linear-gradient(var(--line-strong), var(--line-strong));
+  background-size:
+    clamp(18px, 2.4vw, 34px) 1px,
+    1px clamp(18px, 2.4vw, 34px);
+  background-position:
+    right top,
+    right top;
+  background-repeat: no-repeat;
+}
+
+/* ── 外圈刻度环 + 弧线进度 ─────────────────────────────────────────────
+   36 条角刻度 + 一圈弧线。刻度环随进度**缓慢旋转**（--p 驱动），
+   弧线按真实进度描出 —— 两者一起产生"仪表在读数"的感觉。 */
+.boot__dial {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(72vmin, 640px);
+  height: min(72vmin, 640px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0.85;
+}
+.boot__ticks {
+  /* 旋转由 --p 驱动：0 -> 整圈。用了 CSS 变量所以能随进度连续转 */
+  transform-origin: 150px 150px;
+  transform: rotate(calc(var(--p, 0) * 360deg));
+  transition: transform 0.2s linear;
+}
+.boot__ticks line {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+.boot__track {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.boot__arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  /* 从 12 点方向开始描 */
+  transform: rotate(-90deg);
+  transform-origin: 150px 150px;
+}
+/* 中心印记与刻度环叠在一起时，印记要更弱一点，避免糊成一片 */
+.boot__seal {
+  opacity: 0.055;
+}
+
+/* ── 品牌字遮罩揭示 ───────────────────────────────────────────────────
+   外层 overflow hidden + 内层上顶，替代"直接出现"。逐字错峰。 */
+.boot__word i {
+  overflow: hidden;
+  display: inline-block;
+}
+.boot__word b {
+  display: inline-block;
+  font-weight: 600;
+  transform: translateY(105%);
+  animation: word-mask 0.85s cubic-bezier(0.22, 1.12, 0.36, 1) both;
+}
+@keyframes word-mask {
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot__ticks,
+  .boot__word b {
+    animation: none;
+    transform: none;
+    transition: none;
   }
 }
 </style>
