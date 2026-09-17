@@ -10,7 +10,7 @@
   设计取舍：整块可点靠事件绑在卡片本身（InkCard），卡片内控件一律 @click.stop。
 -->
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import { usePageMotion } from '../design/usePageMotion'
 
@@ -41,6 +41,9 @@ const filters = reactive({ search: '', subject_id: '', difficulty: '' })
 const subjects = ref([])
 
 const detailOpen = ref(false)
+/** 灯箱当前显示的图片 URL（空串 = 关闭） */
+const lightbox = ref('')
+const lbEl = ref(null)
 const detail = ref(null)
 const detailLoading = ref(false)
 
@@ -97,6 +100,26 @@ const SUBJECT_OPTIONS = computed(() => [
   { value: '', label: '全部科目' },
   ...subjects.value.map((s) => ({ value: String(s.id), label: s.name })),
 ])
+
+/**
+ * 打开灯箱：**收起详情弹层**再显示灯箱。
+ *
+ * 为什么不是简单叠一层：灯箱视觉上在弹层之上（z-index 96 > 92），
+ * 但 UiModal 的 Esc 监听绑在 document 捕获阶段并 stopPropagation()，
+ * 会把 Esc 在到达灯箱之前截走 —— 视觉层级与事件流不一致。
+ * 让它成为独立顶层视图后，Esc 只被当前顶层处理，行为可预期。
+ */
+function openLightbox(src) {
+  lightbox.value = src
+  detailOpen.value = false
+  nextTick(() => lbEl.value?.focus?.())
+}
+
+/** 关灯箱：回到详情弹层（用户是从详情里点开图的，不能把他丢在空页面） */
+function closeLightbox() {
+  lightbox.value = ''
+  if (detail.value) detailOpen.value = true
+}
 
 async function openDetail(row) {
   detailOpen.value = true
@@ -225,6 +248,7 @@ usePageMotion(pageRoot, { stagger: 55 })
           :key="row.id"
           :spine="row.correct_answer ? 'var(--ink-3)' : 'var(--redshift)'"
           :flagged="(row.wrong_count || 0) >= 3"
+          tilt
           @select="openDetail(row)"
         >
           <div class="chead">
@@ -325,13 +349,20 @@ usePageMotion(pageRoot, { stagger: 55 })
         </div>
 
         <!-- 英语题：中英对照 + 逐句拆解 + 短语/生词与词性（按 v2 的字段形状呈现） -->
-        <!-- 详情里的题图用原图（列表用缩略图） -->
-        <img
+        <!-- 详情里的题图用原图（列表用缩略图）；点图开灯箱 -->
+        <button
           v-if="firstImage(detail)"
-          class="shot shot-full"
-          :src="firstImage(detail)"
-          :alt="`第 ${detail.id} 题的题目图像`"
-        />
+          class="shot-btn"
+          type="button"
+          aria-label="放大查看题目图像"
+          @click="openLightbox(firstImage(detail))"
+        >
+          <img
+            class="shot shot-full"
+            :src="firstImage(detail)"
+            :alt="`第 ${detail.id} 题的题目图像`"
+          />
+        </button>
 
         <EnglishPanel v-if="detail.passage_text" :data="detail" />
 
@@ -341,6 +372,26 @@ usePageMotion(pageRoot, { stagger: 55 })
         <UiButton variant="quiet" @click="detailOpen = false">关闭</UiButton>
       </template>
     </UiModal>
+
+    <!-- 灯箱：点题图放大；Esc 或点背景关闭 -->
+    <Teleport to="body">
+      <Transition name="lb">
+        <div
+          v-if="lightbox"
+          ref="lbEl"
+          class="lb"
+          role="dialog"
+          aria-modal="true"
+          aria-label="题目图像放大"
+          tabindex="-1"
+          @click="closeLightbox"
+          @keydown.esc.stop="closeLightbox"
+        >
+          <img :src="lightbox" alt="题目图像（放大）" />
+          <span class="mono lb-hint">点任意处或按 Esc 关闭</span>
+        </div>
+      </Transition>
+    </Teleport>
   </main>
 </template>
 
@@ -530,6 +581,84 @@ usePageMotion(pageRoot, { stagger: 55 })
 @media (max-width: 820px) {
   .filters {
     grid-template-columns: 1fr;
+  }
+}
+/* ── 题图按钮与灯箱 ─────────────────────────────────────────── */
+.shot-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.shot-btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--sky-0),
+    0 0 0 4px var(--redshift);
+}
+.shot-btn .shot {
+  transition:
+    transform 0.5s var(--e-settle),
+    opacity 0.3s var(--e-settle);
+}
+.shot-btn:hover .shot {
+  transform: scale(1.012);
+  opacity: 0.94;
+}
+
+/* 灯箱：暗底上不用纯黑厚遮罩，用深蓝黑 + 轻模糊，保持"星图"气质 */
+.lb {
+  position: fixed;
+  inset: 0;
+  z-index: 96;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: clamp(20px, 5vh, 60px) var(--pad);
+  background: oklch(0.145 0.018 265 / 0.9);
+  backdrop-filter: blur(4px);
+  cursor: zoom-out;
+}
+.lb img {
+  max-width: min(96vw, 1400px);
+  max-height: 82vh;
+  object-fit: contain;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--sky-0);
+}
+.lb-hint {
+  color: var(--ink-3);
+}
+.lb-enter-active,
+.lb-leave-active {
+  transition: opacity 0.28s var(--e-settle);
+}
+.lb-enter-active img,
+.lb-leave-active img {
+  transition: transform 0.38s var(--e-flare);
+}
+.lb-enter-from,
+.lb-leave-to {
+  opacity: 0;
+}
+.lb-enter-from img,
+.lb-leave-to img {
+  transform: scale(0.96);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lb-enter-active,
+  .lb-leave-active,
+  .lb-enter-active img,
+  .lb-leave-active img,
+  .shot-btn .shot {
+    transition: none;
   }
 }
 </style>
