@@ -199,9 +199,16 @@ const hasImage = computed(
    这里给图版区保留白（图片需要干净底），但把它**明确成一块"图版"**：
    加一条下边线切开，形成"上图下文的版式"；文字区则用更沉的纸色。 */
 .mistake-card .shot-banner {
-  /* 纯白 #fff 在暖纸旁边会显得刺眼；改为暖白，与纸面同一色系 */
-  background: #fbf8f1;
-  border-bottom: 1px solid rgba(44, 40, 34, 0.12);
+  /* 深色图版：与卡片同调。图片本身多为白底扫描件，深色边框能把它"框"起来，
+     不再出现"整张卡片都是白的"。 */
+  background: #2a251f;
+  border-bottom: 1px solid rgba(239, 233, 221, 0.1);
+  /* 固定高度 + cover：修"参差不齐"（原来图版高度随图片长短变化） */
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   padding: 10px 10px 12px;
 }
 /*
@@ -211,8 +218,22 @@ const hasImage = computed(
   用户说"把白色改成米白色压根没啥区别"就是因为改错了层。
   这里把纸面落到内层，并加深到"暖纸"，与纯白拉开明显差距。
 */
+/*
+  深色卡片（用户选定方案 B）：卡片与图版都改为深墨，文字转浅，与整站同调。
+  注意层次（实测过一次改错层的教训）：视觉主体是**内层 .card-body**，
+  不是 .mistake-card 自身 —— 所以颜色必须落在内层。
+*/
+.mistake-card .shot-banner :deep(img),
+.mistake-card .shot-banner img {
+  max-height: 100%;
+  width: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
 .mistake-card .card-body {
-  background: #f1e9d9;
+  background: #211d18;
+  color: #efe9dd;
 }
 /* 题干区再沉半档，与图版形成层次 */
 .mistake-card .question-text {
@@ -231,7 +252,7 @@ const hasImage = computed(
 }
 .mistake-card .question-text,
 .mistake-card .passage-preview {
-  color: var(--paper-ink);
+  color: #efe9dd;
 }
 .mistake-card .tag-row :is(.ui-tag, span) {
   color: var(--paper-ink-2);
@@ -239,6 +260,8 @@ const hasImage = computed(
 
 .mistake-card {
   position: relative;
+  /* 撑满网格行高：修"参差不齐"（原来卡片高度随内容变化） */
+  height: 100%;
   display: flex;
   flex-direction: column;
   padding: 0;
