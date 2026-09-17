@@ -1645,12 +1645,23 @@ onBeforeUnmount(() => {
 
 /* ② 英雄区：满屏级呼吸（标题大字 + 超大上下留白） */
 .stats-page .view-hero {
-  min-height: min(62svh, 620px);
+  /* 原来 min-height:min(62svh,620px) + align-items:flex-end，
+     实测文案从 507px 才开始，上方空了 387px —— 看着像"没加载出来"。
+     改为：内容上对齐，高度由内容 + 明确的内边距决定，
+     空白因此是"刻意的呼吸"而不是"神秘的虚空"。 */
+  min-height: 0;
   display: flex;
-  align-items: flex-end;
-  padding-top: clamp(40px, 8vh, 96px);
-  padding-bottom: clamp(28px, 4.5vh, 56px);
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: clamp(18px, 2.6vh, 32px);
+  padding-top: clamp(36px, 6vh, 78px);
+  padding-bottom: clamp(26px, 4vh, 52px);
   border-bottom: 1px solid var(--line);
+}
+/* 按钮组不再与文案底部对齐，改为跟在文案下方 */
+.stats-page .view-hero .header-actions {
+  align-self: flex-start;
 }
 .stats-page .view-hero-copy {
   /* 不再限制 ch 宽度：中文标题在 108px 字号下会被逐字换行。

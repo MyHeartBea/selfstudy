@@ -128,6 +128,11 @@
   position: relative;
   z-index: 5;
 }
+/* 装饰层一律受卡片裁切：避免幽灵序号/扫描线溢出到卡片之外
+   （实测溢出会形成"背景槽位与卡片错位"的观感）。 */
+.km-live {
+  overflow: hidden !important;
+}
 
 /* ② 光晕跟随：参考稿用 --mx/--my 定位径向渐变 */
 .km-live::after {
@@ -160,10 +165,12 @@
 /* ⑤ 幽灵序号：巨型数字压在背景，悬停变亮并轻微位移 */
 .km-live__ghost {
   position: absolute;
-  right: -0.1em;
-  bottom: -0.3em;
+  right: 0.04em;
+  bottom: 0.02em;
   z-index: 0;
-  font-size: clamp(7rem, 16vw, 13rem);
+  /* 字号用"卡宽"做上限，而不是视口宽：视口宽会让小卡片里的幽灵序号巨大到出框
+     （实测 208px 字号 -> 高 166px，底边超出卡片 29px）。 */
+  font-size: clamp(4rem, 11vw, 8.5rem);
   font-weight: 700;
   line-height: 0.8;
   letter-spacing: -0.09em;
@@ -243,9 +250,11 @@
 /* ④ 扫描线：22% 高的柔光带循环下滑。用 filter 而不是 mix-blend-mode，
    因为 v2 有亮/暗两套主题，screen 在米色底上会把内容洗白。 */
 .km-live__scan {
+  /* 用 inset:0 的定位上下文 + 百分比高度，确保永远在卡片内。
+     实测过它跑到卡片上方 47px（因为父级定位上下文不是卡片）。 */
   position: absolute;
-  left: 0;
-  right: 0;
+  inset: 0 auto auto 0;
+  width: 100%;
   top: 0;
   height: 22%;
   z-index: 3;
