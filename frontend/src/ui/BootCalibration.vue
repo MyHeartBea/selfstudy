@@ -134,6 +134,14 @@ onBeforeUnmount(() => {
   >
     <!-- 极淡网格：让"开机"有仪表感，而不是一块空白 -->
     <span class="boot__grid" aria-hidden="true"></span>
+    <!-- 扫描光带：给"校准"提供持续运动（周期 2.6s） -->
+    <span class="boot__scan" aria-hidden="true"></span>
+
+    <!-- 中心主体：巨型印记（版式重心）+ 品牌字（逐字揭示） -->
+    <div class="boot__core" aria-hidden="true">
+      <span class="boot__seal">错</span>
+      <span class="boot__word"> <i>研</i><i>错</i><i>本</i> </span>
+    </div>
 
     <div class="boot__left">
       <div class="boot__brand">
@@ -320,6 +328,119 @@ onBeforeUnmount(() => {
   .boot__mark {
     transition: none;
     animation: none;
+  }
+}
+/* ── 中心主体 ──────────────────────────────────────────────────────────
+   为什么加：上一版内容全在底部两头，中间整块空着，构图失衡。
+   用"错"字做版式重心 —— 它是"错题本"的直接标识，不是装饰图形。
+   透明度压到 0.07：在米色底上刚好可见，是重心而不是主角。 */
+.boot__core {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2vh, 22px);
+  pointer-events: none;
+}
+.boot__seal {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(9rem, 30vw, 26rem);
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: var(--accent);
+  opacity: 0.07;
+  /* 落定：极慢的沉降，让它"压"在版面上而不是弹出来 */
+  animation: seal-in 1.6s cubic-bezier(0.22, 1.12, 0.36, 1) both;
+}
+@keyframes seal-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 0.07;
+    transform: scale(1);
+  }
+}
+/* 品牌字：逐字揭示（每个字比前一个晚 90ms） */
+.boot__word {
+  display: flex;
+  gap: 0.05em;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.4rem, 3.6vw, 2.6rem);
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+.boot__word i {
+  font-style: normal;
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.5em);
+  animation: word-up 0.9s cubic-bezier(0.22, 1.12, 0.36, 1) both;
+}
+.boot__word i:nth-child(1) {
+  animation-delay: 0.18s;
+}
+.boot__word i:nth-child(2) {
+  animation-delay: 0.27s;
+}
+.boot__word i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes word-up {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 扫描光带 ──────────────────────────────────────────────────────────
+   一条竖直柔光从左到右扫过面板。作用是让"校准"这件事持续可见地发生，
+   同时因为它是柔光（blur + 极低透明度），不干扰内容的可读性。 */
+.boot__scan {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 26vw;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--accent) 12%, transparent),
+    transparent
+  );
+  filter: blur(26px);
+  animation: scan-x 2.6s var(--ease) infinite;
+}
+@keyframes scan-x {
+  from {
+    transform: translateX(-30vw);
+  }
+  to {
+    transform: translateX(125vw);
+  }
+}
+
+@media (max-width: 760px) {
+  .boot__seal {
+    font-size: clamp(7rem, 46vw, 14rem);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boot__seal,
+  .boot__word i,
+  .boot__scan {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .boot__seal {
+    opacity: 0.07;
   }
 }
 </style>
