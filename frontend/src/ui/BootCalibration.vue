@@ -1,26 +1,19 @@
 <!--
-  研错本 · 开场（开机校准）
+  研错本 · 开机（撕裂揭幕版）
   ===========================================================================
-  用户反馈："这怎么还是夜航星图？你能不能做一个我们自己的呢""启动动画太简陋了，
-  相当于就是一个上滑动画"
+  用户要求的时间线：
+    1) **明显的进度条 1 -> 100%**
+    2) 到 100% 后，中间的圆**转圈**
+    3) 然后从中间**开裂**：上半部分向上滑动、下半部分向下滑动
+    4) 首页出现
 
-  所以这一版做两件事：
-    ① **品牌回到我们自己**：研错本 · 考研错题管理（不再出现借来的"夜航星图"命名）
-    ② **动效从"线性上滑"改成物理运动**：过冲曲线 / 分速度 / 错峰 / 落定沉降
+  实现关键：**真的把屏幕撕成两半**，而不是简单上滑。
+  做法：两个 .boot__half 都铺满全屏、都放一份**完整内容**，
+  再用 clip-path 各裁一半（上面裁下 50%、下面裁上 50%）。
+  这样两半各带着"属于自己那一半"的画面一起滑走 —— 看起来就是屏幕被撕开。
 
-  物理实现方式（与在 v3 上踩的坑有关）：
-    用**阻尼谐振子的解析解**，不逐帧模拟 —— 解析解与帧率无关，也不会被 rAF 节流影响
-    （v3 上实测：无头环境 rAF 3 秒只触发 7 次，逐帧驱动的进度会卡死）。
-      s(t) = 1 - e^(-ζωt)·[cos(ω_d t) + (ζω/ω_d)·sin(ω_d t)]，ω_d = ω√(1-ζ²)
-    ζ<1 会过冲 —— 这就是"弹簧感"的来源。本文件里的 spring() 就是它，供后续复用。
-
-  各处动效：
-    · 品牌行：落定沉降（过冲曲线，像"落"下来而不是"出现"）
-    · 数字：缓出走到 100（数字用弹簧回弹会显得廉价）
-    · 阶段行：三行按进度错峰点亮；已完成的退到次级色并轻微左移，当前行朱砂色
-    · 进度条：与数字同步的 2px 朱砂线（给"开机"一个可读完成度）
-    · 揭幕：整块 upward 抽走用**过冲曲线**，且**内容与整块分速度**（内容额外上浮淡出）
-      —— 这是"有物理感"与"就是平移一下"的区别
+  时间驱动仍用 Date.now + 兜底定时器，**不靠 rAF 驱动**：
+  v3 上实测过，无头环境 rAF 3 秒只触发 7 次，逐帧驱动的进度会卡死。
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -30,16 +23,20 @@ const emit = defineEmits(['done'])
 const BRAND = '研错本'
 const SUB = '考研错题管理'
 const STEPS = ['载入错题库', '整理复习队列', '校准完成']
-const DUR = 1400
 
-const progress = ref(0)
+const COUNT_MS = 1400 // 1 -> 100
+const SPIN_MS = 660 // 圆环转圈
+const SPLIT_MS = 860 // 两半分离
+
+const progress = ref(1)
 const stepIndex = ref(0)
-const done = ref(false)
-const gone = ref(false)
+const phase = ref('boot') // boot | spin | split | gone
+
+const rootEl = ref(null)
+const animTimers = []
 
 let raf = 0
 let tickTimer = 0
-let hideTimer = 0
 let safety = 0
 let finished = false
 
@@ -50,70 +47,115 @@ function reduced() {
 }
 
 /**
- * 阻尼谐振子解析解：ζ<1 时过冲（弹簧感）。
- * 保留导出式写法供后续鼠标拖拽/卡片落定复用，不逐帧模拟。
+ * 用 JS 驱动一段动画（写内联样式）。
+ *
+ * 为什么不用 CSS transition/animation（实测排除后的定论）：
+ *   CSS 规则在产物里、选择器也匹配（half.matches(...) === true），
+ *   但 transition 与 animation 都不推进 —— 位移恒为 0。
+ *   而 Date.now + 定时器驱动的进度是正常的。
+ *   根因与早先实测的「无头环境 rAF 3 秒只触发 7 次」同源：合成器不产生帧。
+ *   改为 JS 写内联 transform 后，任何环境下行为一致。
  */
-// eslint-disable-next-line no-unused-vars
-function spring(t, zeta = 0.72, omega = 9) {
-  if (t >= 1) return 1
-  const wd = omega * Math.sqrt(1 - zeta * zeta)
-  const e = Math.exp(-zeta * omega * t)
-  return 1 - e * (Math.cos(wd * t) + ((zeta * omega) / wd) * Math.sin(wd * t))
+function runAnim(duration, onTick) {
+  return new Promise((resolve) => {
+    const t0 = Date.now()
+    const timer = setInterval(() => {
+      const p = Math.min(1, (Date.now() - t0) / duration)
+      onTick(p)
+      if (p >= 1) {
+        clearInterval(timer)
+        resolve()
+      }
+    }, 16)
+    animTimers.push(timer)
+  })
+}
+
+/** 缓出 */
+const easeOut = (p) => 1 - Math.pow(1 - p, 3)
+
+/** 到 100% 之后：先转圈，再撕裂，最后卸载 */
+async function startSpin() {
+  if (phase.value !== 'boot') return
+  phase.value = 'spin'
+  const dial = rootEl.value?.querySelector('.boot__dial')
+  const halfTop = rootEl.value?.querySelector('.boot__half--top')
+  const halfBot = rootEl.value?.querySelector('.boot__half--bottom')
+
+  // 1) 圆环转两圈 + 轻微放大（模拟"启动"的动作）
+  await runAnim(SPIN_MS, (p) => {
+    if (!dial) return
+    const deg = easeOut(p) * 720
+    const scale = 1 + Math.sin(p * Math.PI) * 0.045
+    dial.style.transform = `translate(-50%, -50%) rotate(${deg.toFixed(1)}deg) scale(${scale.toFixed(3)})`
+  })
+
+  // 2) 撕裂：上半向上、下半向下
+  phase.value = 'split'
+  document.body.classList.add('ready')
+  await runAnim(SPLIT_MS, (p) => {
+    const e = easeOut(p)
+    const d = e * 102
+    if (halfTop) halfTop.style.transform = `translateY(${(-d).toFixed(2)}%)`
+    if (halfBot) halfBot.style.transform = `translateY(${d.toFixed(2)}%)`
+  })
+
+  // 3) 卸载，首页入场
+  phase.value = 'gone'
+  document.body.style.overflow = ''
+  emit('done')
 }
 
 function finish() {
   if (finished) return
   finished = true
-  done.value = true
-  document.body.style.overflow = ''
-  document.body.classList.add('ready')
-  hideTimer = setTimeout(() => {
-    gone.value = true
-    emit('done')
-  }, 1150)
+  progress.value = 100
+  stepIndex.value = STEPS.length - 1
+  startSpin()
 }
 
+/** 任意键/点击：直接补满并走完后续（保留观感，不是瞬间消失） */
 function skip() {
   if (finished) return
-  progress.value = 100
-  stepIndex.value = 2
   finish()
 }
 
 onMounted(() => {
   if (reduced()) {
     document.body.classList.add('ready')
+    phase.value = 'gone'
     emit('done')
     return
-  }
-
-  const t0 = Date.now()
-  const step = () => {
-    const raw = Math.min(1, Math.max(0, (Date.now() - t0) / DUR))
-    const ease = 1 - Math.pow(1 - raw, 3) // 计数用缓出，不用弹簧（数字回弹显得廉价）
-    progress.value = Math.min(100, Math.max(0, ease * 100))
-    const k = raw * 3 // 阶段按进度错峰推进
-    stepIndex.value = k < 1 ? 0 : k < 2 ? 1 : 2
-    if (raw < 1) raf = requestAnimationFrame(step)
-    else setTimeout(finish, 180)
   }
 
   document.body.style.overflow = 'hidden'
   window.addEventListener('keydown', skip)
   window.addEventListener('pointerdown', skip)
-  safety = setTimeout(skip, 3600)
+  safety = setTimeout(skip, 4200)
 
+  const t0 = Date.now()
+  const step = () => {
+    if (finished) return
+    const p = Math.min(1, Math.max(0, (Date.now() - t0) / COUNT_MS))
+    const eased = 1 - Math.pow(1 - p, 3) // 缓出
+    // 从 1 开始（用户要求 1 -> 100）
+    progress.value = Math.max(1, Math.min(99, 1 + eased * 98))
+    stepIndex.value = p < 0.34 ? 0 : p < 0.72 ? 1 : 2
+    if (p < 1) raf = requestAnimationFrame(step)
+    else setTimeout(finish, 90)
+  }
   raf = requestAnimationFrame(step)
-  // 兜底：rAF 被节流时仍推进（v3 的教训：不能只靠 rAF 驱动时长）
+
+  // 兜底：rAF 被节流时仍推进（否则会停在半路）
   tickTimer = setInterval(() => {
-    if (!finished) step()
+    if (!finished && phase.value === 'boot') step()
   }, 100)
 })
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   clearInterval(tickTimer)
-  clearTimeout(hideTimer)
+  animTimers.forEach((t) => clearInterval(t))
   clearTimeout(safety)
   window.removeEventListener('keydown', skip)
   window.removeEventListener('pointerdown', skip)
@@ -123,79 +165,127 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    v-if="!gone"
+    v-if="phase !== 'gone'"
+    ref="rootEl"
     class="boot"
-    :class="{ done }"
+    :class="[`is-${phase}`]"
     role="progressbar"
     :aria-valuenow="Math.round(progress)"
-    aria-valuemin="0"
+    aria-valuemin="1"
     aria-valuemax="100"
     :aria-label="`正在载入${BRAND}`"
   >
-    <!-- 极淡网格：让"开机"有仪表感，而不是一块空白 -->
-    <span class="boot__grid" aria-hidden="true"></span>
-    <!-- 扫描光带：给"校准"提供持续运动（周期 2.6s） -->
-    <span class="boot__scan" aria-hidden="true"></span>
-
-    <!-- 四角取景框：给版面加结构边界（否则全屏大留白会显得"没东西"） -->
-    <span class="boot__frame" aria-hidden="true"></span>
-
-    <!-- 外圈刻度环 + 弧线进度：仪表读数感。
-         刻度环绕整圈（--p 由进度驱动），弧线按真实进度描出（r=132，周长 829.4） -->
-    <svg
-      class="boot__dial"
-      viewBox="0 0 300 300"
-      aria-hidden="true"
-      :style="{ '--p': progress / 100 }"
-    >
-      <g class="boot__ticks">
-        <line
-          v-for="n in 36"
-          :key="n"
-          x1="150"
-          :y1="n % 3 === 0 ? 6 : 11"
-          x2="150"
-          y2="20"
-          :transform="`rotate(${(n - 1) * 10} 150 150)`"
-        />
-      </g>
-      <circle class="boot__track" cx="150" cy="150" r="132" />
-      <circle
-        class="boot__arc"
-        cx="150"
-        cy="150"
-        r="132"
-        :stroke-dasharray="829.4"
-        :stroke-dashoffset="829.4 * (1 - progress / 100)"
-      />
-    </svg>
-
-    <!-- 中心主体：巨型印记（版式重心）+ 品牌字（遮罩揭示） -->
-    <div class="boot__core" aria-hidden="true">
-      <span class="boot__seal">错</span>
-      <span class="boot__word">
-        <i><b>研</b></i
-        ><i><b>错</b></i
-        ><i><b>本</b></i>
-      </span>
-    </div>
-
-    <div class="boot__left">
-      <div class="boot__brand">
-        <span class="boot__mark" aria-hidden="true"></span>
-        {{ BRAND }}
-        <em>{{ SUB }}</em>
-      </div>
-      <div class="boot__num">{{ readout }}</div>
-      <div class="boot__bar" aria-hidden="true">
-        <i :style="{ transform: `scaleX(${progress / 100})` }"></i>
+    <!--
+      两个半屏：各放一份**完整内容**，再用 clip-path 各裁一半。
+      这样两半各带着"属于自己那一半"的画面滑走 —— 视觉上就是屏幕被撕开，
+      而不是"一层覆盖物滑走"（后者就是用户抱怨过的"也只是上滑一下"）。
+    -->
+    <div class="boot__half boot__half--top" aria-hidden="true">
+      <div class="boot__content">
+        <span class="boot__frame"></span>
+        <svg class="boot__dial" viewBox="0 0 300 300" :style="{ '--p': progress / 100 }">
+          <g class="boot__ticks">
+            <line
+              v-for="n in 36"
+              :key="n"
+              x1="150"
+              :y1="n % 3 === 0 ? 5 : 10"
+              x2="150"
+              y2="19"
+              :transform="`rotate(${(n - 1) * 10} 150 150)`"
+            />
+          </g>
+          <circle class="boot__track" cx="150" cy="150" r="132" />
+          <circle
+            class="boot__arc"
+            cx="150"
+            cy="150"
+            r="132"
+            :stroke-dasharray="829.4"
+            :stroke-dashoffset="829.4 * (1 - progress / 100)"
+          />
+        </svg>
+        <div class="boot__core">
+          <span class="boot__seal">错</span>
+          <span class="boot__word">{{ BRAND }}</span>
+        </div>
+        <div class="boot__bottom">
+          <div class="boot__left">
+            <div class="boot__brand">
+              <span class="boot__mark"></span>
+              {{ BRAND }}
+              <em>{{ SUB }}</em>
+            </div>
+            <div class="boot__num">{{ readout }}<i>%</i></div>
+          </div>
+          <div class="boot__steps">
+            <span
+              v-for="(s, i) in STEPS"
+              :key="s"
+              :class="{ on: i === stepIndex, past: i < stepIndex }"
+            >
+              {{ s }}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="boot__steps" aria-hidden="true">
-      <span v-for="(s, i) in STEPS" :key="s" :class="{ on: i === stepIndex, past: i < stepIndex }">
-        {{ s }}
-      </span>
+    <div class="boot__half boot__half--bottom" aria-hidden="true">
+      <div class="boot__content">
+        <span class="boot__frame"></span>
+        <svg class="boot__dial" viewBox="0 0 300 300" :style="{ '--p': progress / 100 }">
+          <g class="boot__ticks">
+            <line
+              v-for="n in 36"
+              :key="`b${n}`"
+              x1="150"
+              :y1="n % 3 === 0 ? 5 : 10"
+              x2="150"
+              y2="19"
+              :transform="`rotate(${(n - 1) * 10} 150 150)`"
+            />
+          </g>
+          <circle class="boot__track" cx="150" cy="150" r="132" />
+          <circle
+            class="boot__arc"
+            cx="150"
+            cy="150"
+            r="132"
+            :stroke-dasharray="829.4"
+            :stroke-dashoffset="829.4 * (1 - progress / 100)"
+          />
+        </svg>
+        <div class="boot__core">
+          <span class="boot__seal">错</span>
+          <span class="boot__word">{{ BRAND }}</span>
+        </div>
+        <div class="boot__bottom">
+          <div class="boot__left">
+            <div class="boot__brand">
+              <span class="boot__mark"></span>
+              {{ BRAND }}
+              <em>{{ SUB }}</em>
+            </div>
+            <div class="boot__num">{{ readout }}<i>%</i></div>
+          </div>
+          <div class="boot__steps">
+            <span
+              v-for="(s, i) in STEPS"
+              :key="`b${s}`"
+              :class="{ on: i === stepIndex, past: i < stepIndex }"
+            >
+              {{ s }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 明显的进度条：横贯底部整宽，4px 高，朱砂填充 + 游标 -->
+    <div class="boot__progress" aria-hidden="true">
+      <span class="boot__progress-fill" :style="{ transform: `scaleX(${progress / 100})` }"></span>
+      <span class="boot__progress-knob" :style="{ left: `${progress}%` }"></span>
     </div>
   </div>
 </template>
@@ -205,51 +295,154 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 9999;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* 两个半屏：铺满全屏 + 各裁一半 + 各带一份完整内容 */
+.boot__half {
+  position: absolute;
+  inset: 0;
   background: var(--bg);
+  will-change: transform;
+}
+.boot__half--top {
+  clip-path: inset(0 0 50% 0);
+}
+.boot__half--bottom {
+  clip-path: inset(50% 0 0 0);
+}
+/*
+  撕裂：上半向上、下半向下。
+  用 animation 而不是 transition：实测 transition 在这个场景（Vue 响应式切类 +
+  clip-path 元素）里不可靠 —— 选择器明明匹配（matchesSplit=true），
+  但位移始终为 0。animation 由类名触发、自身控时，不依赖属性变化检测。
+*/
+/* 撕裂由 JS 写内联 transform 驱动（见脚本注释：CSS 动画在无头环境不推进） */
+
+.boot__content {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* 四角取景框 */
+.boot__frame {
+  position: absolute;
+  inset: clamp(16px, 2.6vw, 40px);
+  pointer-events: none;
+  opacity: 0.5;
+}
+.boot__frame::before,
+.boot__frame::after {
+  content: '';
+  position: absolute;
+  width: clamp(18px, 2.4vw, 34px);
+  height: clamp(18px, 2.4vw, 34px);
+  border: 1px solid var(--line-strong);
+}
+.boot__frame::before {
+  top: 0;
+  left: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+.boot__frame::after {
+  right: 0;
+  bottom: 0;
+  border-left: 0;
+  border-top: 0;
+}
+
+/* 刻度环 + 弧线进度 */
+.boot__dial {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(72vmin, 620px);
+  height: min(72vmin, 620px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0.9;
+  will-change: transform;
+}
+.boot__ticks {
+  transform-origin: 150px 150px;
+  transform: rotate(calc(var(--p, 0) * 360deg));
+  transition: transform 0.2s linear;
+}
+.boot__ticks line {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+}
+.boot__track {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.boot__arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 150px 150px;
+}
+
+/* 到 100% 后：圆环**加速转圈**（两圈）并轻微放大，形成"启动"的动作 */
+/* 转圈同样由 JS 驱动 */
+
+.boot.is-spin .boot__arc {
+  stroke-width: 4;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 60%, transparent));
+}
+
+/* 中心印记 + 品牌字 */
+.boot__core {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2vh, 20px);
+  pointer-events: none;
+}
+.boot__seal {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(8rem, 26vw, 22rem);
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: var(--accent);
+  opacity: 0.06;
+}
+.boot__word {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.4rem, 3.4vw, 2.4rem);
+  letter-spacing: 0.22em;
+  color: var(--ink);
+}
+
+/* 底部左右：品牌与读数（左）／阶段（右） */
+.boot__bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
   padding: clamp(24px, 4vw, 56px);
-  border-radius: 0;
-  overflow: hidden;
-  cursor: pointer;
-  /* 揭幕：过冲曲线 —— 先快速离场、末段轻微减速，不是等速平移 */
-  transition: transform 1.05s cubic-bezier(0.62, 0.02, 0.24, 1);
+  padding-bottom: clamp(48px, 6vw, 78px);
 }
-.boot.done {
-  transform: translateY(-102%);
-}
-/* 内容与整块**分速度**：内容额外上浮淡出。这是"有物理感"与"整体平移一下"的区别。 */
-.boot__left,
-.boot__steps {
-  transition:
-    transform 0.9s cubic-bezier(0.62, 0.02, 0.24, 1),
-    opacity 0.7s ease;
-}
-.boot.done .boot__left,
-.boot.done .boot__steps {
-  transform: translateY(-28px);
-  opacity: 0;
-}
-
-.boot__grid {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image:
-    linear-gradient(to right, var(--line) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
-  background-size: 72px 72px;
-  mask-image: radial-gradient(70% 60% at 30% 70%, #000 20%, transparent 100%);
-}
-
 .boot__left {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 .boot__brand {
@@ -260,18 +453,14 @@ onBeforeUnmount(() => {
   font-weight: 600;
   letter-spacing: 0.12em;
   color: var(--ink);
-  /* 落定沉降：过冲曲线，像"落"下来而不是"出现" */
-  animation: settle 1.1s cubic-bezier(0.34, 1.3, 0.44, 1) both;
+  animation: settle 1s cubic-bezier(0.34, 1.3, 0.44, 1) both;
 }
 @keyframes settle {
-  0% {
+  from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(12px);
   }
-  60% {
-    opacity: 1;
-  }
-  100% {
+  to {
     opacity: 1;
     transform: none;
   }
@@ -302,294 +491,93 @@ onBeforeUnmount(() => {
   letter-spacing: 0.18em;
   color: var(--ink-3);
 }
-
 .boot__num {
-  font-family: var(--font-display);
-  font-weight: 500;
-  font-size: clamp(3.6rem, 12vw, 9.6rem);
-  line-height: 0.8;
-  letter-spacing: -0.045em;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 300;
+  font-size: clamp(3.4rem, 11vw, 8.6rem);
+  line-height: 0.82;
+  letter-spacing: -0.03em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
-
-/* 进度条：与数字同步，给"开机"一个可读完成度 */
-.boot__bar {
-  position: relative;
-  width: min(320px, 42vw);
-  height: 2px;
-  background: var(--line-strong);
-  overflow: hidden;
+.boot__num i {
+  font-style: normal;
+  font-size: 0.32em;
+  color: var(--ink-3);
+  margin-left: 4px;
 }
-.boot__bar i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-  transform-origin: left;
-  will-change: transform;
-}
-
 .boot__steps {
-  position: relative;
   display: grid;
   gap: 9px;
   text-align: right;
 }
 .boot__steps span {
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   letter-spacing: 0.16em;
   color: var(--ink-3);
   opacity: 0.45;
   transition:
-    color 0.45s var(--ease),
-    opacity 0.45s var(--ease),
+    color 0.4s var(--ease),
+    opacity 0.4s var(--ease),
     transform 0.5s cubic-bezier(0.34, 1.3, 0.44, 1);
 }
-/* 已完成：退到次级色并轻微左移，留下"读过"的痕迹 */
 .boot__steps span.past {
   opacity: 0.6;
   transform: translateX(-4px);
 }
-/* 当前：朱砂色，右进的过冲曲线提供弹簧感 */
 .boot__steps span.on {
   color: var(--accent);
   opacity: 1;
-  transform: translateX(0);
+  transform: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .boot,
-  .boot__left,
-  .boot__steps,
-  .boot__brand,
-  .boot__mark {
-    transition: none;
-    animation: none;
-  }
-}
-/* ── 中心主体 ──────────────────────────────────────────────────────────
-   为什么加：上一版内容全在底部两头，中间整块空着，构图失衡。
-   用"错"字做版式重心 —— 它是"错题本"的直接标识，不是装饰图形。
-   透明度压到 0.07：在米色底上刚好可见，是重心而不是主角。 */
-.boot__core {
+/* ── 明显的进度条（用户要求 1 -> 100%）───────────────────────────────
+   横贯屏幕底部**整宽**，4px 高，朱砂填充 + 一个游标点。
+   原来是一条 320px 的短细条，不够"明显"。 */
+.boot__progress {
   position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(10px, 2vh, 22px);
-  pointer-events: none;
+  left: clamp(24px, 4vw, 56px);
+  right: clamp(24px, 4vw, 56px);
+  bottom: clamp(26px, 3.4vw, 42px);
+  height: 4px;
+  background: var(--line-strong);
 }
-.boot__seal {
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: clamp(9rem, 30vw, 26rem);
-  line-height: 0.8;
-  letter-spacing: -0.06em;
-  color: var(--accent);
-  opacity: 0.07;
-  /* 落定：极慢的沉降，让它"压"在版面上而不是弹出来 */
-  animation: seal-in 1.6s cubic-bezier(0.22, 1.12, 0.36, 1) both;
+.boot__progress-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+  will-change: transform;
 }
-@keyframes seal-in {
-  from {
-    opacity: 0;
-    transform: scale(1.04);
-  }
-  to {
-    opacity: 0.07;
-    transform: scale(1);
-  }
-}
-/* 品牌字：逐字揭示（每个字比前一个晚 90ms） */
-.boot__word {
-  display: flex;
-  gap: 0.05em;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: clamp(1.4rem, 3.6vw, 2.6rem);
-  letter-spacing: 0.16em;
-  color: var(--ink);
-}
-.boot__word i {
-  font-style: normal;
-  display: inline-block;
-  opacity: 0;
-  transform: translateY(0.5em);
-  animation: word-up 0.9s cubic-bezier(0.22, 1.12, 0.36, 1) both;
-}
-.boot__word i:nth-child(1) {
-  animation-delay: 0.18s;
-}
-.boot__word i:nth-child(2) {
-  animation-delay: 0.27s;
-}
-.boot__word i:nth-child(3) {
-  animation-delay: 0.36s;
-}
-@keyframes word-up {
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* ── 扫描光带 ──────────────────────────────────────────────────────────
-   一条竖直柔光从左到右扫过面板。作用是让"校准"这件事持续可见地发生，
-   同时因为它是柔光（blur + 极低透明度），不干扰内容的可读性。 */
-.boot__scan {
+.boot__progress-knob {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 26vw;
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--accent) 12%, transparent),
-    transparent
-  );
-  filter: blur(26px);
-  animation: scan-x 2.6s var(--ease) infinite;
-}
-@keyframes scan-x {
-  from {
-    transform: translateX(-30vw);
-  }
-  to {
-    transform: translateX(125vw);
-  }
-}
-
-@media (max-width: 760px) {
-  .boot__seal {
-    font-size: clamp(7rem, 46vw, 14rem);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .boot__seal,
-  .boot__word i,
-  .boot__scan {
-    animation: none;
-    opacity: 1;
-    transform: none;
-  }
-  .boot__seal {
-    opacity: 0.07;
-  }
-}
-/* ── 四角取景框 ────────────────────────────────────────────────────────
-   四个直角标记，用伪元素画（不额外加 DOM）。给版面一个"取景"的边界，
-   否则全屏大留白会显得"没东西"。 */
-.boot__frame {
-  position: absolute;
-  inset: clamp(16px, 2.6vw, 40px);
-  pointer-events: none;
-  opacity: 0.5;
-}
-.boot__frame::before,
-.boot__frame::after {
-  content: '';
-  position: absolute;
-  width: clamp(18px, 2.4vw, 34px);
-  height: clamp(18px, 2.4vw, 34px);
-  border: 1px solid var(--line-strong);
-}
-.boot__frame::before {
-  top: 0;
-  left: 0;
-  border-right: 0;
-  border-bottom: 0;
-}
-.boot__frame::after {
-  right: 0;
-  bottom: 0;
-  border-left: 0;
-  border-top: 0;
-}
-/* 另外两个角用内部元素补：这里用 box-shadow 的负向偏移不合适，
-   改为给 .boot__frame 加两条渐变线（避免再加 DOM） */
-.boot__frame {
-  background-image:
-    linear-gradient(var(--line-strong), var(--line-strong)),
-    linear-gradient(var(--line-strong), var(--line-strong));
-  background-size:
-    clamp(18px, 2.4vw, 34px) 1px,
-    1px clamp(18px, 2.4vw, 34px);
-  background-position:
-    right top,
-    right top;
-  background-repeat: no-repeat;
-}
-
-/* ── 外圈刻度环 + 弧线进度 ─────────────────────────────────────────────
-   36 条角刻度 + 一圈弧线。刻度环随进度**缓慢旋转**（--p 驱动），
-   弧线按真实进度描出 —— 两者一起产生"仪表在读数"的感觉。 */
-.boot__dial {
-  position: absolute;
-  left: 50%;
   top: 50%;
-  width: min(72vmin, 640px);
-  height: min(72vmin, 640px);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  opacity: 0.85;
+  width: 11px;
+  height: 11px;
+  margin-left: -6px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 20%, transparent);
 }
-.boot__ticks {
-  /* 旋转由 --p 驱动：0 -> 整圈。用了 CSS 变量所以能随进度连续转 */
-  transform-origin: 150px 150px;
-  transform: rotate(calc(var(--p, 0) * 360deg));
-  transition: transform 0.2s linear;
+/* 撕裂瞬间：进度条淡出（它属于下半部分） */
+.boot.is-split .boot__progress {
+  animation: fade-out 0.22s ease forwards;
 }
-.boot__ticks line {
-  stroke: var(--line-strong);
-  stroke-width: 1;
-}
-.boot__track {
-  fill: none;
-  stroke: var(--line);
-  stroke-width: 1;
-}
-.boot__arc {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 2;
-  stroke-linecap: round;
-  /* 从 12 点方向开始描 */
-  transform: rotate(-90deg);
-  transform-origin: 150px 150px;
-}
-/* 中心印记与刻度环叠在一起时，印记要更弱一点，避免糊成一片 */
-.boot__seal {
-  opacity: 0.055;
-}
-
-/* ── 品牌字遮罩揭示 ───────────────────────────────────────────────────
-   外层 overflow hidden + 内层上顶，替代"直接出现"。逐字错峰。 */
-.boot__word i {
-  overflow: hidden;
-  display: inline-block;
-}
-.boot__word b {
-  display: inline-block;
-  font-weight: 600;
-  transform: translateY(105%);
-  animation: word-mask 0.85s cubic-bezier(0.22, 1.12, 0.36, 1) both;
-}
-@keyframes word-mask {
+@keyframes fade-out {
   to {
-    transform: none;
+    opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .boot__ticks,
-  .boot__word b {
-    animation: none;
-    transform: none;
+  .boot__half,
+  .boot__progress {
     transition: none;
+  }
+  .boot.is-spin .boot__dial {
+    animation: none;
   }
 }
 </style>
