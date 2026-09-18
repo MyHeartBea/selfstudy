@@ -73,7 +73,10 @@ const hasImage = computed(
   <article
     class="mistake-card card km-live"
     :class="{ picked: selected }"
-    :style="{ '--enter-delay': `${Math.min(pos, 11) * 55}ms`, '--spine': spineColor }"
+    :style="{
+      '--enter-delay': `calc(${Math.min(pos, 11)} * var(--stagger-1))`,
+      '--spine': spineColor,
+    }"
     tabindex="0"
     role="button"
     @click="$emit('open', mistake.id)"
@@ -275,7 +278,7 @@ const hasImage = computed(
      matrix(1,0,0,1,0,0)，倾斜完全没生效。
      所以把"位移动画"交给外层容器（.card-grid 的错峰入场），
      这里只负责淡入，避免两处争同一个属性。 */
-  animation: card-fade 0.55s var(--ease) both;
+  animation: card-fade var(--dur-4) var(--ease-enter) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes card-fade {

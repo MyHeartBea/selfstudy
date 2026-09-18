@@ -9,6 +9,8 @@ import { onMounted, onUnmounted, ref } from 'vue'
 const ambientEl = ref(null)
 const glowEl = ref(null)
 let rafId = 0
+let ambientRunning = false
+let blobs = []
 let mx = 0,
   my = 0,
   gx = 0,
@@ -17,6 +19,7 @@ let mx = 0,
 function onMove(e) {
   mx = e.clientX
   my = e.clientY
+  startAmbient()
 }
 
 onMounted(() => {
@@ -37,28 +40,57 @@ onMounted(() => {
     }
   }
   if (!reduce) {
-    const blobs = ambientEl.value ? [...ambientEl.value.querySelectorAll('[data-depth]')] : []
-    const loop = () => {
-      gx += (mx - gx) * 0.06
-      gy += (my - gy) * 0.06
-      if (glowEl.value) {
-        glowEl.value.style.left = gx + 'px'
-        glowEl.value.style.top = gy + 'px'
-      }
-      for (const b of blobs) {
-        const depth = Number(b.dataset.depth) || 0
-        b.style.translate = `${((gx / window.innerWidth - 0.5) * depth).toFixed(1)}px ${((gy / window.innerHeight - 0.5) * depth).toFixed(1)}px`
-      }
-      rafId = requestAnimationFrame(loop)
-    }
-    rafId = requestAnimationFrame(loop)
+    blobs = ambientEl.value ? [...ambientEl.value.querySelectorAll('[data-depth]')] : []
     window.addEventListener('mousemove', onMove, { passive: true })
+    // 切到后台标签页就停：氛围层是纯装饰，不该在看不见的时候继续写 style
+    document.addEventListener('visibilitychange', onVisibility)
+    startAmbient()
   }
 })
 
-onUnmounted(() => {
+function startAmbient() {
+  if (ambientRunning) return
+  ambientRunning = true
+  rafId = requestAnimationFrame(loop)
+}
+
+function stopAmbient() {
+  ambientRunning = false
   if (rafId) cancelAnimationFrame(rafId)
+  rafId = 0
+}
+
+function onVisibility() {
+  if (document.visibilityState === 'hidden') stopAmbient()
+  else startAmbient()
+}
+
+function loop() {
+  if (!ambientRunning) return
+  gx += (mx - gx) * 0.06
+  gy += (my - gy) * 0.06
+  if (glowEl.value) {
+    glowEl.value.style.left = gx + 'px'
+    glowEl.value.style.top = gy + 'px'
+  }
+  for (const b of blobs) {
+    const depth = Number(b.dataset.depth) || 0
+    b.style.translate = `${((gx / window.innerWidth - 0.5) * depth).toFixed(1)}px ${((gy / window.innerHeight - 0.5) * depth).toFixed(1)}px`
+  }
+  // 追到 0.4px 以内视为收敛：不再排下一帧，鼠标一动 onMove 会把它重新叫醒。
+  // 之前是无条件 requestAnimationFrame，整页空转在每帧写 4 个 style。
+  if (Math.abs(mx - gx) < 0.4 && Math.abs(my - gy) < 0.4) {
+    ambientRunning = false
+    rafId = 0
+    return
+  }
+  rafId = requestAnimationFrame(loop)
+}
+
+onUnmounted(() => {
+  stopAmbient()
   window.removeEventListener('mousemove', onMove)
+  document.removeEventListener('visibilitychange', onVisibility)
 })
 </script>
 

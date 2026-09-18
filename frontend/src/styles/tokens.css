@@ -69,9 +69,30 @@
   --e-pop: var(--shadow-3);
   --e-glow: 0 6px 24px rgba(193, 74, 49, 0.16), 0 2px 6px rgba(193, 74, 49, 0.08);
 
-  /* ── 动效 ── */
+  /* ── 动效 ──
+     全站唯一的动效词汇表。此前只有两条缓动、没有时长/交错，
+     结果是全库 246+ 处硬编码时长、26 种取值、8 条手写 cubic-bezier
+     —— 同一种"hover 上浮"在六个文件里是六个手感。新代码一律引用令牌。 */
   --spring: cubic-bezier(0.34, 1.4, 0.4, 1);
   --ease: cubic-bezier(0.22, 0.8, 0.3, 1);
+
+  /* 时长档位：1 微反馈（按下/变色）... 5 大段揭示 */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --dur-4: 460ms;
+  --dur-5: 720ms;
+
+  /* 列表交错间隔 */
+  --stagger-1: 45ms;
+  --stagger-2: 70ms;
+  --stagger-3: 110ms;
+
+  /* 按语义角色分派的缓动（进场和退场本来就不该用同一条曲线） */
+  --ease-enter: var(--ease);
+  --ease-exit: cubic-bezier(0.4, 0, 0.9, 0.35);
+  --ease-move: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: var(--spring);
 
   /* ── 圆角 ── */
   --r-sm: 10px;

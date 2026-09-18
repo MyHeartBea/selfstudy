@@ -27,6 +27,12 @@ export function useCountUp(source, options = {}) {
       display.value = format(target)
       return
     }
+    // 减弱动效偏好下直接落值：immediate:true 的 watch 会在挂载那一刻就开滚，
+    // 原先完全不看偏好，等于每个数字都白刷 900ms 的 rAF。
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      display.value = format(target)
+      return
+    }
     const step = (now) => {
       const t = Math.min(1, (now - start) / duration)
       // easeOutCubic

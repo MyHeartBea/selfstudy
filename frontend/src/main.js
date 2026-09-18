@@ -3,11 +3,11 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import { reveal } from './directives/reveal'
-// 本地子集思源宋体（unicode-range 分片，只加载用到的字形；离线可用）
-import '@fontsource/noto-serif-sc/500.css'
-import '@fontsource/noto-serif-sc/600.css'
-import '@fontsource/noto-serif-sc/700.css'
-import '@fontsource/noto-serif-sc/900.css'
+// 本地子集思源宋体：动态引入，让 404 条 @font-face（486KB）脱离 render-blocking 链，
+// 启动屏不再等它。字体本身有 font-display:swap。
+// 把这个 promise 挂到 window：开场编排要等"字体样式表真的注入完"再读
+// document.fonts.ready，否则 ready 会在字体还没开始下载时就提前兑现（表现为 FOUT）。
+window.__kmFontsReady = import('./styles/fonts.js')
 import './styles/tokens.css'
 import './styles/base.css'
 // 交互与排版增强层（列表悬停 / 逐行揭示 / 等宽数位）—— 学自参考稿，保持 v2 语言

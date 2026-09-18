@@ -147,7 +147,7 @@ onUnmounted(() => {
   background: transparent;
   color: var(--ink-3);
   cursor: pointer;
-  transition: all 0.15s var(--ease);
+  transition: all var(--dur-1) var(--ease);
 }
 .modal-close:hover {
   background: var(--surface-2);
@@ -169,13 +169,19 @@ onUnmounted(() => {
   flex: none;
 }
 
-.modal-enter-active,
-.modal-leave-active {
-  transition: opacity 0.2s ease;
+/* 弹层统一时序：进场有回弹、离场干脆。
+   之前 enter 和 leave 共用一条 transition，关窗也带 300ms 弹簧，拖沓。 */
+.modal-enter-active {
+  transition: opacity var(--dur-2) var(--ease-enter);
 }
-.modal-enter-active .modal-panel,
+.modal-leave-active {
+  transition: opacity var(--dur-1) var(--ease-exit);
+}
+.modal-enter-active .modal-panel {
+  transition: transform var(--dur-3) var(--ease-spring);
+}
 .modal-leave-active .modal-panel {
-  transition: transform 0.3s var(--spring);
+  transition: transform var(--dur-1) var(--ease-exit);
 }
 .modal-enter-from,
 .modal-leave-to {

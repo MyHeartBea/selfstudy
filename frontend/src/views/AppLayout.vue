@@ -143,7 +143,7 @@ function toggleTheme(event) {
     applyTheme(next) // 墨已盖满：此刻才真正换肤
     veil.style.transition = 'opacity .18s ease'
     veil.style.opacity = '0'
-    setTimeout(() => {
+    veilTimer = setTimeout(() => {
       veil.style.display = 'none'
       veil.style.transition = ''
       themeBusy = false
@@ -176,15 +176,21 @@ watch(
 let healthTimer = 0
 let mediaHandler = null
 let systemThemeHandler = null
+let shortcutsHandler = null
+let armTimer = 0
+let veilTimer = 0
 
 onMounted(() => {
   loadBaseData()
   loadRing()
   loadHealth()
   healthTimer = setInterval(loadHealth, 30000)
+  shortcutsHandler = () => {
+    shortcutsOpen.value = true
+  }
   window.addEventListener('km:review-saved', loadRing)
   window.addEventListener('km:toggle-theme', onToggleThemeEvent)
-  window.addEventListener('km:show-shortcuts', () => (shortcutsOpen.value = true))
+  window.addEventListener('km:show-shortcuts', shortcutsHandler)
   window.addEventListener('keydown', onGlobalKeydown)
   // 窄屏：Dock 收起，改为紧凑顶栏 + 抽屉
   mq = window.matchMedia('(max-width: 1100px)')
@@ -193,7 +199,7 @@ onMounted(() => {
     isNarrow.value = mq.matches
   }
   mq.addEventListener?.('change', mediaHandler)
-  // 从未手动选过主题 → 跟随系统（用户点换肤后写入 km-theme 即固定）
+  // 从未手动选过主题就跟随系统（用户点换肤后写入 km-theme 即固定）
   if (!localStorage.getItem('km-theme')) {
     const systemMQ = window.matchMedia('(prefers-color-scheme: dark)')
     applyTheme(systemMQ.matches, false)
@@ -202,20 +208,31 @@ onMounted(() => {
     }
     systemMQ.addEventListener?.('change', systemThemeHandler)
   }
-  // 开场编排：等字体就绪（本地字体毫秒级；700ms 兜底）再放下 Dock / 显影氛围
+  // 开场编排（两个条件都要满足才放行 Dock / 氛围显影）：
+  //   ① 启动校准动画放完 —— BootCalibration 与 AppLayout 是同一帧挂载的，
+  //      不等它就会让 Dock 的入场在遮罩背后悄悄演完（用户只看到"已经摆好了"）；
+  //   ② 字体样式表注入完 + 字形就绪 —— 字体 CSS 现在是异步 chunk（见 main.js），
+  //      必须串在它后面读 fonts.ready，否则揭示瞬间看到的是兜底字体。
   const arm = () => document.body.classList.add('app-ready')
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(arm)
-    setTimeout(arm, 700)
-  } else {
-    setTimeout(arm, 200)
-  }
+  const booted = document.body.classList.contains('ready')
+    ? Promise.resolve()
+    : new Promise((res) => window.addEventListener('km:boot-done', res, { once: true }))
+  const fonts = Promise.resolve(window.__kmFontsReady)
+    .catch(() => {})
+    .then(() => document.fonts?.ready)
+  Promise.all([booted, fonts]).then(arm)
+  // 兜底看门狗故意放在 BootCalibration 自身 4200ms 之后，不抢它的收尾
+  armTimer = setTimeout(arm, 4500)
 })
 
 onUnmounted(() => {
   clearInterval(healthTimer)
+  clearTimeout(armTimer)
+  clearTimeout(veilTimer)
+  cancelAnimationFrame(contentRaf)
   window.removeEventListener('km:review-saved', loadRing)
   window.removeEventListener('km:toggle-theme', onToggleThemeEvent)
+  window.removeEventListener('km:show-shortcuts', shortcutsHandler)
   window.removeEventListener('keydown', onGlobalKeydown)
   mq?.removeEventListener?.('change', mediaHandler)
   if (systemThemeHandler) {
@@ -228,10 +245,11 @@ onUnmounted(() => {
 /* ── 换页动画（JS 驱动）─────────────────────────────────────────────────
    不依赖 Vue <Transition>：连续四版实测都不可靠。
    做法：路由变化时新内容已渲染 -> 立刻给它一个**起始偏移**（内联样式），
-   再用 runAnim 推到 0。只动 transform / opacity。
+   再用 rAF 逐步推到 0。只动 transform / opacity。
    方向由 pageDir（导航顺序决定）给出。 */
 const deckInner = ref(null)
-let pageAnimTimer = 0
+let pageAnimRaf = 0
+let contentRaf = 0
 
 const easeOut = (p) => 1 - Math.pow(1 - p, 3)
 
@@ -242,25 +260,29 @@ function playPageEnter() {
 
   // 方向：next = 新页在当前页右边 -> 新页从右侧进来
   const fromX = pageDir.value === 'next' ? 5.5 : -5.5
-  const t0 = Date.now()
+  const t0 = performance.now()
   const DUR = 420
 
-  clearInterval(pageAnimTimer)
+  cancelAnimationFrame(pageAnimRaf)
   el.style.willChange = 'transform, opacity'
-  pageAnimTimer = window.setInterval(() => {
-    const raw = Math.min(1, (Date.now() - t0) / DUR)
+  // 用 rAF 而不是 setInterval(16)：后者不吃浏览器的帧时钟，
+  // 高负载下会挤成两次采样、后台标签页里还会被推迟到动画结束后才收尾。
+  const step = (now) => {
+    const raw = Math.min(1, (now - t0) / DUR)
     const e = easeOut(raw)
     const x = fromX * (1 - e)
     const op = 0.55 + 0.45 * e
     el.style.transform = `translate3d(${x.toFixed(2)}%, 0, 0)`
     el.style.opacity = op.toFixed(3)
-    if (raw >= 1) {
-      clearInterval(pageAnimTimer)
-      el.style.transform = ''
-      el.style.opacity = ''
-      el.style.willChange = ''
+    if (raw < 1) {
+      pageAnimRaf = requestAnimationFrame(step)
+      return
     }
-  }, 16)
+    el.style.transform = ''
+    el.style.opacity = ''
+    el.style.willChange = ''
+  }
+  requestAnimationFrame(step)
 }
 
 /**
@@ -272,18 +294,21 @@ function playPageEnter() {
  * 所以先等容器真的有内容（首个子元素有高度）再开始，最多等 500ms。
  */
 function whenContentReady(cb, deadline = 500) {
-  const t0 = Date.now()
-  const tick = () => {
+  const t0 = performance.now()
+  cancelAnimationFrame(contentRaf)
+  const tick = (now) => {
     const el = deckInner.value
-    const child = el && el.firstElementChild
+    if (!el) return // 已卸载：deckInner 变 null，别再回调去写 style
+    const child = el.firstElementChild
     const ready = child && child.getBoundingClientRect().height > 8
-    if (ready || Date.now() - t0 > deadline) {
+    if (ready || now - t0 > deadline) {
+      contentRaf = 0
       cb()
       return
     }
-    requestAnimationFrame(tick)
+    contentRaf = requestAnimationFrame(tick)
   }
-  requestAnimationFrame(tick)
+  contentRaf = requestAnimationFrame(tick)
 }
 
 watch(
@@ -291,9 +316,14 @@ watch(
   () => {
     whenContentReady(playPageEnter)
   },
+  // .page 的 CSS 入场已删（它压掉了 JS 的水平位移），首个路由也要靠这里补上
+  { immediate: true },
 )
 
-onUnmounted(() => clearInterval(pageAnimTimer))
+onUnmounted(() => {
+  cancelAnimationFrame(pageAnimRaf)
+  cancelAnimationFrame(contentRaf)
+})
 </script>
 
 <template>
@@ -584,26 +614,6 @@ onUnmounted(() => clearInterval(pageAnimTimer))
 .drawer-enter-from.drawer,
 .drawer-leave-to.drawer {
   transform: translateX(30px);
-}
-
-/* ---------- 路由过渡 ---------- */
-.route-enter-active {
-  transition:
-    opacity 0.3s var(--ease),
-    transform 0.3s var(--ease);
-}
-.route-leave-active {
-  transition:
-    opacity 0.16s ease,
-    transform 0.16s ease;
-}
-.route-enter-from {
-  opacity: 0;
-  transform: translateY(14px) scale(0.996);
-}
-.route-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
 }
 
 @media (max-width: 1100px) {

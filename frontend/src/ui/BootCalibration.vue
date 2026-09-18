@@ -33,7 +33,7 @@ const stepIndex = ref(0)
 const phase = ref('boot') // boot | spin | split | gone
 
 const rootEl = ref(null)
-const animTimers = []
+const animRafs = new Set()
 
 let raf = 0
 let tickTimer = 0
@@ -119,16 +119,22 @@ function burstParticles() {
 
 function runAnim(duration, onTick) {
   return new Promise((resolve) => {
-    const t0 = Date.now()
-    const timer = setInterval(() => {
-      const p = Math.min(1, (Date.now() - t0) / duration)
+    // rAF 而不是 setInterval(16)：这里逐帧写 40+ 个粒子的 transform，
+    // 定时器节奏和浏览器帧时钟对不上就会出现"跳一下再不动"的顿挫。
+    const t0 = performance.now()
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / duration)
       onTick(p)
       if (p >= 1) {
-        clearInterval(timer)
+        animRafs.delete(id)
         resolve()
+        return
       }
-    }, 16)
-    animTimers.push(timer)
+      id = requestAnimationFrame(step)
+      animRafs.add(id)
+    }
+    let id = requestAnimationFrame(step)
+    animRafs.add(id)
   })
 }
 
@@ -224,7 +230,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   clearInterval(tickTimer)
-  animTimers.forEach((t) => clearInterval(t))
+  animRafs.forEach((id) => cancelAnimationFrame(id))
+  animRafs.clear()
   clearTimeout(safety)
   window.removeEventListener('keydown', skip)
   window.removeEventListener('pointerdown', skip)

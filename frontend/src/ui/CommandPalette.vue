@@ -199,8 +199,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           </div>
 
           <div class="palette-foot">
-            <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
-            <span><kbd>↵</kbd> 打开</span>
+            <span><kbd>上</kbd><kbd>下</kbd> 选择</span>
+            <span><kbd>Enter</kbd> 打开</span>
             <span><kbd>Tab</kbd> 换范围</span>
             <span class="palette-brand">研错本 · 命令面板</span>
           </div>
@@ -283,7 +283,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.14s;
+  transition: all var(--dur-1) var(--ease);
 }
 .scope-chip:hover {
   border-color: var(--accent);
@@ -376,13 +376,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   letter-spacing: 0.06em;
 }
 
-.palette-enter-active,
-.palette-leave-active {
-  transition: opacity 0.18s ease;
+.palette-enter-active {
+  transition: opacity var(--dur-2) var(--ease-enter);
 }
-.palette-enter-active .palette,
+.palette-leave-active {
+  transition: opacity var(--dur-1) var(--ease-exit);
+}
+.palette-enter-active .palette {
+  transition: transform var(--dur-3) var(--ease-spring);
+}
 .palette-leave-active .palette {
-  transition: transform 0.22s cubic-bezier(0.22, 1.2, 0.36, 1);
+  transition: transform var(--dur-1) var(--ease-exit);
 }
 .palette-enter-from,
 .palette-leave-to {

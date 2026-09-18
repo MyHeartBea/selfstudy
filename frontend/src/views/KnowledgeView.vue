@@ -269,7 +269,7 @@ onMounted(() => {
           tabindex="0"
           :aria-label="`查看知识点 ${row.tag_name}`"
           :style="{
-            '--enter-delay': Math.min(i, 11) * 50 + 'ms',
+            '--enter-delay': `calc(${Math.min(i, 11)} * var(--stagger-1))`,
             '--kcol': subjectColor(row.subject_id),
           }"
           @click="openDetail(row)"
@@ -496,7 +496,7 @@ onMounted(() => {
   transition:
     border-color 0.2s var(--ease),
     box-shadow 0.3s var(--ease);
-  animation: kcard-in 0.5s var(--ease) both;
+  animation: kcard-in var(--dur-4) var(--ease-enter) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes kcard-in {

@@ -116,7 +116,10 @@ onMounted(loadProfiles)
         v-for="(row, i) in profiles"
         :key="row.subject_id"
         class="card card-pad subject-card km-card"
-        :style="{ '--enter-delay': i * 80 + 'ms', '--scol': subjectColor(row.subject_id) }"
+        :style="{
+          '--enter-delay': `calc(${i} * var(--stagger-2))`,
+          '--scol': subjectColor(row.subject_id),
+        }"
       >
         <i class="s-topbar" aria-hidden="true"></i>
         <div class="subject-head">
@@ -206,7 +209,7 @@ onMounted(loadProfiles)
     transform 0.25s var(--spring),
     box-shadow 0.3s var(--ease),
     border-color 0.2s var(--ease);
-  animation: subj-in 0.55s var(--ease) both;
+  animation: subj-in var(--dur-4) var(--ease-enter) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes subj-in {

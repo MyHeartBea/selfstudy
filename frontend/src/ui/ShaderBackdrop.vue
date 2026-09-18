@@ -32,6 +32,7 @@ let running = false
 let startTime = 0
 let uniforms = {}
 let resizeHandler = null
+let moveHandler = null
 let visibilityHandler = null
 
 const VERT = `
@@ -221,10 +222,15 @@ onMounted(() => {
     tmy = e.clientY / window.innerHeight
   }
 
+  resizeHandler = () => {
+    resize()
+    applyColors()
+  }
+  moveHandler = onMove
   resize()
   applyColors()
-  window.addEventListener('resize', resize, { passive: true })
-  window.addEventListener('pointermove', onMove, { passive: true })
+  window.addEventListener('resize', resizeHandler, { passive: true })
+  window.addEventListener('pointermove', moveHandler, { passive: true })
 
   startTime = performance.now()
   running = true
@@ -254,17 +260,15 @@ onMounted(() => {
     }
   }
   document.addEventListener('visibilitychange', visibilityHandler)
-
-  resizeHandler = () => {
-    resize()
-    applyColors()
-  }
 })
 
 onBeforeUnmount(() => {
   running = false
   cancelAnimationFrame(raf)
+  // 之前这里移除的是 resizeHandler —— 但注册的是内层 resize，指针完全不同，
+  // 等于每次挂载都漏一个 resize + 一个 pointermove 监听器。
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
+  if (moveHandler) window.removeEventListener('pointermove', moveHandler)
   if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler)
   gl = null
   program = null

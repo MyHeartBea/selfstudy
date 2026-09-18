@@ -105,7 +105,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
 }
 .dd-arrow {
   color: var(--ink-3);
-  transition: transform 0.2s var(--ease);
+  transition: transform var(--dur-2) var(--ease);
 }
 .dd-arrow.up {
   transform: rotate(180deg);
@@ -142,17 +142,23 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.14s var(--ease);
+  transition: background var(--dur-1) var(--ease);
 }
 .dropdown-item:hover {
   background: var(--surface-2);
 }
 
-.drop-enter-active,
+/* 下拉/弹层统一时序：进带回弹、退干脆。共用一条 transition 会让
+   关闭动作也走完整个弹簧，鼠标已移开菜单还在飘。 */
+.drop-enter-active {
+  transition:
+    opacity var(--dur-2) var(--ease-enter),
+    transform var(--dur-3) var(--ease-spring);
+}
 .drop-leave-active {
   transition:
-    opacity 0.18s var(--ease),
-    transform 0.22s var(--spring);
+    opacity var(--dur-1) var(--ease-exit),
+    transform var(--dur-1) var(--ease-exit);
 }
 .drop-enter-from,
 .drop-leave-to {

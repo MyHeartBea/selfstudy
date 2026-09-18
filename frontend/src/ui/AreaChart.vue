@@ -88,7 +88,7 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
           class="ac-area"
           :d="`${pathOf(s.values)} L${xs(s.values.length - 1)},${H - 30} L${xs(0)},${H - 30} Z`"
           :fill="`url(#${uid}-${si})`"
-          :style="{ animationDelay: 0.15 + si * 0.2 + 's' }"
+          :style="{ animationDelay: `calc(var(--dur-2) + ${si} * var(--stagger-3))` }"
         />
         <path
           v-if="s.values.length > 1"
@@ -100,7 +100,7 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
           stroke-linecap="round"
           stroke-linejoin="round"
           pathLength="1"
-          :style="{ animationDelay: 0.15 + si * 0.2 + 's' }"
+          :style="{ animationDelay: `calc(var(--dur-2) + ${si} * var(--stagger-3))` }"
         />
         <circle
           v-for="(v, i) in s.values"
@@ -112,7 +112,9 @@ const uid = `area-${Math.random().toString(36).slice(2, 8)}`
           fill="var(--surface)"
           :stroke="s.color"
           stroke-width="2.2"
-          :style="{ animationDelay: 0.35 + si * 0.2 + i * 0.07 + 's' }"
+          :style="{
+            animationDelay: `calc(var(--dur-3) + ${si} * var(--stagger-3) + ${i} * var(--stagger-1))`,
+          }"
         />
       </g>
 

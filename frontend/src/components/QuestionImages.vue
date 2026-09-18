@@ -74,7 +74,7 @@ function displaySrc(item) {
 }
 
 function onThumbError(item, event) {
-  // 缩略图缺失/生成失败 → 回退原图（只回退一次，防循环）
+  // 缩略图缺失/生成失败时回退原图（只回退一次，防循环）
   const full = imageSrc(item)
   if (event.target.src.endsWith(full) || event.target.src.includes(full)) return
   event.target.src = full
@@ -189,7 +189,7 @@ function onThumbError(item, event) {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--dur-1) var(--ease);
 }
 .lb-close:hover,
 .lb-nav:hover {
@@ -220,7 +220,7 @@ function onThumbError(item, event) {
 }
 .lightbox-enter-active,
 .lightbox-leave-active {
-  transition: opacity 0.18s;
+  transition: opacity var(--dur-2) var(--ease);
 }
 .lightbox-enter-from,
 .lightbox-leave-to {

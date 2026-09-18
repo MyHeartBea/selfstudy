@@ -20,10 +20,19 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    // 字体分片不许内联成 base64：它们靠 unicode-range 按需命中，
+    // 内联等于把 24 个用不上的字形包塞进那一支 CSS 一起下载。
+    assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? 0 : 4096),
     rollupOptions: {
       output: {
-        manualChunks: {
-          katex: ['katex'],
+        // 之前只切了 katex，Vue 全家桶 + axios + 全部外壳组件混在一个
+        // 219KB 的 index chunk 里：改一行文案就让用户重下整包，且首屏
+        // 必须解析完所有外壳代码才拿得到运行时。
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('katex')) return 'katex'
+          if (id.includes('gsap') || id.includes('lenis')) return 'motion'
+          if (/[\\/](vue|vue-router|@vue|axios)[\\/]/.test(id)) return 'vendor'
         },
       },
     },

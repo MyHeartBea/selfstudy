@@ -102,9 +102,11 @@ const ICON_MAP = {
   background: var(--surface-2);
 }
 
-.toast-enter-active,
+.toast-enter-active {
+  transition: all var(--dur-3) var(--ease);
+}
 .toast-leave-active {
-  transition: all 0.28s cubic-bezier(0.22, 0.8, 0.36, 1);
+  transition: all var(--dur-2) var(--ease-exit);
 }
 .toast-enter-from {
   opacity: 0;

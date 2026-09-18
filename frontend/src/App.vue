@@ -88,6 +88,10 @@ onBeforeUnmount(() => {
 })
 
 router.afterEach(async () => {
+  // 先解绑上一批：afterEach 每次导航都会跑，之前只 push 不 dispose，
+  // 数组无限增长，且跨路由留存的元素（Dock）会被叠上第二份磁吸监听。
+  magnets.forEach((fn) => fn())
+  magnets = []
   document.querySelectorAll('[data-magnetic]').forEach((el) => {
     magnets.push(magnetic(el))
   })
@@ -96,6 +100,9 @@ router.afterEach(async () => {
 
 function onBootDone() {
   booting.value = false
+  // 广播给外壳层：AppLayout 的 Dock / 氛围入场要等这一刻才放行，
+  // 否则它们会在启动遮罩背后演完，用户只看到"导航已经摆在那儿了"。
+  window.dispatchEvent(new Event('km:boot-done'))
 }
 </script>
 

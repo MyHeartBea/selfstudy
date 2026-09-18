@@ -171,7 +171,7 @@ onMounted(loadBaseData)
               type="button"
               class="practice-mode"
               :class="{ active: mode === m.value }"
-              :style="{ '--enter-delay': i * 70 + 'ms' }"
+              :style="{ '--enter-delay': `calc(${i} * var(--stagger-2))` }"
               @click="mode = m.value"
             >
               <span class="mode-icon"><Icon :name="m.icon" :size="19" /></span>
@@ -332,7 +332,7 @@ onMounted(loadBaseData)
             <label class="f-label">难度</label>
             <UiSelect
               v-model="filters.difficulty"
-              :options="[1, 2, 3, 4, 5].map((n) => ({ label: '★'.repeat(n), value: n }))"
+              :options="[1, 2, 3, 4, 5].map((n) => ({ label: `${n} 星`, value: n }))"
               placeholder="全部难度"
               clearable
             />
@@ -460,7 +460,7 @@ onMounted(loadBaseData)
     border-color 0.18s var(--ease),
     background 0.18s var(--ease),
     box-shadow 0.25s var(--ease);
-  animation: mode-in 0.5s var(--ease) both;
+  animation: mode-in var(--dur-4) var(--ease-enter) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes mode-in {

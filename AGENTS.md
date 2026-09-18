@@ -191,18 +191,33 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - `UiButton`（variant=primary|ghost|outline|danger|success|subtle；primary=印章渐变+涟漪）、`UiModal`（玻璃+渐变描边，zIndex 可叠）、`UiTabs/UiSelect/UiDropdown/UiCheckbox/UiPagination/UiProgress/UiStars/UiTag/UiEmpty/ToastHost/ConfirmHost/CommandPalette/Icon(icons.js 内联 SVG)`；
 - v2 新增：`GlassCard`（渐变描边玻璃+流光，#badge 骑缝）、`MetricTile`（tone=accent|teal|gold|green|violet|blue，#spark 插槽）、`RingProgress`（渐变环+生长动画）、`AreaChart`（手写 SVG 面积图，颜色传 `var(--xxx)` 自动跟主题）、`BarRow`、`Heatmap`（data=[{date,count}]，级联入场）、`Skeleton`（variant=text|rect|circle）、`StageBadge`（骑缝徽章，top:-15px）。
 - ⚠️ scoped CSS 教训：`:global(A) B` 会被错编译成「把 B 的样式套到 A」（Phase 1 曾把 Dock 的 transform 套到 body 导致整页左移）；组合选择器要写 `:global(A B)`。
-- ⚠️ 路由过渡必须带显式 `:duration`（AppLayout 已配）：后台标签页 transitionend 被浏览器推迟，否则切路由卡死白屏。
+- ⚠️ **换页动画只有 JS 一条路径**：`AppLayout.playPageEnter()` 用 rAF 写内联 `transform/opacity`，**没有** Vue `<Transition>`（连续四版实测不可靠，已放弃）。因此**绝不能再给 `.page` 或页面根节点加 CSS `animation`**：CSS 动画在层叠里压过内联样式、且它锁的是整个 `transform` 属性，会把 JS 写的水平位移整段吃掉 —— 「换页没动画/方向反了」连修五次（`4772524`→`c570ed0`）的真因就是这个，`base.css` 里那条 `animation: page-in .36s` 已删。首个路由靠 `watch(route.path, {immediate:true})` 补入场。
+- ⚠️ 逐帧动画一律 `requestAnimationFrame` + `performance.now()`，不要 `setInterval(…, 16)`：定时器不吃浏览器帧时钟，后台标签页会被推迟到动画早该结束后才补帧。`whenContentReady`/翻页/氛围层都按此收敛并带 `cancelAnimationFrame`。
+- ⚠️ 氛围层（`AmbientLayer`）的 rAF 循环必须①`visibilitychange` 时停、②鼠标追平（<0.4px）后自行收尾，靠 `mousemove` 再唤醒；否则整页每帧空转写 4 个 `style`。
+
+**动效词汇表（`tokens.css`，新代码必须引用而不是手写数值）**：
+- 时长档位 `--dur-1 120ms`（微反馈：按下/变色/离场）· `--dur-2 200ms`（hover、遮罩淡入）· `--dur-3 320ms`（面板/内容入场）· `--dur-4 460ms`（换页、卡片入场）· `--dur-5 720ms`（大段揭示）；
+- 交错 `--stagger-1 45ms`（卡片墙）· `--stagger-2 70ms`（少量条目）· `--stagger-3 110ms`（分系列/分块揭示）；
+- 缓动按**语义角色**取用而非一条走天下：`--ease-enter`（= 原 `--ease`）· `--ease-exit`（离场，先慢后快）· `--ease-move`（位移与尺寸同步）· `--ease-spring`（= 原 `--spring`，强调回弹）。`--ease`/`--spring` 保留为别名，老代码不动。
+- **进场与离场必须分开配**：以前 `<Transition>` 的 enter/leave 共用一条 `transition`，关窗/收菜单也走完整个弹簧，鼠标已移开菜单还在飘。
+- 交错间隔写在 CSS 里而非 JS 拼数字：`--enter-delay: calc(<序号> * var(--stagger-1))`（`MistakeCard`/`Knowledge`/`Formula`/`Vocab` 已统一为 45ms，`Practice`/`Subject` 为 70ms）。
+
+**开场时间线（三条链已合流，不要再各走各的）**：内联 splash（`main.js` 收，最短 950ms）→ `BootCalibration` 四相放完时给 `body` 加 `.ready` 并 `emit('done')` → `App.onBootDone()` 广播 `km:boot-done` → `AppLayout` 才加 `body.app-ready`（Dock 落下 / 氛围显影的**唯一**开关）。`app-ready` 同时等字体就绪：字体 CSS 是异步 chunk，`main.js` 把它的 promise 挂在 `window.__kmFontsReady`，AppLayout 必须**串在它后面**再读 `document.fonts.ready`，否则 ready 会在字形还没开始下载时就兑现（表现为揭示瞬间是兜底字体）。看门狗一律 4500ms，刻意放在 BootCalibration 自身 4200ms 之后，不抢它的收尾。
+- **字体不在关键 CSS 里**：`main.js` 用 `import('./styles/fonts.js')` 动态引入 4 个字重（404 条 `@font-face` = 486KB）。它们曾被 Vite 合进 render-blocking 的 `index-*.css`，首屏要先解析完才画得出启动屏。实测：阻塞 CSS 528.6KB→54.7KB（gzip 12.1KB），`renderBlockingStatus` 由 `blocking` 变 `non-blocking`。`vite.config.js` 另设 `assetsInlineLimit` 对 woff/woff2 返回 0（禁止内联成 base64，那等于把 24 个用不上的字形包一起下载）。
+- **分包**：`manualChunks` 按 `katex` / `motion`(gsap+lenis) / `vendor`(vue·router·axios+vue 生态) 切分，入口 chunk 从 219.8KB 降到 62.4KB，并自动产出 `<link rel=modulepreload>`；KaTeX 由 `MathText` 的路由依赖图按需并行加载。
+- **`prefers-reduced-motion`**：`base.css` 除压时长外还必须带 `animation-iteration-count: 1 !important`，否则光斑/骨架屏/加载圈会以 0.01ms 的节奏**无限空转**；`useCountUp` 在 `immediate` 路径上也要先看偏好再决定开滚。
 
 **门面页**：`StatsView`=Bento 网格（英雄卡+进度环+速览徽章+AreaChart 趋势+复习负荷预报+AI 错因周报+模考成绩趋势+Heatmap+薄弱点直通+科目分析墨条）；`ReviewView`=沉浸舞台（流光进度线+StageBadge+巨型汉字数字背景+玻璃题卡+落章完成页+模考成绩单分支）；生词闪卡=真 3D 翻面（preserve-3d 双面卡）；公式背诵=翻卡 reveal 动效。四题型作答/全键盘流/判分反馈链（脉冲/抖动）逻辑层未动。
 
 **硬规则补充（v2 后续批次踩过的坑）**：
 - **backdrop-filter 创建层叠上下文**：玻璃筛选栏（`.list-toolbar`/`.filter-bar`）必须带 `position:relative; z-index:5`，否则内部 UiSelect 下拉会被后渲染的卡片盖住（三处已修；新增玻璃容器 Hosting 下拉时同样要加）；
 - **Vue scoped `:global(A) B` 会错编译**（把 B 的样式套到 A 上），组合选择器一律写 `:global(A B)`；
-- **后台标签页 transitionend/rAF 会被推迟**：路由过渡带显式 `:duration`；换肤遮罩有 1s 看门狗强制收尾；
+- **后台标签页 transitionend/rAF 会被推迟**：换页由 rAF 自管并有显式收尾（见 6.5「换页动画只有 JS 一条路径」）；换肤遮罩有 1s 看门狗强制收尾；
+- **监听器要成对，且解绑的必须是注册的那个**：`ShaderBackdrop` 曾把内层 `resize` 注册进去、却在卸载时移除另一个从未注册的 `resizeHandler`，`pointermove` 则根本没移除——每次挂载净漏两个。`AppLayout` 的 `km:show-shortcuts` 曾是匿名函数、清理块里无从移除（已改具名）。`App.vue` 的 `router.afterEach` 里绑磁吸前**必须先 dispose 上一批**，否则数组无限增长且跨路由留存的元素（Dock）会被叠第二份监听。`onUnmounted` 在同一个组件里声明两次是合法的，但正是这些泄漏躲过 review 的原因；
 - **搜索高亮**用 CSS Custom Highlight API（`::highlight(km-search-hit)`，MistakeListView 注册 Range），不改 RichText 的 DOM——KaTeX 安全；
 - **改含中文文件禁止 PowerShell Get-Content|Set-Content**（GBK/UTF-8 双重编码会吃掉标签，Phase 6 翻过车），用 Edit 工具或 `[System.IO.File]::ReadAllText/WriteAllText` 显式 UTF-8 无 BOM。
 
-**字体**：`@fontsource/noto-serif-sc` 本地子集（按 unicode-range 分片按需加载，约 411 片 woff2），`main.js` 引 500/600/700/900 四字重；**已移除 Google Fonts CDN**。更新字体 = `npm update @fontsource/noto-serif-sc`。`/design` 画廊页（不入导航）是全组件双主题打磨场，改基件先在画廊验证。
+**字体**：`@fontsource/noto-serif-sc` 本地子集（按 unicode-range 分片按需加载，约 411 片 woff2），500/600/700/900 四字重由 `src/styles/fonts.js` 集中引入、`main.js` **动态** import（脱离 render-blocking，见 6.5）；**已移除 Google Fonts CDN**。更新字体 = `npm update @fontsource/noto-serif-sc`。`/design` 画廊页（不入导航）是全组件双主题打磨场，改基件先在画廊验证。
 
 **PowerShell 教训**：改含中文的文件**禁止** `Get-Content | Set-Content`（GBK/UTF-8 双重编码会把 `</title>` 等吃掉导致整页空白——Phase 6 实际翻过车）；一律用 Edit 工具或 `[System.IO.File]::ReadAllText/WriteAllText` 显式 UTF-8 无 BOM。
 

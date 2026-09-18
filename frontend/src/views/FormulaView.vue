@@ -232,7 +232,10 @@ onMounted(loadFormulas)
         role="button"
         tabindex="0"
         :aria-label="`查看公式 ${item.title}`"
-        :style="{ '--enter-delay': Math.min(i, 11) * 50 + 'ms', '--fcol': catColor(item.category) }"
+        :style="{
+          '--enter-delay': `calc(${Math.min(i, 11)} * var(--stagger-1))`,
+          '--fcol': catColor(item.category),
+        }"
         @click="openDetail(item)"
         @keydown.enter.prevent="openDetail(item)"
         @keydown.space.prevent="openDetail(item)"
@@ -373,7 +376,7 @@ onMounted(loadFormulas)
   transition:
     border-color 0.2s var(--ease),
     box-shadow 0.3s var(--ease);
-  animation: fcard-in 0.5s var(--ease) both;
+  animation: fcard-in var(--dur-4) var(--ease-enter) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes fcard-in {

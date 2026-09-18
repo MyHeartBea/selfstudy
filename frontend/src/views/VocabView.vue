@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 生词本（英语二核心）：词表管理 + 闪卡快刷 + 批量导入。
- * 复习节奏：认识→阶梯拉远（1/2/4/7/15/30/60 天），模糊→明天，不认识→留在队列。
+ * 复习节奏：认识则阶梯拉远（1/2/4/7/15/30/60 天），模糊说明天，不认识留在队列。
  */
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
@@ -279,7 +279,7 @@ async function exportAnki() {
     link.download = `生词本_anki_${new Date().toISOString().slice(0, 10)}.tsv`
     link.click()
     URL.revokeObjectURL(url)
-    toast.success('已导出 Anki TSV，在 Anki 中「文件 → 导入」即可')
+    toast.success('已导出 Anki TSV，在 Anki 中「文件 > 导入」即可')
   } catch (err) {
     toast.error('Anki 导出失败')
   } finally {
@@ -294,7 +294,7 @@ async function exportAnki() {
       <div class="view-hero-copy">
         <div class="view-kicker">Vocabulary</div>
         <h2>生词本</h2>
-        <p class="view-desc">英语二的每日必修：滚动快刷生词，认识→拉远，不认识→今天再见。</p>
+        <p class="view-desc">英语二的每日必修：滚动快刷生词，认识就拉远，不认识今天再见。</p>
       </div>
       <div class="header-actions">
         <UiButton variant="primary" @click="startFlashcards">
@@ -358,7 +358,7 @@ async function exportAnki() {
               }"
             ></div>
             <span class="dist-level">{{
-              d.mastery === 0 ? '新' : d.mastery >= 5 ? '✓' : d.mastery
+              d.mastery === 0 ? '新' : d.mastery >= 5 ? '熟' : d.mastery
             }}</span>
           </div>
         </div>
@@ -504,7 +504,7 @@ async function exportAnki() {
           v-for="(row, i) in items"
           :key="row.id"
           class="vocab-card km-card card"
-          :style="{ '--enter-delay': Math.min(i, 11) * 45 + 'ms' }"
+          :style="{ '--enter-delay': `calc(${Math.min(i, 11)} * var(--stagger-1))` }"
         >
           <span class="v-mark serif" aria-hidden="true">{{
             (row.word || 'A').slice(0, 1).toUpperCase()
@@ -961,7 +961,7 @@ async function exportAnki() {
     border-color 0.2s var(--ease),
     box-shadow 0.3s var(--ease),
     transform 0.25s var(--spring);
-  animation: vcard-in 0.5s var(--ease) both;
+  animation: vcard-in var(--dur-4) var(--ease-enter) both;
   animation-delay: var(--enter-delay, 0ms);
 }
 @keyframes vcard-in {
