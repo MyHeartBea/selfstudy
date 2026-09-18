@@ -1,6 +1,13 @@
+<script>
+// 标题 id 计数器必须放普通 script：`<script setup>` 里的声明每个实例都会重跑一遍。
+let seq = 0
+const nextTitleId = () => `ui-modal-title-${++seq}`
+</script>
+
 <script setup>
-/** 模态框：teleport 到 body，Esc 关闭、滚动锁定、宽档 size = sm | md | lg | xl */
-import { onUnmounted, watch } from 'vue'
+/** 模态框：teleport 到 body，Esc 关闭、焦点圈在面板内、滚动锁定、宽档 size = sm | md | lg | xl */
+import { nextTick, onUnmounted, ref, watch } from 'vue'
+import { lockBodyScroll, unlockBodyScroll } from './scrollLock'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -15,33 +22,89 @@ const emit = defineEmits(['update:modelValue'])
 
 const WIDTH = { sm: '560px', md: '760px', lg: '1000px', xl: '1220px' }
 
+const titleId = nextTitleId()
+
+const panelEl = ref(null)
+
 function close() {
   emit('update:modelValue', false)
 }
 
+// 弹窗可以叠（确认框盖在编辑弹窗上），锁要计数：见 ui/scrollLock.js。
+let locked = false
+function setScrollLock(on) {
+  if (locked === on) return
+  locked = on
+  if (on) lockBodyScroll()
+  else unlockBodyScroll()
+}
+
+const FOCUSABLE =
+  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+
+let returnFocus = null
+
+// Teleport 出去的内层弹窗与外层是 body 下的兄弟，不在其 panel 里，
+// 所以用 target 是否落在本面板内来判断"Tab 该不该由我处理"。
 function onKeydown(event) {
-  if (event.key === 'Escape' && props.closeOnEsc && props.modelValue) {
-    event.stopPropagation()
-    close()
+  if (event.key === 'Escape') {
+    if (props.closeOnEsc && props.modelValue) {
+      event.stopPropagation()
+      close()
+    }
+    return
+  }
+  if (event.key !== 'Tab' || !panelEl.value) return
+  const panel = panelEl.value
+  if (!panel.contains(event.target)) return
+  const items = Array.from(panel.querySelectorAll(FOCUSABLE)).filter(
+    (el) => el.getClientRects().length,
+  )
+  if (!items.length) {
+    event.preventDefault()
+    panel.focus()
+    return
+  }
+  const first = items[0]
+  const last = items[items.length - 1]
+  const active = document.activeElement
+  if (event.shiftKey && (active === first || active === panel)) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
   }
 }
 
 watch(
   () => props.modelValue,
-  (open) => {
+  async (open) => {
     if (open) {
+      returnFocus = document.activeElement
       document.addEventListener('keydown', onKeydown, true)
-      document.body.style.overflow = 'hidden'
+      setScrollLock(true)
+      // 焦点落到面板本身（tabindex=-1）：读屏会念出 dialog 与标题，
+      // Tab 也从面板顶部开始，而不是留在被遮住的上一个页面里。
+      // 内容自己抢了焦点（ConfirmHost 的确认输入框）就不抢回来。
+      await nextTick()
+      const panel = panelEl.value
+      if (panel && !panel.contains(document.activeElement)) panel.focus({ preventScroll: true })
     } else {
       document.removeEventListener('keydown', onKeydown, true)
-      document.body.style.overflow = ''
+      setScrollLock(false)
+      if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true })
+      returnFocus = null
     }
   },
+  // 必须 immediate：不少调用方是"以 modelValue=true 直接挂载"（KnowledgeEditModal 就是这样），
+  // 只监听 false->true 的话这类弹窗既没有焦点圈也没有 Esc。见 AGENTS.md 弹窗状态一条。
+  { immediate: true },
 )
 
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown, true)
-  document.body.style.overflow = ''
+  setScrollLock(false)
 })
 </script>
 
@@ -56,13 +119,16 @@ onUnmounted(() => {
         @mousedown.self="close()"
       >
         <div
+          ref="panelEl"
           class="modal-panel"
+          tabindex="-1"
           :style="{ maxWidth: WIDTH[size] || WIDTH.md }"
           role="dialog"
           aria-modal="true"
+          :aria-labelledby="titleId"
         >
           <header class="modal-head">
-            <h3 class="modal-title">{{ title }}</h3>
+            <h3 :id="titleId" class="modal-title">{{ title }}</h3>
             <button class="modal-close" aria-label="关闭" @click="close">
               <svg
                 viewBox="0 0 24 24"

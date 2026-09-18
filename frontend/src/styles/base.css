@@ -273,8 +273,12 @@ textarea.field-input {
   opacity: 0;
   transform: translateY(18px);
   transition:
-    opacity 0.55s cubic-bezier(0.22, 0.8, 0.36, 1),
-    transform 0.55s cubic-bezier(0.22, 0.8, 0.36, 1);
+    opacity var(--dur-4) var(--ease-enter),
+    transform var(--dur-4) var(--ease-enter);
+}
+/* 只给"还没显现"的元素开层：will-change 写在 .reveal-pending 上会永久留在
+   合成层里（unobserve 之后类也不摘），一屏十几个卡片就是十几个空转的 GPU 图层。 */
+.reveal-pending:not(.reveal-in) {
   will-change: opacity, transform;
 }
 .reveal-pending.reveal-in {
@@ -285,10 +289,13 @@ textarea.field-input {
 /* ---------- 错题卡 3D 倾斜 + 光泽（MistakeCard 配合） ---------- */
 .tilt {
   transition:
-    transform 0.28s cubic-bezier(0.22, 0.8, 0.36, 1),
-    box-shadow 0.28s,
-    border-color 0.2s;
+    transform var(--dur-3) var(--ease-move),
+    box-shadow var(--dur-3),
+    border-color var(--dur-2);
   transform-style: preserve-3d;
+}
+/* 悬停才开图层：列表里同时有 20 张卡，常驻 will-change 等于常驻 20 个合成层 */
+.tilt:hover {
   will-change: transform;
 }
 .tilt .card-sheen {

@@ -32,8 +32,8 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 
 # 测试
 cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（148 个）
-cd frontend && npm test                                  # Vitest 49 个；含 DOM 级交互回归（happy-dom）
-cd frontend && npm run test:e2e                          # Playwright 23 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）
+cd frontend && npm test                                  # Vitest 53 个；含 DOM 级交互回归（happy-dom）
+cd frontend && npm run test:e2e                          # Playwright 31 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
 cd backend && ruff check app tests && ruff format --check app tests
@@ -207,6 +207,8 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - **字体不在关键 CSS 里**：`main.js` 用 `import('./styles/fonts.js')` 动态引入 4 个字重（404 条 `@font-face` = 486KB）。它们曾被 Vite 合进 render-blocking 的 `index-*.css`，首屏要先解析完才画得出启动屏。实测：阻塞 CSS 528.6KB→54.7KB（gzip 12.1KB），`renderBlockingStatus` 由 `blocking` 变 `non-blocking`。`vite.config.js` 另设 `assetsInlineLimit` 对 woff/woff2 返回 0（禁止内联成 base64，那等于把 24 个用不上的字形包一起下载）。
 - **分包**：`manualChunks` 按 `katex` / `motion`(gsap+lenis) / `vendor`(vue·router·axios+vue 生态) 切分，入口 chunk 从 219.8KB 降到 62.4KB，并自动产出 `<link rel=modulepreload>`；KaTeX 由 `MathText` 的路由依赖图按需并行加载。
 - **`prefers-reduced-motion`**：`base.css` 除压时长外还必须带 `animation-iteration-count: 1 !important`，否则光斑/骨架屏/加载圈会以 0.01ms 的节奏**无限空转**；`useCountUp` 在 `immediate` 路径上也要先看偏好再决定开滚。
+- **`will-change` 不许常驻在列表项上**：一屏 20 张卡 = 20 个空转的 GPU 合成层。只在真正需要的那一刻开：`.tilt:hover`、`.reveal-pending:not(.reveal-in)`（`v-reveal` 显现完就关层，因为 `reveal-pending` 类不摘）。同理 `.tilt`/`.reveal-*` 的时长与缓动也已收进令牌，不再是手写的 `cubic-bezier(0.22,0.8,0.36,1)`。
+- **`UiModal` 负责焦点与滚动锁**：打开时把焦点放进面板（`tabindex="-1"` + `aria-labelledby`，内容自己抢焦点如 `ConfirmHost` 的输入框则不抢回），Tab/Shift+Tab 圈在面板内，关闭时把焦点还给触发元素。滚动锁是**模块级计数**（普通 `<script>` 块里，`<script setup>` 里的 `let` 是每实例的）—— 弹窗可叠加，各实例各写 `body.overflow=''` 会让关内层解开外层。新增弹窗直接用 `UiModal`，不要在页面里自己锁滚动。
 
 **门面页**：`StatsView`=Bento 网格（英雄卡+进度环+速览徽章+AreaChart 趋势+复习负荷预报+AI 错因周报+模考成绩趋势+Heatmap+薄弱点直通+科目分析墨条）；`ReviewView`=沉浸舞台（流光进度线+StageBadge+巨型汉字数字背景+玻璃题卡+落章完成页+模考成绩单分支）；生词闪卡=真 3D 翻面（preserve-3d 双面卡）；公式背诵=翻卡 reveal 动效。四题型作答/全键盘流/判分反馈链（脉冲/抖动）逻辑层未动。
 
@@ -277,3 +279,15 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ⑨**前端 E2E（Playwright）**：`frontend/e2e/` 31 个用例（desktop + Pixel 7 两档 project）—— 卡片整块可点（含键盘 Enter/Space 等价入口、`@click.stop` 不误开详情，桌面与窄屏都跑）、智能录入多图暂存（3 张只暂存 / 只发一次请求 / 请求体 3 张图齐 / **解析结果真的渲染**）、10 条主路由渲染烟测。CI 新增独立 `frontend-e2e` job；`frontend/src/views/CaptureView.vue` 主图 input 加 `data-testid`。
   ⑩**E2E 自查（用 dsh-code-review 审查这批新代码后修的）**：打桩夹具字段名/形状对齐真实契约（`/api/ai/english` 的 `passage_text` 等、`/api/knowledge/tags` 的 `[{tag,mistake_count}]`）；否定断言改正向；断言同步点从"请求已发"改为"结果已渲染"（并用变异测试证明断言真的会失败）；新增 `expectAllApiStubbed`（漏打桩即失败）与 `guardPageErrors`（三个 spec 都装页面错误守卫）；`vite.config.js` 纳入 lint 目标（此前 `process.env` 无人检查）；E2E 默认端口改 5274 避免误复用旧 dev server；mobile project 补跑卡片点击。
   测试：**后端 148、前端 49 + E2E 31**，覆盖率约 62%。
+
+- **2026-09-18 前端动效与首屏批次（`77af90d` + `d025aa9` + 本批）**：以"网页进入动画的工程水平"为基准做的全前端对齐，规矩都写进 6.5 节。
+  ①**动效词汇表**落地（`--dur-1..5` / `--stagger-1..3` / 语义缓动），弹层基件（UiModal/UiDropdown/UiSelect/CommandPalette/ToastHost/QuestionImages）与四张卡片墙、AreaChart 全部改为引用令牌，`base.css` 里 `.tilt`/`.reveal-*` 的手写 cubic-bezier 也已收掉；
+  ②**换页动画只留 JS 一条路径**：删掉 `base.css` 里那条压住内联样式的 `.page { animation: page-in }`（五次"换页没动画/方向反"commit 的真因）；
+  ③**开场三条链合流**（splash / BootCalibration / AppLayout 靠 `km:boot-done` + `window.__kmFontsReady` 串成一条），`app-ready` 必须等字体样式表注入完再读 `document.fonts.ready`；
+  ④**首屏减负**：字体 CSS 拆成异步 chunk（阻塞 CSS 528.6KB 降到 54.7KB、`renderBlockingStatus` 变 non-blocking）、`manualChunks` 切 katex/motion/vendor（入口 219.8KB 降到 62.5KB）、woff2 禁内联；
+  ⑤**生命周期泄漏**：ShaderBackdrop 解绑的从来不是注册的那个函数、AppLayout 匿名快捷键监听、`router.afterEach` 磁吸只增不减、AmbientLayer 每帧空转、confetti/ResizeObserver 之类的成对问题；
+  ⑥**`prefers-reduced-motion` 补 `animation-iteration-count: 1`**（只压时长会让无限循环动画以 0.01ms 空转，比有动画更费 GPU）；
+  ⑦**`.gitattributes`** 治掉 `core.autocrlf=true` 造成的 10 个伪差异（需 `git add --renormalize .` 才生效）；
+  ⑧**回归踩坑（务必读 6.5 的两条 ⚠️）**：把 `BootCalibration.runAnim` 从 setInterval 改成纯 rAF 之后，后台标签页里合成器不排帧，撕裂阶段永不结束，遮罩以 `pointer-events:auto` 压住整页（`/design` 实测）—— 装饰性动效才用纯 rAF，驱动流程的时间线一律「wall-clock + setInterval 兜底」；复现开关就是 `document.hidden === true`；
+  ⑨**叠层焦点与滚动锁**：`UiModal` 现在负责焦点圈（Tab 不跑出面板）+ 关闭后归还焦点 + `aria-labelledby`，监听改为 `{immediate:true}`（以 `modelValue=true` 直接挂载的弹窗此前既没焦点也没 Esc）；滚动锁收敛到 `ui/scrollLock.js` 的**全站计数**（原来 UiModal/CommandPalette/QuestionImages 各写各的，Ctrl+K 在弹窗之上唤起再关掉会把弹窗的锁一起解掉）。
+  测试：**后端 148、前端 53 + E2E 31**（`--workers=2` 下全绿；单 worker 会因并发争抢假红）。

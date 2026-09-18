@@ -2,6 +2,7 @@
 /** 题干配图缩略图 + 点击放大灯箱 */
 import { computed, onUnmounted, ref } from 'vue'
 import Icon from '../ui/Icon.vue'
+import { lockBodyScroll, unlockBodyScroll } from '../ui/scrollLock'
 
 const props = defineProps({
   images: { type: Array, default: () => [] },
@@ -14,7 +15,6 @@ const props = defineProps({
 
 const viewerVisible = ref(false)
 const viewerIndex = ref(0)
-const savedOverflow = ref('')
 
 const showList = computed(() => {
   const list = props.images || []
@@ -25,15 +25,17 @@ const showList = computed(() => {
 const previewList = computed(() => (props.images || []).map((item) => imageSrc(item)))
 
 function openPreview(index) {
+  // 计数锁怕"重复加锁、只解一次"：灯箱已经开着再点一张只换图，不再加锁。
+  const wasOpen = viewerVisible.value
   viewerIndex.value = index
   viewerVisible.value = true
-  savedOverflow.value = document.body.style.overflow
-  document.body.style.overflow = 'hidden'
+  if (!wasOpen) lockBodyScroll()
 }
 
 function closePreview() {
+  if (!viewerVisible.value) return
   viewerVisible.value = false
-  document.body.style.overflow = savedOverflow.value
+  unlockBodyScroll()
 }
 
 function step(delta) {
@@ -54,9 +56,7 @@ if (typeof window !== 'undefined') {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
-  if (viewerVisible.value) {
-    document.body.style.overflow = savedOverflow.value
-  }
+  if (viewerVisible.value) closePreview()
 })
 
 function imageSrc(item) {

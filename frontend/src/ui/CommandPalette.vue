@@ -5,6 +5,7 @@ import { useRouter, useRoute } from 'vue-router'
 
 import Icon from './Icon.vue'
 import UiTag from './UiTag.vue'
+import { lockBodyScroll, unlockBodyScroll } from './scrollLock'
 import {
   paletteState,
   closePalette,
@@ -28,11 +29,13 @@ watch(
   () => paletteState.open,
   async (open) => {
     if (open) {
-      document.body.style.overflow = 'hidden'
+      // Ctrl+K 是全局的，很可能在弹窗之上唤起，再关掉时把弹窗的滚动锁一起清了
+      // —— 所以走全站计数锁，不直接写 body.style.overflow。
+      lockBodyScroll()
       await nextTick()
       inputEl.value?.focus()
     } else {
-      document.body.style.overflow = ''
+      unlockBodyScroll()
     }
   },
 )
