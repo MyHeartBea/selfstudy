@@ -192,7 +192,8 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - v2 新增：`GlassCard`（渐变描边玻璃+流光，#badge 骑缝）、`MetricTile`（tone=accent|teal|gold|green|violet|blue，#spark 插槽）、`RingProgress`（渐变环+生长动画）、`AreaChart`（手写 SVG 面积图，颜色传 `var(--xxx)` 自动跟主题）、`BarRow`、`Heatmap`（data=[{date,count}]，级联入场）、`Skeleton`（variant=text|rect|circle）、`StageBadge`（骑缝徽章，top:-15px）。
 - ⚠️ scoped CSS 教训：`:global(A) B` 会被错编译成「把 B 的样式套到 A」（Phase 1 曾把 Dock 的 transform 套到 body 导致整页左移）；组合选择器要写 `:global(A B)`。
 - ⚠️ **换页动画只有 JS 一条路径**：`AppLayout.playPageEnter()` 用 rAF 写内联 `transform/opacity`，**没有** Vue `<Transition>`（连续四版实测不可靠，已放弃）。因此**绝不能再给 `.page` 或页面根节点加 CSS `animation`**：CSS 动画在层叠里压过内联样式、且它锁的是整个 `transform` 属性，会把 JS 写的水平位移整段吃掉 —— 「换页没动画/方向反了」连修五次（`4772524`→`c570ed0`）的真因就是这个，`base.css` 里那条 `animation: page-in .36s` 已删。首个路由靠 `watch(route.path, {immediate:true})` 补入场。
-- ⚠️ 逐帧动画一律 `requestAnimationFrame` + `performance.now()`，不要 `setInterval(…, 16)`：定时器不吃浏览器帧时钟，后台标签页会被推迟到动画早该结束后才补帧。`whenContentReady`/翻页/氛围层都按此收敛并带 `cancelAnimationFrame`。
+- ⚠️ **UI 动效**逐帧用 `requestAnimationFrame` + `performance.now()`（定时器不吃帧时钟，后台标签页会被推迟到动画早该结束后才补帧），`whenContentReady`/翻页/氛围层都按此收敛并带 `cancelAnimationFrame`。
+- ⚠️ **但"时间线状态机"不许只靠 rAF**（`BootCalibration.runAnim` 翻过车）：无头环境与后台标签页里合成器不排帧，纯 rAF 的 await 永不返回 → 开机遮罩卡在 `spin` 阶段、`pointer-events:auto` 压住整页，且 `body.ready` 不会加上（表现为页面级联也不触发）。凡是**驱动流程推进**（不是纯装饰）的动画都要「wall-clock + setInterval 兜底」双驱动；`requestAnimationFrame(fn)` 的返回 id 也要赋回变量，否则下一轮的 `cancelAnimationFrame(0)` 是空操作，旧循环与新循环会同时写同一个 `transform`。
 - ⚠️ 氛围层（`AmbientLayer`）的 rAF 循环必须①`visibilitychange` 时停、②鼠标追平（<0.4px）后自行收尾，靠 `mousemove` 再唤醒；否则整页每帧空转写 4 个 `style`。
 
 **动效词汇表（`tokens.css`，新代码必须引用而不是手写数值）**：

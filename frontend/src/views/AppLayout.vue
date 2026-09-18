@@ -282,7 +282,9 @@ function playPageEnter() {
     el.style.opacity = ''
     el.style.willChange = ''
   }
-  requestAnimationFrame(step)
+  // 必须记下这个 id：不记的话快速连切路由时上面那句 cancel 取消掉的是 0（空操作），
+  // 上一段动画的循环还在跑，和新方向的循环一起写同一个 transform。
+  pageAnimRaf = requestAnimationFrame(step)
 }
 
 /**

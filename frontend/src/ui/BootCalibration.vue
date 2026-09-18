@@ -12,8 +12,10 @@
   再用 clip-path 各裁一半（上面裁下 50%、下面裁上 50%）。
   这样两半各带着"属于自己那一半"的画面一起滑走 —— 看起来就是屏幕被撕开。
 
-  时间驱动仍用 Date.now + 兜底定时器，**不靠 rAF 驱动**：
+  时间驱动一律「按 wall-clock 算进度 + setInterval 兜底」，**不许只靠 rAF**：
   v3 上实测过，无头环境 rAF 3 秒只触发 7 次，逐帧驱动的进度会卡死。
+  改回纯 rAF 会让撕裂阶段永远不结束，遮罩卡在 spin 上压住整页（真实浏览器
+  后台标签页同样会触发，因为帧被浏览器推迟）。
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
@@ -33,7 +35,8 @@ const stepIndex = ref(0)
 const phase = ref('boot') // boot | spin | split | gone
 
 const rootEl = ref(null)
-const animRafs = new Set()
+// 每个 runAnim 注册一个自己的收尾函数；结束时自摘，卸载时全摘。
+const animStops = new Set()
 
 let raf = 0
 let tickTimer = 0
@@ -119,22 +122,39 @@ function burstParticles() {
 
 function runAnim(duration, onTick) {
   return new Promise((resolve) => {
-    // rAF 而不是 setInterval(16)：这里逐帧写 40+ 个粒子的 transform，
-    // 定时器节奏和浏览器帧时钟对不上就会出现"跳一下再不动"的顿挫。
+    // 双驱动：rAF 负责逐帧平滑，setInterval 负责"rAF 根本不产帧"的场合。
+    // 只留 rAF 会卡死整条时间线：后台标签页/无头里合成器不排帧（本文件开头
+    // 记录的实测是 3 秒只触发 7 次，进度段靠 setInterval 兜底才走完），于是
+    // startSpin 的第一个 await 永远不返回，遮罩停在 spin 阶段压住整页。
     const t0 = performance.now()
-    const step = (now) => {
-      const p = Math.min(1, (now - t0) / duration)
-      onTick(p)
-      if (p >= 1) {
-        animRafs.delete(id)
-        resolve()
-        return
-      }
-      id = requestAnimationFrame(step)
-      animRafs.add(id)
+    let rafId = 0
+    let timer = 0
+    let done = false
+    const stop = () => {
+      if (done) return
+      done = true
+      cancelAnimationFrame(rafId)
+      clearInterval(timer)
+      animStops.delete(stop)
+      resolve()
     }
-    let id = requestAnimationFrame(step)
-    animRafs.add(id)
+    const step = (now) => {
+      if (done) return
+      const p = Math.min(1, (now - t0) / duration)
+      try {
+        onTick(p)
+      } catch {
+        // 单帧写样式失败不该让开场停摆；下一次 step 照常推进到收尾
+      }
+      if (p >= 1) stop()
+    }
+    const loop = (now) => {
+      step(now)
+      if (!done) rafId = requestAnimationFrame(loop)
+    }
+    rafId = requestAnimationFrame(loop)
+    timer = setInterval(() => step(performance.now()), 90)
+    animStops.add(stop)
   })
 }
 
@@ -230,8 +250,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   clearInterval(tickTimer)
-  animRafs.forEach((id) => cancelAnimationFrame(id))
-  animRafs.clear()
+  animStops.forEach((stop) => stop())
+  animStops.clear()
   clearTimeout(safety)
   window.removeEventListener('keydown', skip)
   window.removeEventListener('pointerdown', skip)
