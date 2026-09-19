@@ -79,73 +79,103 @@ BASIC_WORDS = set(
 
 # 明确"句子特征"的助动词/代词（用于判定多词条目是否为句子）
 SENTENCE_MARKERS = {
-    'i', 'you', 'he', 'she', 'it', 'we', 'they',
-    'who', 'which', 'that', 'what', 'when', 'where', 'why', 'how',
-    'is', 'are', 'was', 'were', 'be', 'been',
-    'will', 'would', 'can', 'could', 'should', 'must', 'may', 'might',
-    'do', 'does', 'did', 'have', 'has', 'had',
+    "i",
+    "you",
+    "he",
+    "she",
+    "it",
+    "we",
+    "they",
+    "who",
+    "which",
+    "that",
+    "what",
+    "when",
+    "where",
+    "why",
+    "how",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "will",
+    "would",
+    "can",
+    "could",
+    "should",
+    "must",
+    "may",
+    "might",
+    "do",
+    "does",
+    "did",
+    "have",
+    "has",
+    "had",
 }
 
 MAX_PHRASE_WORDS = 4
 
 
 def normalize(text: str) -> str:
-    return re.sub(r'\s+', ' ', (text or '').strip())
+    return re.sub(r"\s+", " ", (text or "").strip())
 
 
 def is_simple_word(text: str) -> tuple[bool, str]:
     """判断是否为"太简单、不值得收录"的单词。返回 (是否简单, 原因)"""
     w = normalize(text).lower()
     if not w:
-        return True, '空'
-    if ' ' in w:
-        return False, ''  # 多词交给 is_sentence_like
+        return True, "空"
+    if " " in w:
+        return False, ""  # 多词交给 is_sentence_like
     if w in BASIC_WORDS:
-        return True, '基础词停用表'
+        return True, "基础词停用表"
     # 注意：这里**刻意不做"长度 <= 4 就删"**的判定。
     # 试运行时它误杀了 hurt / tend / lack / rate 这些有价值的考研词；
     # 而 easy / path / system 这类已被上面的停用表覆盖，长度规则并不必要。
     # 过滤规则的原则：**宁可漏判，也不误杀** —— 误杀会丢掉学生真正需要的词。
-    return False, ''
+    return False, ""
 
 
 def is_sentence_like(text: str) -> tuple[bool, str]:
     """判断多词条目是否其实是**句子**（而不是搭配）。返回 (是否句子, 原因)"""
     t = normalize(text)
-    if ' ' not in t:
-        return False, ''
+    if " " not in t:
+        return False, ""
     words = t.split()
     # 1) 词数过多
     if len(words) > MAX_PHRASE_WORDS:
-        return True, f'词数 {len(words)} > {MAX_PHRASE_WORDS}'
+        return True, f"词数 {len(words)} > {MAX_PHRASE_WORDS}"
     # 注意：这里**刻意不判省略号**。
     # 试运行时 "hail ... as ..." / "divide ... into ..." / "no less...than" 都被误杀 ——
     # 这些省略号表示**空槽位**，是结构搭配（把…称为…、把…分成…），
     # 恰恰是学生最该记的。用户要清的是**整句**，不是这些模式。
     # 3) 首字母大写且 >= 4 词（句子特征）
     if len(words) >= 4 and t[0].isupper() and t[0].isalpha():
-        return True, '首字母大写且 >=4 词（句子特征）'
+        return True, "首字母大写且 >=4 词（句子特征）"
     # 4) 含句末标点
     # (?<!\.) 排除省略号：否则 "hail ... as ..." 末尾那个点会被当成句末标点
     # （试运行时确实误杀过这一条，它是结构搭配）
-    if re.search(r'(?<!\.)[.!?]$', t):
-        return True, '含句末标点'
-    return False, ''
+    if re.search(r"(?<!\.)[.!?]$", t):
+        return True, "含句末标点"
+    return False, ""
 
 
 def is_all_basic(text: str) -> bool:
     """短语里**所有词都是基础词** -> 太简单（如 "go home"、"a lot of"）"""
-    words = [re.sub(r'[^a-z]', '', w.lower()) for w in normalize(text).split()]
+    words = [re.sub(r"[^a-z]", "", w.lower()) for w in normalize(text).split()]
     words = [w for w in words if w]
     return bool(words) and all(w in BASIC_WORDS for w in words)
 
 
-def should_reject(word: str, kind: str = '') -> tuple[bool, str]:
+def should_reject(word: str, kind: str = "") -> tuple[bool, str]:
     """统一入口：是否应拒绝收录。返回 (是否拒绝, 原因)"""
     t = normalize(word)
     if not t:
-        return True, '空'
-    if ' ' in t or kind == 'phrase':
+        return True, "空"
+    if " " in t or kind == "phrase":
         # 这里**刻意不判"整条都是基础词"**：试运行时它误杀了
         # hold up / call out / come down to / all but / in short 这些真正的搭配与习语，
         # 而这些恰恰是最该收录的。宁可漏判，也不误杀。
@@ -153,22 +183,28 @@ def should_reject(word: str, kind: str = '') -> tuple[bool, str]:
     return is_simple_word(t)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # 自测：确认规则在示例上的判断符合预期
     cases = [
-        ('system', 'word'), ('easy', 'word'), ('path', 'word'),
-        ('accomplish', 'word'), ('legally', 'word'), ('existing', 'word'),
-        ('go home', 'phrase'),
-        ('who would make some money and then go home', 'phrase'),
-        ('have a job in one place and a family in another', 'phrase'),
-        ('change the way we think about categories', 'phrase'),
-        ('in one place and ... in another', 'phrase'),
-        ('account for', 'phrase'), ('a series of', 'phrase'),
-        ('be much more rigid about', 'phrase'),
-        ('take into account', 'phrase'),
-        ('be subject to', 'phrase'),
+        ("system", "word"),
+        ("easy", "word"),
+        ("path", "word"),
+        ("accomplish", "word"),
+        ("legally", "word"),
+        ("existing", "word"),
+        ("go home", "phrase"),
+        ("who would make some money and then go home", "phrase"),
+        ("have a job in one place and a family in another", "phrase"),
+        ("change the way we think about categories", "phrase"),
+        ("in one place and ... in another", "phrase"),
+        ("account for", "phrase"),
+        ("a series of", "phrase"),
+        ("be much more rigid about", "phrase"),
+        ("take into account", "phrase"),
+        ("be subject to", "phrase"),
     ]
-    print(f"{'条目':52s} {'判定':6s} 原因")
+    # 这两条是 __main__ 自测的表格输出，刻意保留（ruff 规则只管应用代码里的散落 print）
+    print(f"{'条目':52s} {'判定':6s} 原因")  # noqa: T201
     for w, k in cases:
         rej, why = should_reject(w, k)
-        print(f'{w[:50]:52s} {"拒绝" if rej else "保留":6s} {why}')
+        print(f"{w[:50]:52s} {'拒绝' if rej else '保留':6s} {why}")  # noqa: T201

@@ -106,10 +106,77 @@ def _count_reviewed_today(conn: sqlite3.Connection) -> int:
     return int(row["c"] or 0)
 
 
+# ── 复习分块（墨韵 3.5）─────────────────────────────────────────────────
+# 今日复习按大类分块：默认只刷数学，同时提供 408 / 英语 / 政治。
+# 科目名按**包含关键词**归块（subjects 表是小表，全量取回在 Python 里匹配），
+# 兼容 数学/数学一/数学二/数学三、英语/英语一/英语二、408/计算机408、政治 等命名。
+# 没有归入任何块的科目（如手工建的杂项科目）不会出现在四个分块里，
+# 只能通过自主练习等模式触达 —— 这是刻意行为：分块是给四大主科用的。
+REVIEW_BLOCKS = [
+    {"key": "math", "name": "数学", "match": ("数学",)},
+    {"key": "cs408", "name": "408", "match": ("408", "计算机")},
+    {"key": "english", "name": "英语", "match": ("英语",)},
+    {"key": "politics", "name": "政治", "match": ("政治",)},
+]
+
+VALID_REVIEW_BLOCKS = tuple(b["key"] for b in REVIEW_BLOCKS)
+
+
+def _subject_ids_for_block(conn: sqlite3.Connection, category: str) -> Optional[List[int]]:
+    """把分块 key 解析成科目 id 列表。
+
+    返回 None = 不过滤（category 为空或不认识）；返回 [] = 该块在库里没有科目。
+    """
+    spec = next((b for b in REVIEW_BLOCKS if b["key"] == category), None)
+    if not spec:
+        return None
+    rows = conn.execute("SELECT id, name FROM subjects").fetchall()
+    return [int(r["id"]) for r in rows if any(m in (r["name"] or "") for m in spec["match"])]
+
+
+def get_review_blocks(conn: sqlite3.Connection) -> List[dict]:
+    """四个复习分块及各自的到期数：[{key, name, due, total}]。
+
+    due = 该块今日到期（含从未复习的新题，与 get_today_queue 的 due 口径一致）；
+    total = 该块错题总数（含未到期）。已暂停复习的题不计入。
+    """
+    due_map = {
+        int(r["subject_id"]): int(r["c"])
+        for r in conn.execute(
+            "SELECT subject_id, COUNT(*) AS c FROM mistakes "
+            "WHERE COALESCE(review_paused, 0) = 0 "
+            "AND (next_review_at IS NULL OR next_review_at <= datetime('now') "
+            "     OR review_count = 0) "
+            "GROUP BY subject_id"
+        ).fetchall()
+    }
+    total_map = {
+        int(r["subject_id"]): int(r["c"])
+        for r in conn.execute(
+            "SELECT subject_id, COUNT(*) AS c FROM mistakes "
+            "WHERE COALESCE(review_paused, 0) = 0 GROUP BY subject_id"
+        ).fetchall()
+    }
+    subjects = conn.execute("SELECT id, name FROM subjects").fetchall()
+    out = []
+    for spec in REVIEW_BLOCKS:
+        ids = [int(r["id"]) for r in subjects if any(m in (r["name"] or "") for m in spec["match"])]
+        out.append(
+            {
+                "key": spec["key"],
+                "name": spec["name"],
+                "due": sum(due_map.get(i, 0) for i in ids),
+                "total": sum(total_map.get(i, 0) for i in ids),
+            }
+        )
+    return out
+
+
 def get_today_queue(
     conn: sqlite3.Connection,
     limit: int = 50,
     daily_limit: Optional[int] = None,
+    category: Optional[str] = None,
 ) -> dict:
     """今日复习队列：**新题优先 + 逾期轮转 + 每日配额**。
 
@@ -126,20 +193,44 @@ def get_today_queue(
        逐日推过一遍，而不是天天砸同几道题；
     3. **每日配额**：daily_limit（默认 settings.REVIEW_DAILY_LIMIT）是"今天总共
        做多少"，已减去今日已复习数——所以你做完就收工，不会无底洞；
-    4. **不淘汰**：题不会被移出队列（没有"毕业/归档"），只是按顺序轮转。
+    4. **不淘汰**：题不会被移出队列（没有"毕业/归档"），只是按顺序轮转；
+    5. **分块**（category）：math/cs408/english/politics 四选一，只取该大类的题；
+       配额仍是全局的（reviewedToday 跨块累计），换块不重置今日额度。
 
     返回 {"items", "dueTotal", "returned", "dailyLimit", "reviewedToday", "remaining"}：
-    remaining 是今天做完这一批后还剩多少（用于前端提示"积压 N 题，明天继续"）。
+    remaining 是今天做完这一批后该块还积压多少（dueTotal - 本批返回数）；
+    传 category 时 dueTotal/remaining 只统计该块，每日配额仍是全局共享。
     """
     if daily_limit is None:
         daily_limit = settings.REVIEW_DAILY_LIMIT
+
+    subject_ids = _subject_ids_for_block(conn, category) if category else None
+    if category and subject_ids == []:
+        # 该块没有科目：直接给空队列，不做全表查询
+        reviewed_today = _count_reviewed_today(conn)
+        return {
+            "items": [],
+            "dueTotal": 0,
+            "returned": 0,
+            "dailyLimit": int(daily_limit or 0),
+            "reviewedToday": reviewed_today,
+            "remaining": 0,
+        }
+
+    block_sql = ""
+    block_params: tuple = ()
+    if subject_ids is not None:
+        marks = ",".join("?" for _ in subject_ids)
+        block_sql = f"AND subject_id IN ({marks}) "
+        block_params = tuple(subject_ids)
 
     due_total = int(
         conn.execute(
             "SELECT COUNT(*) AS c FROM mistakes "
             "WHERE COALESCE(review_paused, 0) = 0 "
             "AND (next_review_at IS NULL OR next_review_at <= datetime('now') "
-            "     OR review_count = 0)"
+            "     OR review_count = 0) " + block_sql,
+            block_params,
         ).fetchone()["c"]
     )
 
@@ -161,14 +252,13 @@ def get_today_queue(
             "SELECT * FROM mistakes "
             "WHERE COALESCE(review_paused, 0) = 0 "
             "AND (next_review_at IS NULL OR next_review_at <= datetime('now') "
-            "     OR review_count = 0) "
-            "ORDER BY "
+            "     OR review_count = 0) " + block_sql + "ORDER BY "
             "  CASE WHEN review_count = 0 OR next_review_at IS NULL THEN 0 ELSE 1 END ASC, "
             "  COALESCE(last_reviewed_at, '1970-01-01 00:00:00') ASC, "
             "  COALESCE(next_review_at, '9999-12-31 23:59:59') ASC, "
             "  id ASC "
             "LIMIT ?",
-            (fetch,),
+            block_params + (fetch,),
         ).fetchall()
 
     items = (

@@ -1,6 +1,6 @@
 <script setup>
 /** 复习/练习流程：今日队列与四种练习模式共用，按题型给出作答组件 */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -86,6 +86,60 @@ const practiceTitle = computed(
 const emptyText = computed(() =>
   isPractice.value ? '没有符合条件的错题，换个条件试试' : '暂无待复习错题',
 )
+
+// —— 复习分块（墨韵 3.5）：默认只刷数学，408/英语/政治各自一块 ——
+// 分块存 URL（?block=cs408），刷新/分享保持所在块；每日配额仍是全局的。
+const REVIEW_BLOCKS = [
+  { key: 'math', name: '数学' },
+  { key: 'cs408', name: '408' },
+  { key: 'english', name: '英语' },
+  { key: 'politics', name: '政治' },
+]
+const blockKey = computed(() =>
+  REVIEW_BLOCKS.some((b) => b.key === route.query.block) ? String(route.query.block) : 'math',
+)
+const blockName = computed(
+  () => REVIEW_BLOCKS.find((b) => b.key === blockKey.value)?.name || '数学',
+)
+const showBlockTabs = computed(() => !route.query.paper_id && !isPractice.value)
+const blockStats = ref([])
+const otherBlockDues = computed(() =>
+  blockStats.value.filter((b) => b.key !== blockKey.value && b.due > 0),
+)
+function dueOf(key) {
+  return blockStats.value.find((b) => b.key === key)?.due || 0
+}
+async function loadBlocks() {
+  try {
+    const res = await request.get('/reviews/blocks', { silent: true })
+    blockStats.value = res.data.data || []
+  } catch (err) {}
+}
+function switchBlock(key) {
+  if (key === blockKey.value) return
+  router.replace({ query: { ...route.query, block: key } })
+}
+// 换块 = 换一批题：清掉上一题的作答现场再取新队列
+watch(
+  () => route.query.block,
+  () => {
+    if (!showBlockTabs.value) return
+    index.value = 0
+    selected.value = null
+    answered.value = false
+    revealed.value = false
+    userInput.value = ''
+    judgeResult.value = null
+    gradeResult.value = null
+    reviewSaved.value = false
+    done.value = false
+    loadQueue()
+  },
+)
+// 完成任何一个块后刷新各块到期数（完成页的跨块跳转靠它）
+watch(done, (v) => {
+  if (v) loadBlocks()
+})
 const questionType = computed(() => current.value?.question_type || 'choice')
 const isChoice = computed(() => ['choice', 'multi'].includes(questionType.value))
 const isMulti = computed(() => questionType.value === 'multi')
@@ -366,7 +420,8 @@ async function loadQueue() {
       if (route.query.mistake_id) params.mistake_id = route.query.mistake_id
       res = await request.get('/reviews/practice', { params })
     } else {
-      res = await request.get('/reviews/today')
+      // 今日复习按分块取题（默认数学；配额全局共享）
+      res = await request.get('/reviews/today', { params: { category: blockKey.value } })
     }
     if (!route.query.paper_id) {
       // /reviews/today 现在返回 {items, dueTotal, remaining, dailyLimit, reviewedToday}
@@ -380,6 +435,7 @@ async function loadQueue() {
         queueInfo.value = payload || null
       }
       if (!queue.value.length) done.value = !isPractice.value
+      loadBlocks()
     }
     if (isMock.value) {
       // 模考仅含客观题（选择/多选/填空），主观题与英语整篇不进卷面
@@ -651,6 +707,23 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- 复习分块：默认只刷数学，408/英语/政治各自一块；徽标 = 该块到期数 -->
+    <nav v-if="showBlockTabs" class="block-tabs" aria-label="复习分块">
+      <button
+        v-for="b in REVIEW_BLOCKS"
+        :key="b.key"
+        type="button"
+        role="tab"
+        class="block-tab"
+        :class="{ active: blockKey === b.key }"
+        :aria-selected="blockKey === b.key"
+        @click="switchBlock(b.key)"
+      >
+        {{ b.name }}
+        <i v-if="dueOf(b.key)" class="bt-due num">{{ dueOf(b.key) }}</i>
+      </button>
+    </nav>
+
     <!-- 模考成绩单 -->
     <template v-if="done && mockReport">
       <GlassCard class="stage-card km-card" :hover="false">
@@ -706,7 +779,7 @@ onUnmounted(() => {
           <YearRing :total="resultCount.correct + resultCount.wrong" :wrong="resultCount.wrong" />
           <div class="stamp">已<br />完成</div>
         </div>
-        <h3 class="done-title">{{ practiceTitle ? '练习完成' : '今日复习完成' }}</h3>
+        <h3 class="done-title">{{ practiceTitle ? '练习完成' : blockName + ' · 复习完成' }}</h3>
         <p class="done-sub">
           答对 <b class="ok pop-num">{{ resultCount.correct }}</b> 题，答错
           <b class="bad pop-num">{{ resultCount.wrong }}</b> 题 · 朱砂印为证
@@ -722,6 +795,19 @@ onUnmounted(() => {
           >
           <UiButton variant="primary" @click="router.push('/mistakes')">返回错题列表</UiButton>
           <UiButton variant="ghost" @click="router.push('/stats')">查看统计</UiButton>
+        </div>
+        <!-- 跨块跳转：这个块刷完了，别的块还有到期题就顺手指一下 -->
+        <div v-if="!isPractice && otherBlockDues.length" class="done-others">
+          <span class="count-tip">其他分块还有待复习：</span>
+          <button
+            v-for="b in otherBlockDues"
+            :key="b.key"
+            type="button"
+            class="done-other-btn"
+            @click="switchBlock(b.key)"
+          >
+            {{ b.name }} · {{ b.due }} 题到期
+          </button>
         </div>
       </div>
     </template>
@@ -1064,6 +1150,87 @@ onUnmounted(() => {
   transform: translateY(-10px);
   filter: blur(4px);
 }
+/* 复习分块 Tabs：编辑式药丸，active=朱砂印底；徽标 = 该块今日到期数 */
+.block-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 18px;
+}
+.block-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    color var(--dur-2) var(--ease),
+    background var(--dur-2) var(--ease),
+    border-color var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+.block-tab:hover {
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.block-tab.active {
+  color: #fff;
+  background: var(--accent-grad);
+  border-color: transparent;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-hover) 40%, transparent);
+}
+.bt-due {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: inherit;
+}
+.block-tab.active .bt-due {
+  background: color-mix(in srgb, #fff 22%, transparent);
+  color: #fff;
+}
+/* 完成页跨块跳转：小墨点按钮 */
+.done-others {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.done-other-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 13px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent-ink);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--dur-2) var(--ease),
+    color var(--dur-2) var(--ease);
+}
+.done-other-btn:hover {
+  background: var(--accent-soft);
+}
 /* 巨型汉字数字：戏台纵深 */
 .stage-numeral {
   position: absolute;
@@ -1218,7 +1385,8 @@ onUnmounted(() => {
 .done-title,
 .done-sub,
 .done-backlog,
-.done-actions {
+.done-actions,
+.done-others {
   animation: gather-in var(--dur-4) var(--ease-spring) both;
 }
 .done-title {
@@ -1232,6 +1400,9 @@ onUnmounted(() => {
 }
 .done-actions {
   animation-delay: calc(var(--stagger-2) * 4);
+}
+.done-others {
+  animation-delay: calc(var(--stagger-2) * 5);
 }
 @keyframes gather-in {
   from {

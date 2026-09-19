@@ -122,3 +122,19 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 ### 有意不做（记录在案）
 - B3 首图视差（图片对象定位动画易抖，收益低）；C5 进度线滴墨（进度线已有流光，再加是堆）；E2 标签 pills（现状是文本输入框，非标签堆叠，不适用）；F4 分布条墨阶渐变（现有墨点语义已够）；PracticeView 预览（"今日出征"已存在）。
 测试：前端 Vitest 61 + E2E 31 全绿、build/lint 干净；真机抽验 chips/stepper/空态印章 DOM 命中。
+
+## 2026-09-19 · 复习分块批（`<hash>`，用户需求：今日复习按科目分块，默认只刷数学）
+首个前后端协同功能批。
+**后端**：
+- `review_service.get_today_queue` 新增 `category` 参数（math/cs408/english/politics）：队列 SQL 加 `subject_id IN (...)` 过滤，dueTotal/remaining 按块统计；不传 = 全部（向后兼容，旧测试全过）。
+- 归块表 `REVIEW_BLOCKS`：按**科目名包含关键词**匹配（数学 / 408|计算机 / 英语 / 政治），兼容 数学二/英语二/计算机408 命名；不入块的杂项科目不出现在分块里（只能走自主练习）—— 刻意行为。
+- 新接口 `GET /api/reviews/blocks`：四块汇总 `{key,name,due,total}`，due 口径与今日队列一致（新题永远算到期）。
+- ⚠️ 语义教训：`remaining` = **该块积压**（dueTotal-本批），我初版错误地让它和今日剩余配额取小，被既有测试 `test_daily_limit_caps_and_subtracts_reviewed_today` 当场抓住 —— done 页的"积压 N 题"文案靠它。配额与积压是两个概念。
+**后端测试**：新增 `tests/test_review_blocks.py` 5 用例（分块过滤/关键词归块/汇总计数/空块/配额全局共享），后端 **153** 全绿。注意：`review_count=0` 的题无论 next_review_at 排到多远都算"到期"（新题必须被见到）—— 写测试数据时容易踩。
+**前端（ReviewView）**：
+- 分块 Tabs（编辑式药丸 + 到期数徽标），**默认选中数学**；`?block=` 同步 URL（刷新/回跳保持所在块）；仅今日复习模式显示（练习/模考/整卷不显示）。
+- 换块 = 清空上一题作答现场（index/selected/revealed/judgeResult 等）再取新队列（watch route.query.block）；换块后完成的标题显示"数学 · 复习完成"。
+- 完成页**跨块跳转**：数学刷完时显示"408 · 16 题到期 / 英语 · 10 题到期"墨点按钮，点击直接切块续刷（blocks 在 done 时刷新）。
+- E2E `fixtures.js` 补 `/api/reviews/blocks` 打桩（漏打桩会被 expectAllApiStubbed 判假红）。
+**真机验证**（重启 8000 后端后）：Tabs 显示 数学 80 / 408 16 / 英语 10 / 政治 1（真实到期数）；默认数学队列只出数学题；切 408 后队列 16 题、DOM 卡片显示"408计算机基础综合/计算机网络"、API 确认 subject_id 全部归属 408 块。
+测试：后端 153、前端 61 + E2E 31 全绿。

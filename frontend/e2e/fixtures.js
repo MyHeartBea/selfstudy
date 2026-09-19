@@ -286,6 +286,13 @@ function resolver(path, method, overrides) {
   if (path === '/api/stats') return emptyStats
   if (path === '/api/reviews/stats') return emptyReviewStats
   if (path === '/api/reviews/today') return { items: [], dueTotal: 0, remaining: 0 }
+  if (path === '/api/reviews/blocks')
+    return [
+      { key: 'math', name: '数学', due: 0, total: 0 },
+      { key: 'cs408', name: '408', due: 0, total: 0 },
+      { key: 'english', name: '英语', due: 0, total: 0 },
+      { key: 'politics', name: '政治', due: 0, total: 0 },
+    ]
   if (path === '/api/reviews/forecast') return { overdue: 0, items: [] }
   // 日历热力图接口返回数组（ReviewHeatmap 直接 for..of 遍历）；返回对象会 TypeError
   if (path === '/api/reviews/calendar') return []

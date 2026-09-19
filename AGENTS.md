@@ -240,6 +240,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - ⚠️ **配额必须在 `_expand_passage_items` 展开之后截断**：英语整篇会展开成多道小题，先按行数截断再展开会让实际题量超过配额（实测 50 行 → 59 题）。所以候选行取 `budget*3`（下限 budget+20，上限 300），展开后再 `[:budget]`。
   - **明确不做毕业机制**：题永远不会被移出队列（用户要求以后再说）。答错的题重置 1 天，所以明天仍会出现——这是设计而非 bug。
   - 响应是对象 `{items, dueTotal, returned, dailyLimit, reviewedToday, remaining}`（旧格式是纯数组，前端两种都兼容）。
+- **今日复习分块（墨韵 3.5）**：`/api/reviews/today` 支持 `category=math|cs408|english|politics`（不传=全部，向后兼容），`GET /api/reviews/blocks` 返回四块的 `{key,name,due,total}` 汇总。归块在 `review_service.REVIEW_BLOCKS`，按**科目名包含关键词**（数学/408|计算机/英语/政治）匹配 `subjects.name` —— 兼容 数学二/英语二/计算机408 等命名；不入块的科目（杂项）只能走自主练习。**每日配额是全局共享的**（reviewedToday 跨块累计，换块不重置），`remaining` 语义是"该块积压"（dueTotal-本批），不要改成和配额取小。前端默认块=数学（`?block=` 同步 URL），完成页有跨块跳转；E2E 打桩必须含 `/reviews/blocks`，否则冒测假红。
 - **真题库扫描（`exam_paper_service.scan_folder`）**：按 `(科目, 年份)` **去重合并**，每条候选带 `sources`（该年份涉及的真题/合卷/答案速查）。角色判定见 `classify_file`：
   - `mixed` = **题+答案合卷**（`真题解析`/`真题及参考答案`）——旧实现把它们当"纯答卷"，导致 150 份候选里 **52 份变成孤儿（既当不成试卷也配不到答案）**；
   - `answer_key` = 答案册（`答案速查`/`参考答案`/`选择题解析`）；`question` = 纯试卷；`other` = 答题卡等（不产生候选）。

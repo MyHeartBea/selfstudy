@@ -17,15 +17,32 @@ router = APIRouter(prefix="/api", tags=["复习"])
 def get_today_reviews(
     limit: int = Query(50, ge=1, le=200),
     daily_limit: Optional[int] = Query(None, ge=0, le=500),
+    category: Optional[str] = Query(
+        None,
+        pattern="^(math|cs408|english|politics)$",
+        description="复习分块：数学/408/英语/政治；不传 = 全部科目",
+    ),
 ):
     """返回今日复习队列：新题优先 + 逾期轮转 + 每日配额。
 
     响应除 items 外还带配额信息（dueTotal/remaining/dailyLimit/reviewedToday），
-    供前端提示"今天做多少、积压还剩多少"。
+    供前端提示"今天做多少、积压还剩多少"。传 category 时按大块过滤（配额全局共享）。
     """
     conn = get_connection()
     try:
-        return ok(review_service.get_today_queue(conn, limit, daily_limit))
+        return ok(review_service.get_today_queue(conn, limit, daily_limit, category))
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.get("/reviews/blocks")
+def get_review_blocks():
+    """四个复习分块及各自到期数：[{key, name, due, total}]，供分块 Tab 徽标与完成页跳转。"""
+    conn = get_connection()
+    try:
+        return ok(review_service.get_review_blocks(conn))
     except Exception as exc:
         return server_error(exc)
     finally:
