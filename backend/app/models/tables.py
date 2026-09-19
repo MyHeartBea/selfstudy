@@ -197,6 +197,18 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_base_created_at ON knowledge_base(creat
 CREATE INDEX IF NOT EXISTS idx_formula_items_category ON formula_items(category);
 CREATE INDEX IF NOT EXISTS idx_mistake_tag_map_tag ON mistake_tag_map(tag);
 
+-- v11 补齐：以下索引都按**真实查询形状**建，不给没人查的列建索引。
+-- mistake_tag_map 的 (mistake_id, tag) 主键已覆盖 WHERE mistake_id=?，所以那里不需要新索引。
+-- 1) AI 批改记录：错题详情每次取 last_grade 都是 "WHERE mistake_id=? ORDER BY id DESC LIMIT 1"，
+--    删错题/批量删也要按 mistake_id 删，此前整表无索引（全表扫描）。
+CREATE INDEX IF NOT EXISTS idx_solution_grades_mistake ON solution_grades(mistake_id, id DESC);
+-- 2) 生词本是增长最快的表（一篇精读就能进几十条），列表默认排序 created_at DESC, id DESC。
+CREATE INDEX IF NOT EXISTS idx_vocab_created ON vocab_items(created_at DESC, id DESC);
+-- 3) 模考成绩存档：GET /api/mocks 固定 ORDER BY created_at DESC, id DESC LIMIT n。
+CREATE INDEX IF NOT EXISTS idx_mock_records_created ON mock_records(created_at DESC, id DESC);
+-- 4) 真题登记按 (source_path, year) 做幂等查重。
+CREATE INDEX IF NOT EXISTS idx_exam_papers_source_year ON exam_papers(source_path, year);
+
 -- 英语作文批改存档（v10）：AI 按考研评分档批改的记录（转录文本 + 完整批改 JSON）
 CREATE TABLE IF NOT EXISTS essay_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -208,7 +220,10 @@ CREATE TABLE IF NOT EXISTS essay_records (
     result_json TEXT DEFAULT '{}',
     created_at DATETIME
 );
-CREATE INDEX IF NOT EXISTS idx_essay_records_kind ON essay_records(kind);
+-- 作文档案列表是 "WHERE kind = ? ORDER BY id DESC"：单列 kind 索引命中后还要再排一次，
+-- 换成 (kind, id DESC) 让过滤与排序走同一条索引。旧名先删，免得两套索引长期并存互相追平。
+DROP INDEX IF EXISTS idx_essay_records_kind;
+CREATE INDEX IF NOT EXISTS idx_essay_records_kind_id ON essay_records(kind, id DESC);
 """
 
 MISTAKE_COLUMNS = (

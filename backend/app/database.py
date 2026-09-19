@@ -294,7 +294,10 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         )
         """
     )
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_essay_records_kind ON essay_records(kind)")
+    # 索引一律由 TABLES_DDL 负责（它在 migrate_database 之前先 executescript 一遍，
+    # 且每条都是 IF NOT EXISTS / IF EXISTS，对新旧库都幂等）。
+    # 这里**不许**再补 CREATE INDEX：v11 把 essay 的 (kind) 换成 (kind, id DESC) 并删旧名，
+    # 而本函数在 DDL 之后运行，残留一句旧 DDL 就会把已删的单列索引又建回来。
 
     _ensure_math_categories(conn)
     _ensure_english_categories(conn)

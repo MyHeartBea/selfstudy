@@ -32,8 +32,8 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（182 个）
-cd frontend && npm test                                  # Vitest 91 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（193 个）
+cd frontend && npm test                                  # Vitest 98 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
 cd frontend && npm run test:e2e                          # Playwright 39 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
@@ -94,6 +94,13 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - 已花掉 AI 调用的结果不许因为一次 INSERT 失败变成 500——`/api/essays/grade` 返回 200 + `persisted:false` + `persist_error`，前端 toast 明说"未存档"；
   - 删行必须连带删文件：`batch_mistakes(action='delete')` 先取回 `images` 再删，事后 `remove_image_files()`。巡检跑 `python scripts/clean_orphan_images.py`（默认 dry-run；孤儿文件的内容仍能通过 `/images/<name>` 访问，这是隐私问题不是磁盘问题）。
 - **PUT /api/mistakes 的"附加内容"键有特殊语义**：`images` 与 `passage_text / passage_translation / english_*`（见 `mistake_service.ATTACHMENT_KEYS`）**压根不带键**时服务层按库里原值回填，显式提交 `""` / `[]` 才是清空——这几列是 AI 整篇精读的唯一副本，被一个只含基础字段的表单覆盖就再也生成不回来。Pydantic 侧靠 `body.model_fields_set` 区分，新增字段时要一起维护那张名单。
+- **索引归 `TABLES_DDL` 管，`migrate_database()` 里不许写 `CREATE/DROP INDEX`**：`init_database()` 每次启动都
+  `executescript(TABLES_DDL)`，而 `migrate_database()` 在它**之后**跑 —— 同一处留两份 DDL，后跑的会把
+  前面刚 `DROP` 的旧索引又建回来（v11 换 `essay_records(kind)`→`(kind,id DESC)` 时真踩了）。索引是幂等 DDL，
+  **不需要**动 `MIGRATION_VERSION`（那个门控只管一次性全表扫描）。加索引要按**真实 SQL 形状**加并在
+  `tests/test_index_coverage.py` 里用 `EXPLAIN QUERY PLAN` 验：只断言"索引名字存在"抓不到列序写反，
+  而断言计划时**表里必须灌够量**（几百行 + `ANALYZE`），1~3 行时 SQLite 会诚实地选 SCAN。
+  反例备查：`mistake_tag_map` 不缺索引——`(mistake_id, tag)` 主键就是 `WHERE mistake_id=?` 的 best index。
 - **字母题判分以服务端为唯一口径**：`answer_service.judge_letters()`（取 A-D、去重、排序后整体相等），`review_mistake` 在 `user_answer` 非空时用它覆盖前端传来的 `result`。前端 `utils/examScoring.js::scoreLetters` 只为即时反馈存在，两边必须跑同一张用例表（`backend/tests/test_data_safety.py::TestScoringSingleSource` 与 `frontend/tests/examScoring.test.js` 各钉一遍）。
 - **C 盘空间紧张：所有缓存 / 下载 / 临时文件一律放 D 盘**，C 盘只留程序本体。
   - 临时文件放 `D:\temp`（不要用系统 `%TEMP%`，它已在 C 盘积了几个 GB）。
@@ -287,7 +294,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > **历史批次记录（什么时候干了什么、批次明细、踩坑叙事）已迁至 `docs/WORKLOG.md`** —— 本文件只放约束与规定，新批次完成后在 WORKLOG.md 末尾追加一节，不要再往这里堆。
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
-- 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。
-- 测试基线：**后端 182、前端 Vitest 91、E2E 39**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
+- 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
+- 测试基线：**后端 193、前端 Vitest 98、E2E 39**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

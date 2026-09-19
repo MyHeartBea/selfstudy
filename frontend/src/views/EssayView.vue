@@ -6,6 +6,7 @@ import request from '../api/request'
 import { confirmDialog } from '../ui/confirm'
 import { toast } from '../ui/toast'
 import { formatTime } from '../composables/useBaseData'
+import { useResourceList } from '../composables/useResourceList'
 import EssayGradeResult from '../components/EssayGradeResult.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
@@ -18,17 +19,27 @@ import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
 import { ESSAY_KINDS, essayKindMeta } from '../composables/essayKinds'
 
-const items = ref([])
-const total = ref(0)
 const page = ref(1)
 const pageSize = ref(15)
 const kind = ref('')
-const loading = ref(false)
-const loadError = ref(false)
 
 const detail = ref(null)
 const detailVisible = ref(false)
 const detailTranscript = ref('')
+
+const {
+  items,
+  total,
+  loading,
+  loadError,
+  load: loadList,
+} = useResourceList(async () => {
+  const res = await request.get('/essays', {
+    params: { page: page.value, page_size: pageSize.value, kind: kind.value || undefined },
+    silent: true,
+  })
+  return res.data.data
+})
 
 const kindOptions = computed(() => [{ value: '', label: '全部类型' }, ...ESSAY_KINDS])
 
@@ -44,25 +55,6 @@ const avgPct = computed(() => {
   const sum = items.value.reduce((acc, r) => acc + r.score / (r.max_score || 1), 0)
   return Math.round((sum / items.value.length) * 100)
 })
-
-async function loadList() {
-  loading.value = true
-  loadError.value = false
-  try {
-    const res = await request.get('/essays', {
-      params: { page: page.value, per_page: pageSize.value, kind: kind.value || undefined },
-      silent: true,
-    })
-    const data = res.data.data || {}
-    items.value = data.items || []
-    total.value = data.total || 0
-  } catch (err) {
-    items.value = []
-    loadError.value = true
-  } finally {
-    loading.value = false
-  }
-}
 
 function onFilterChange() {
   page.value = 1

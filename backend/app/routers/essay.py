@@ -155,7 +155,9 @@ def _row_brief(row) -> dict:
 def list_essays(
     kind: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
-    per_page: int = Query(15, ge=1, le=100),
+    # 分页参数名全站统一为 page_size（mistakes / knowledge / vocab 都是它）。
+    # 这里原先叫 per_page，是全站唯一的例外 —— 前端 EssayView 要同步改。
+    page_size: int = Query(15, ge=1, le=100),
 ):
     """作文批改历史（按时间倒序，服务端分页）。"""
     conn = get_connection()
@@ -170,7 +172,7 @@ def list_essays(
         ]
         rows = conn.execute(
             f"SELECT * FROM essay_records {where} ORDER BY id DESC LIMIT ? OFFSET ?",
-            [*params, per_page, (page - 1) * per_page],
+            [*params, page_size, (page - 1) * page_size],
         ).fetchall()
         return ok({"items": [_row_brief(r) for r in rows], "total": total})
     finally:

@@ -6,6 +6,7 @@ import request from '../api/request'
 import RichText from '../components/RichText.vue'
 import { markdownToPlain } from '../utils/markdown'
 import { formatTime } from '../composables/useBaseData'
+import { useResourceList } from '../composables/useResourceList'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
 import FlipCard from '../ui/FlipCard.vue'
@@ -19,9 +20,17 @@ import Icon from '../ui/Icon.vue'
 
 const categories = ['高等数学', '线性代数', '概率统计', '英语背诵', '政治背诵', '408背诵', '其他']
 
-const loading = ref(false)
-const loadError = ref(false)
-const items = ref([])
+// 公式是全量集合（后端返回裸数组），筛选与搜索在客户端做，所以只要 items + 两个状态位
+const {
+  items,
+  loading,
+  loadError,
+  load: loadFormulas,
+} = useResourceList(async () => {
+  const res = await request.get('/formulas')
+  return res.data.data
+})
+
 const filters = reactive({
   category: '',
   search: '',
@@ -53,20 +62,6 @@ const filteredItems = computed(() => {
   }
   return list
 })
-
-async function loadFormulas() {
-  loading.value = true
-  loadError.value = false
-  try {
-    const res = await request.get('/formulas')
-    items.value = res.data.data || []
-  } catch (err) {
-    // toast 由请求拦截器统一弹；这里只记"这一屏是失败、不是没数据"
-    loadError.value = true
-  } finally {
-    loading.value = false
-  }
-}
 
 function openCreate() {
   editingId.value = null

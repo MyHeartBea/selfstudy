@@ -8,6 +8,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import request from '../api/request'
 import { useCountUp } from '../utils/useCountUp'
 import { formatTime } from '../composables/useBaseData'
+import { useResourceList } from '../composables/useResourceList'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
 import FlipCard from '../ui/FlipCard.vue'
@@ -28,13 +29,24 @@ const nDue = useCountUp(computed(() => stats.value.due))
 const nMastered = useCountUp(computed(() => stats.value.mastered))
 
 // —— 词表 ——
-const loading = ref(false)
-const loadError = ref(false)
-const items = ref([])
 const page = ref(1)
 const pageSize = ref(15)
-const total = ref(0)
 const filters = reactive({ search: '', mastery: null, kind: '', sort: 'created_desc' })
+
+const {
+  items,
+  total,
+  loading,
+  loadError,
+  load: loadList,
+} = useResourceList(async () => {
+  const params = { page: page.value, page_size: pageSize.value, sort: filters.sort }
+  if (filters.search.trim()) params.search = filters.search.trim()
+  if (filters.mastery !== null) params.mastery = filters.mastery
+  if (filters.kind) params.kind = filters.kind
+  const res = await request.get('/vocab', { params })
+  return res.data.data
+})
 
 // —— 生词详情（整卡可点打开）——
 const detailVisible = ref(false)
@@ -57,26 +69,6 @@ async function removeFromDetail(row) {
   if (!row) return
   detailVisible.value = false
   await remove(row)
-}
-
-async function loadList() {
-  loading.value = true
-  loadError.value = false
-  try {
-    const params = { page: page.value, page_size: pageSize.value, sort: filters.sort }
-    if (filters.search.trim()) params.search = filters.search.trim()
-    if (filters.mastery !== null) params.mastery = filters.mastery
-    if (filters.kind) params.kind = filters.kind
-    const res = await request.get('/vocab', { params })
-    const data = res.data.data
-    items.value = data?.items || []
-    total.value = data?.total || 0
-  } catch (err) {
-    // toast 由请求拦截器统一弹；这里只记"这一屏是失败、不是没数据"
-    loadError.value = true
-  } finally {
-    loading.value = false
-  }
 }
 
 async function loadStats() {

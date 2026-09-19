@@ -233,3 +233,64 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 - 复核记录：体检表里这条写的是"高亮会串到复习页"，实测 `.question-text` 只在 `MistakeCard` 出现，**结论按实况改写成"防外溢的收敛"**，没有夸大成 bug（上一批 B9 也是同类自我纠正）。
 
 **测试与自查**：后端 **182**（未改后端）；前端 Vitest **91**（+8 errorBoundary、+8 UiStars）；E2E **39**（+2）全绿，跑两遍无假红；ruff / eslint / prettier / `npm run build` 干净。生产 8000 真机（深色主题）：`/design` 零 console 消息；Tab 落点 `aria-label="3 星"`、`:focus-visible` 命中、描边 `rgb(224,88,61) 2px`；按 → 后 `aria-checked` 与 tabindex 一起移到第 4 颗、组标签变「难度 4 / 5」；坏图片不触发错误面板，派生 `ErrorEvent` 则面板出现（`role=alert`、z-index 9999、深色卡面 + 朱砂边）。
+
+## 2026-09-19 · 全栈体检第 3 批：工程性收敛（索引 / 接口契约 / 列表加载）
+
+**B5 多步写入的事务原子性 —— 复核后判定为"不是缺陷"，本批没改事务。**
+逐条读了所有多语句写路径：`create_mistake`（补词条 + INSERT 错题 + 同步标签）、`update_mistake`、
+`review_mistake`（UPDATE 调度 + INSERT 记录）、`delete_mistake`/`batch_mistakes`（连删四张表）、
+`import_mistakes`（`with conn:` 包住整批）—— **全部只在末尾 commit 一次**，中途异常靠 `conn.close()`
+回滚，`sync_mistake_tags` / `ensure_knowledge_tags` 内部也没有偷偷 commit（这是最容易破原子性的地方，专门查了）。
+唯一"一条函数里多次提交"的是后台拆题流水线的 `_set_status`：那是**进度上报**（extracting→structuring→done），
+故意即时落库，不属于该收敛的对象。体检表里这一条按实况降级为"已验证无问题"。
+
+**B6/B7/B10 → v11 索引补齐（`app/models/tables.py`，共 5 条，全部对着真实 SQL 建）**
+- `idx_solution_grades_mistake (mistake_id, id DESC)`：错题详情每次都跑
+  `WHERE mistake_id=? ORDER BY id DESC LIMIT 1` 取 last_grade，删错题还要按 mistake_id 批删 —— 此前**整表无索引**。
+- `idx_vocab_created (created_at DESC, id DESC)`：生词本是增长最快的表（820 行且一篇精读进几十条），
+  列表默认按它排序。真库 EXPLAIN 现在走 covering index 顺序扫，不再建临时 B 树。
+- `idx_mock_records_created (created_at DESC, id DESC)`：`GET /api/mocks` 的固定形状。
+- `idx_exam_papers_source_year (source_path, year)`：登记真题的幂等查重。
+- `idx_essay_records_kind_id (kind, id DESC)` **替换** 原单列 `idx_essay_records_kind`：
+  档案列表是 `WHERE kind=? ORDER BY id DESC`，单列索引命中后还要再排一次。
+- **`mistake_tag_map` 不建索引**：`(mistake_id, tag)` 主键就是 `WHERE mistake_id=?` 的 best index，
+  体检表把它列成"缺索引"是错的，已在测试 docstring 里钉住免得下次重复报。
+- **不走 `MIGRATION_VERSION` 门控**：索引全是 `IF NOT EXISTS` / `IF EXISTS` 的幂等 DDL，
+  而 `init_database()` 每次启动都 `executescript(TABLES_DDL)`，门控只管一次性全表扫描 —— 所以版本仍是 10。
+  顺带删掉 `migrate_database()` 里那句重复的 `CREATE INDEX idx_essay_records_kind`：它在 DDL **之后**运行，
+  留着会把刚 DROP 的单列索引又建回来（写成注释 + 一条 `test_dropped_single_column_index_stays_gone` 钉死）。
+- **踩坑**：`EXPLAIN QUERY PLAN` 的断言在只灌 1~3 行的表上**必红** —— SQLite 成本模型认定扫小表更便宜，
+  索引建对了、查询写对了也照样输出 SCAN。测试改成灌 400 行 + `ANALYZE`（`tests/test_index_coverage.py`，10 条，
+  既验"索引存在"也验"计划真的用上"）。真库重启后复核：5 条到位、旧名消失、四条查询逐条命中。
+
+**C2 分页参数名统一**：`GET /api/essays` 的 `per_page` → `page_size`（全站唯一例外名消除）。
+后端、`EssayView` 调用、docs 三处同步；新增契约测试断言**旧名字必须彻底失效**（FastAPI 忽略未声明 query →
+回落到默认 15 条），否则两套名字并存时前端漏改是静默的。
+
+**C3 `docs/api.md` 补齐与纠错**：此前有 **11 个端点从未记录**（`/api/papers` 全套、`/api/mocks` 读写、
+`/api/reviews/blocks`、`/api/reviews/forecast`、`/api/reviews/today?category=`、`practice?mistake_id=`、
+`/api/ai/sense`、`/api/ai/weekly-report`、`/api/vocab/import-english`、`/api/export/anki`、`/api/exam-countdown`），
+且「系统」小节整块重复两次。现在：合并为一个「系统」段、新增「真题库与模考存档」段、补齐上述条目，
+并在开头写下**两种信封的约定**（有分页 → `{items,total,page,page_size}`；无分页全量 → 裸数组；
+`mistakes`/`vocab` 不传 `page` 时退化为数组）。写文档时自己错了一次并当场改掉：整卷模考**不走**
+`/reviews/practice`，是前端取 `GET /api/papers/{id}` 客户端组卷 —— 文档必须以代码为准。
+
+**C1 响应信封是否统一 —— 判定为"约定，不是 bug"，只补文档不改代码**：裸数组是有意的（全量集合无需再包一层），
+把 6 个数组接口改成 `{items,total}` 会连带改 6 个前端调用点 + 一批测试，收益只是好看。
+
+**F8/F9 `composables/useResourceList.js`**：把「loading / loadError / items / total + 失败清空 + 重试位」
+从四个纯列表页收敛到一处（`EssayView` / `KnowledgeView` / `VocabView` / `FormulaView`）。
+理由不是少写几行，而是这类状态**错一次就静默**：上一批刚踩过"`useMistakeFilters` 早 return 了 loadError、
+视图解构漏一个字段 → 错误 UI 永不渲染、三道质量关卡全绿"。composable 只认一种返回形状，漏不了；
+两种后端信封也在这一处认完（`KnowledgeView` 原来自己写了一遍 `Array.isArray` 分支）。
+`KnowledgeView` 的"详情弹窗跟随列表刷新"留在外面（`await fetchList()` 之后同步），不为此加钩子参数。
+**没接进来的页面是刻意的**：`MistakeListView`（筛选状态要同步 URL，已在 `useMistakeFilters` 里）、
+`ReviewView`（沉浸流程，队列不是资源列表）、`PapersView`（轮询型加载，只在库为空时才报失败）、
+`StatsView`（十几个面板各自兜底，见 AGENTS 6.5）。新增 7 条单测（两种信封 / null 响应不算失败 /
+失败清空并置位 / 重试清位 / loading 收敛 / fetcher 同步抛错也被收住）。
+
+**测试与自查**：后端 **193**（+10 索引计划、+1 essay 分页契约）；前端 Vitest **98**（+7 useResourceList）；
+E2E **39** 全绿；ruff / eslint / prettier / `npm run build` 干净，`katex-*.css` 仍是 24,475 B（字体未被重新内联）。
+生产 8000 真机逐页验数据加载（重构的是取数层，E2E 打桩返回空数组、测不出真回归）：
+`/vocab` 30 张卡、`/knowledge` 9 张（=page_size）+ 分页器、`/formulas` 7 张（"共 7 条"与库一致）、
+`/essays` 平均得分率 60%（=库里那条 9/15，说明 items 真的穿过 composable 到了 computed）；四页零 console 消息。

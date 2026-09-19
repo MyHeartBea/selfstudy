@@ -12,6 +12,7 @@ import {
   subSubjectName,
 } from '../composables/useBaseData'
 import { useSubSubject } from '../composables/useSubSubject'
+import { useResourceList } from '../composables/useResourceList'
 import KnowledgeEditModal from '../components/KnowledgeEditModal.vue'
 import RichText from '../components/RichText.vue'
 import { markdownToPlain } from '../utils/markdown'
@@ -27,14 +28,10 @@ import UiPagination from '../ui/UiPagination.vue'
 import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
 
-const loading = ref(false)
-const loadError = ref(false)
 const router = useRouter()
 const route = useRoute()
-const items = ref([])
 const page = ref(1)
 const pageSize = ref(9)
-const total = ref(0)
 const filters = reactive({
   subjectId: null,
   subSubjectId: null,
@@ -51,37 +48,30 @@ const summarizingId = ref(null)
 
 const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
 
-async function loadKnowledge() {
-  loading.value = true
-  loadError.value = false
-  try {
-    const params = {
-      page: page.value,
-      page_size: pageSize.value,
-    }
-    if (filters.subjectId) params.subject_id = filters.subjectId
-    if (filters.subSubjectId) params.sub_subject_id = filters.subSubjectId
-    if (filters.tag) params.tag = filters.tag
-    const res = await request.get('/knowledge', { params })
-    const data = res.data.data
-    if (Array.isArray(data)) {
-      items.value = data
-      total.value = data.length
-    } else {
-      items.value = data?.items || []
-      total.value = data?.total || 0
-    }
-  } catch (err) {
-    // toast 由请求拦截器统一弹；这里只记"这一屏是失败、不是没数据"
-    loadError.value = true
-  } finally {
-    loading.value = false
-    // 详情弹窗打开时，列表刷新后同步最新内容（如刚做完 AI 总结）
-    if (detailItem.value) {
-      const fresh = items.value.find((it) => it.id === detailItem.value.id)
-      if (fresh) detailItem.value = fresh
-    }
+const {
+  items,
+  total,
+  loading,
+  loadError,
+  load: fetchList,
+} = useResourceList(async () => {
+  const params = {
+    page: page.value,
+    page_size: pageSize.value,
   }
+  if (filters.subjectId) params.subject_id = filters.subjectId
+  if (filters.subSubjectId) params.sub_subject_id = filters.subSubjectId
+  if (filters.tag) params.tag = filters.tag
+  const res = await request.get('/knowledge', { params })
+  return res.data.data
+})
+
+async function loadKnowledge() {
+  await fetchList()
+  // 详情弹窗打开时，列表刷新后同步最新内容（如刚做完 AI 总结）
+  if (!detailItem.value) return
+  const fresh = items.value.find((it) => it.id === detailItem.value.id)
+  if (fresh) detailItem.value = fresh
 }
 
 function searchKnowledge() {

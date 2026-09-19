@@ -113,6 +113,36 @@ class TestEssayApi(unittest.TestCase):
         other = self.client.get("/api/essays", params={"kind": "e1_short"}).json()["data"]
         self.assertEqual(other["total"], 0)
 
+    def test_list_pagination_uses_page_size(self):
+        """分页参数全站统一为 page_size（essay 曾用 per_page，是唯一的例外名）。"""
+        base = self.client.get("/api/essays", params={"kind": "e2_long"}).json()["data"]["total"]
+        for i in range(3):
+            self._grade({"text": f"essay {i}", "kind": "e2_long"})
+
+        page2 = self.client.get(
+            "/api/essays", params={"kind": "e2_long", "page": 2, "page_size": 2}
+        ).json()["data"]
+        total = base + 3
+        self.assertEqual(page2["total"], total)
+        # 断言与"库里原本有几条"无关：只按总数算第 2 页（每页 2 条）应有几条
+        self.assertEqual(len(page2["items"]), max(0, min(2, total - 2)))
+
+        last = self.client.get(
+            "/api/essays", params={"kind": "e2_long", "page": total, "page_size": 1}
+        ).json()["data"]
+        self.assertEqual(len(last["items"]), 1)
+        overflow = self.client.get(
+            "/api/essays", params={"kind": "e2_long", "page": total + 1, "page_size": 1}
+        ).json()["data"]
+        self.assertEqual(overflow["items"], [])
+
+        # 旧名字必须**彻底失效**（FastAPI 忽略未声明的 query → 回落到默认 15 条），
+        # 否则等于两套参数名并存，前端漏改也发现不了。
+        legacy = self.client.get("/api/essays", params={"kind": "e2_long", "per_page": 1}).json()[
+            "data"
+        ]
+        self.assertEqual(len(legacy["items"]), base + 3)
+
     def test_grade_persist_zero_skips_record(self):
         data = self._grade({"text": "no save", "kind": "e1_short", "persist": False}).json()["data"]
         self.assertIsNone(data["record_id"])
