@@ -144,6 +144,48 @@ export const formulaRows = [
 ]
 
 /**
+ * 样例作文批改记录。形状必须对齐 routers/essay.py：
+ * 列表是 {items:[_row_brief], total}，详情在 brief 之上加 essay_text + result（批改 JSON）。
+ */
+export const essayResult = {
+  kind: 'e2_long',
+  kind_name: '英语二 大作文（图表作文 15 分）',
+  max_score: 15,
+  score: 11,
+  band: '第四档',
+  dimensions: { content: 5, structure: 2, language: 3, format: 1 },
+  estimated_word_count: 152,
+  corrections: [
+    {
+      original: 'The number of students go up.',
+      corrected: 'The number of students goes up.',
+      type: '主谓一致',
+      note: 'the number of 作主语谓语用单数',
+    },
+  ],
+  highlights: ['定语从句使用自然'],
+  overall: '要点齐全，语言基本准确。',
+  top_errors: ['主谓一致'],
+  weakness_advice: '专项练三单。',
+  upgrade_tips: ['I think it is important -> It is widely acknowledged that...'],
+  model_version: 'As is vividly shown in the chart above.',
+  raw_transcript: 'The number of students go up.',
+}
+
+export const essayRows = [
+  {
+    id: 301,
+    kind: 'e2_long',
+    kind_name: '英语二 大作文（图表作文 15 分）',
+    prompt_text: 'Write an essay of 150 words on the chart below.',
+    score: 11,
+    max_score: 15,
+    created_at: '2026-09-18 20:30:00',
+    excerpt: 'The number of students go up.',
+  },
+]
+
+/**
  * 给页面装上 API 打桩。
  * 返回一个 `calls` 数组，记录每个被拦截请求的 {method, url, body}，供断言"只调用一次"。
  */
@@ -267,6 +309,11 @@ function resolver(path, method, overrides) {
   // 真实接口返回的就是数组（不是 {items:[]}）——写成对象会让 .filter 直接抛异常
   if (path === '/api/papers/scan') return []
   if (path === '/api/mocks') return []
+  // 作文档案：列表 {items,total}，详情 = brief + essay_text + result
+  if (path === '/api/essays') return { items: essayRows, total: essayRows.length }
+  if (/^\/api\/essays\/\d+$/.test(path)) {
+    return { ...essayRows[0], essay_text: essayResult.raw_transcript, result: essayResult }
+  }
 
   // —— 基础数据 ——
   if (path === '/api/subjects') {

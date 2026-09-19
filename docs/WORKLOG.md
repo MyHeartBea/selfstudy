@@ -146,3 +146,25 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 ④**知识点每页 9**（pageSize 10→9，三列网格恰好 3×3，sizes [9,18,45,90]）。
 ⑤**练习页高级筛选下拉被裁**（用户截图实测）：根因是 `details.adv-filter` 放在 `.deploy` 玻璃卡内，`gcard-body` 的 `overflow:hidden`（流光裁切用）把 UiSelect 下拉菜单整个裁掉。修法 = 提前闭合 GlassCard，把筛选挪出为独立 `.card.card-pad` 纸片（普通 .card 无 overflow 裁切）。真机确认 adv-filter 已不在 gcard-body 内。
 测试：后端 153 + ruff 全绿、前端 61 + E2E 31 全绿；真机四页 DOM 验收（倒计时 91 天/点卡出详情/portrait 词、page_size=9、adv-filter 出卡）。
+
+## 2026-09-19 · 英语作文 AI 批改批（新会话接管后的第一个功能批）
+交接后先确认两件事：`EXAM_DATE=2026-12-19`（用户给的预计初试日）写进 `backend/.env` 并重启后端（`/api/stats` 实测 `days:91`）；功能选型由用户点定「英语作文批改」。
+
+**后端**（`app/services/ai_essay.py` + `app/routers/essay.py`，迁移 **v10** 新增 `essay_records`）：
+- 四型评分档 `ESSAY_KINDS`（e1/e2 × 小/大作文，10/20/10/15 分）+ 五档与零分档区间写进 prompt；`normalize_essay_grade` 钳制分数、band 缺失按分数兜底、**四维分和与总分偏差 >1 分时按权重（内容.4/结构.2/语言.3/格式.1）重算**、丢弃 `original` 为空的改错项、字符串字段按换行规整成列表。
+- 手写稿照片**逐张** `_vision_extract_text` 转录后合并再走文本批改（守第 5 节"先提文字再分析"）；视觉指令要求第 1 行输出【题目】、正文**原样转录**、看不清写 `[?]`、**严禁替学生改错词**（否则批改等于自问自答）。转录通道与 `/ai/ocr` 一致：`_vision_providers()` 顺序回退 + 本地 Windows OCR 兜底。
+- `POST /api/essays/grade`（text 优先，`persist` 默认存档并回 `record_id`）、`GET /api/essays`（kind/分页，`_row_brief` 带 kind_name + excerpt）、`GET|DELETE /api/essays/{id}`。
+- **后端测试** `tests/test_essay.py` 12 个（归一化各分支 + API 全流程），后端 **165** 全绿。
+
+**前端**：录入页第三个 Tab「英语作文批改」（`components/EssayPanel.vue`，粘贴照片走 CaptureView 的 essay 分流）+ 档案页 `/essays`（`views/EssayView.vue`，整卡可点 + 分数趋势条 + 印章空态）+ 结果组件 `EssayGradeResult.vue`（分数印/四维 bar/**逐词 diff**）+ `utils/essayDiff.js`（LCS 逐词，标点随词，避免 `home.` vs `home` 误判两处改动）。"存入错题库"走普通错题（`question_type=solution`），**先匹配「英语」科目，匹配不到直接 toast 拒绝**——`subject_id` 是必填 int，传 null 会被 pydantic 422。
+- 顺手补 `AppLayout` 的 `LIBRARY_NAV`：`/papers` 真题库**原本没有导航入口**（只能手输 URL），与 `/essays` 一起补上。
+
+**踩坑（都是会被静默吞掉的那类）**：
+1. `from app.services.ai_service import _chat_json` 会把函数**绑死在原模块**，`patch.object(ai_service, "_chat_json")` 打不中 → 单测在 CI 里真调了 DeepSeek（返回 402）。改成 `import ai_service` 后按模块属性调用（`_vision_extract_text` 同理）。
+2. 模板里写 `**原样转录**` 会把星号显示出来（不是 markdown 上下文）；`<GlassCard>` 用了没 import 只会运行时 undefined，build 不报错。
+3. prettier 会把多语句内联 `@change="a(); b()"` 拆成属性换行 → 3 个单测当场红。改成具名方法 `onImagePicked(event)`。
+4. `error()` 返回**真实 HTTP 状态码**（400/404），测试别只断言 body 里的 code。
+5. TestClient 不进 lifespan，`setUpClass` 里必须显式 `init_database()`，否则 `no such table: essay_records`。
+
+**验证**：后端 165 + ruff check/format 干净；前端 eslint(0 warning) + prettier + Vitest **70** + `npm run build`；E2E **37** 全绿（`card-click` 新增作文卡整卡可点与"删除只弹确认框、确认后卡片换成空态"两条真命中用例，`render-smoke` 加 `/essays`）。生产 8000 重启后真机自查：`/essays` 浅色（印章空态/Dock 高亮正确）、`/capture` 深色作文 Tab，零 console/page 错误。
+⚠️ **未验到的部分**：DeepSeek 与智谱两把 key 目前都是 `402 Insufficient Balance`，**真实批改的 prompt 效果无法端到端确认**（代码路径到 AI 调用前正常，失败会以 502 + 明确 message 返回）。充值后需补一次真机批改。

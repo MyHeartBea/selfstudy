@@ -35,6 +35,8 @@ const LIBRARY_NAV = [
   { path: '/vocab', title: '生词本', full: '生词本', icon: 'book' },
   { path: '/knowledge', title: '知识点', full: '知识点库', icon: 'layers' },
   { path: '/formulas', title: '公式', full: '公式背诵', icon: 'sigma' },
+  { path: '/papers', title: '真题库', full: '真题库', icon: 'notebook' },
+  { path: '/essays', title: '作文', full: '作文档案', icon: 'pencil' },
   { path: '/subjects', title: '科目指南', full: '科目指南', icon: 'compass' },
 ]
 

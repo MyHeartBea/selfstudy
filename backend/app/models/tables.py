@@ -196,6 +196,19 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_base_subject_subject ON knowledge_base(
 CREATE INDEX IF NOT EXISTS idx_knowledge_base_created_at ON knowledge_base(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_formula_items_category ON formula_items(category);
 CREATE INDEX IF NOT EXISTS idx_mistake_tag_map_tag ON mistake_tag_map(tag);
+
+-- 英语作文批改存档（v10）：AI 按考研评分档批改的记录（转录文本 + 完整批改 JSON）
+CREATE TABLE IF NOT EXISTS essay_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT DEFAULT 'e2_long',
+    prompt_text TEXT DEFAULT '',
+    essay_text TEXT DEFAULT '',
+    score INTEGER DEFAULT 0,
+    max_score INTEGER DEFAULT 15,
+    result_json TEXT DEFAULT '{}',
+    created_at DATETIME
+);
+CREATE INDEX IF NOT EXISTS idx_essay_records_kind ON essay_records(kind);
 """
 
 MISTAKE_COLUMNS = (

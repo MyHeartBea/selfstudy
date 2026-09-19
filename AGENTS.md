@@ -12,7 +12,7 @@
 - 仓库根 = `D:\km-v2`
 - 后端：`backend/`（入口 `backend/main.py`，挂 `frontend/dist`，监听 127.0.0.1:8000）
 - 前端：`frontend/`（源码 `src/`，构建产物 `frontend/dist`）
-- 数据：`data/kaoyan_mistakes.db`（SQLite；迁移版本门控 v8；启动前自动备份保留 20 份）
+- 数据：`data/kaoyan_mistakes.db`（SQLite；迁移版本门控 v10；启动前自动备份保留 20 份）
 - 文档：`docs/`（api.md / architecture.md / NEW_SESSION.md / **WORKLOG.md 工作日志** / notes/）
 - 视觉脚本：`scripts/vision_request.py`
 
@@ -32,9 +32,9 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（148 个）
-cd frontend && npm test                                  # Vitest 61 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
-cd frontend && npm run test:e2e                          # Playwright 31 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（165 个）
+cd frontend && npm test                                  # Vitest 70 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd frontend && npm run test:e2e                          # Playwright 37 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
 cd backend && ruff check app tests && ruff format --check app tests
@@ -47,7 +47,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > 单测用 `trigger('click')` 直接派发事件、**绕开命中测试**，所以永远抓不到）；
 > ②**真 paste 事件**——智能录入多图暂存（原生 `ClipboardEvent` + `DataTransfer`），并断言
 > **解析结果真的渲染出来**（`.ep-bilingual` / 译文），而不只是"请求发出去了"；
-> ③**渲染烟测**——10 条主路由在真浏览器渲染且零 console/page 错误（HTTP 200 是假阳性：SPA 空壳也回 200）。
+> ③**渲染烟测**——11 条主路由在真浏览器渲染且零 console/page 错误（HTTP 200 是假阳性：SPA 空壳也回 200）。
 > 本机默认用**系统 Chrome**（`channel: 'chrome'`，不下载几百 MB 浏览器），
 > `E2E_CHROME=0` 可切回自带浏览器；CI 单独 job 装官方 chromium。
 > 默认端口 **5274**（刻意与开发端口 5174 错开，避免 `reuseExistingServer` 静默复用旧 checkout 的 dev server）。
@@ -122,6 +122,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 | `REVIEW_DAILY_LIMIT` | `50` | 每日复习配额（含新题）；`0` = 不限 |
 | `SLOW_REQUEST_MS` | `3000` | 超过则日志 WARN，并计入 `/api/health` 的慢请求统计 |
 | `PAPERS_DIR` | `D:\km-v2\真题` | 真题库扫描根目录 |
+| `EXAM_DATE` | `2026-12-19` | 考研初试日期（统计页倒计时）；非法日期前端静默不显示 |
 
 > 约定：视觉**首选 DeepSeek** `deepseek-v4-flash-vision-exp`（走 `AI_API_KEY` 同一把 DeepSeek key，已在 `GET /v1/models` 确认可用）。当前 `.env` 的 `AI_VISION_MODEL` 为智谱 `glm-4.6v-flash`。改视觉时以 `.env` 实际值为准，并遵循下方「先提文字再分析」。
 
@@ -257,6 +258,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - **生词本**（英语）：闪卡快刷（认识→1/2/4/7/15/30/60 天阶梯，模糊→明天，不认识→留在队列）；批量导入词表；掌握度墨点；掌握度分布。
 - **知识点库**：标签同义归一、AI 自动总结、贴图分析、服务端分页；知识笺卡片墙（科目色脊+摘要+关联标签）。
 - **公式背诵**：分类 / 搜索 / 过卡循环背诵模式（没记住排队尾直到全会）；分类彩色印章。
+- **英语作文批改**（迁移 v10，`essay_records` 表）：录入页第三个 Tab「英语作文批改」→ `POST /api/essays/grade`（手写稿照片**逐张** `_vision_extract_text` 转录后合并，再走文本批改；同样遵守第 5 节"先提文字再分析"，禁止单次超大视觉生成）→ 按考研四型（e1/e2 × 小/大作文）五档评分，`ai_essay.normalize_essay_grade` 钳制分数、按档位兜底 band、四维分和与总分偏差超 1 分时按权重（内容.4/结构.2/语言.3/格式.1）重算。`persist` 默认存档到 `essay_records`，档案页 `/essays`（整卡可点看详情、逐词 diff 用 `utils/essayDiff.js` 的 LCS）。"存入错题库"走普通错题（`question_type=solution`，科目自动匹配「英语」，**匹配不到就拒绝并 toast**，因为 `subject_id` 是必填 int）。
 - **科目指南**：各科复习重点与方法建议（政治 / 英语已预置默认档案，可编辑）；首字印章+顶部色条。
 - **统计**：Bento 网格——英雄卡（今日待复习+进度环+连续复习火苗章+正确率/掌握度徽章）、瓷砖、今日速览条、SVG 趋势、**复习负荷预报（`/api/reviews/forecast`）**、AI 错因周报、**模考成绩趋势**、热力图、薄弱知识点、题型/来源/科目分析（两张旧表已合并为科目分析墨条；**不再展示二级科目统计**）。
 - **前端体验**：墨纸印/墨韵2.0 设计系统、启动动画、按钮涟漪、复习礼花、命令面板（Ctrl+K 全局搜索+快捷动作）、`?` 快捷键速查、图片灯箱、深色模式（墨漫纸面 rAF 圆形扩散换肤，未手动选择时跟随系统）、搜索高亮（Highlight API）、打印样式。
@@ -274,7 +276,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > **历史批次记录（什么时候干了什么、批次明细、踩坑叙事）已迁至 `docs/WORKLOG.md`** —— 本文件只放约束与规定，新批次完成后在 WORKLOG.md 末尾追加一节，不要再往这里堆。
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
-- 数据库迁移已到 **v9**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image）；启动前自动备份保留 20 份。
-- 测试基线：**后端 148、前端 Vitest 61、E2E 31**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
+- 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。
+- 测试基线：**后端 165、前端 Vitest 70、E2E 37**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

@@ -16,6 +16,7 @@ from app.config import settings
 from app.database import init_database
 from app.routers import (
     ai,
+    essay,
     formulas,
     knowledge,
     mistakes,
@@ -147,6 +148,7 @@ app.include_router(transfer.router, dependencies=[Depends(verify_api_token)])
 app.include_router(reviews.router, dependencies=[Depends(verify_api_token)])
 app.include_router(ai.router, dependencies=[Depends(verify_api_token)])
 app.include_router(papers.router, dependencies=[Depends(verify_api_token)])
+app.include_router(essay.router, dependencies=[Depends(verify_api_token)])
 
 # 错题题干配图静态访问（data/images/）
 from app.services.mistake_service import _images_dir  # noqa: E402

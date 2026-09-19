@@ -1,0 +1,196 @@
+"""考研英语作文批改接口：/api/essays。"""
+
+import json
+import time
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, Query
+
+from app.config import settings
+from app.database import get_connection
+from app.responses import error, ok
+from app.schemas import AiEssayRequest
+from app.security import ai_rate_limit
+from app.services import ai_essay, local_ocr
+from app.services.ai_essay import ESSAY_KINDS
+from app.services.ai_service import AiNotConfigured
+
+from app.routers.ai import _ai_error_message, _vision_providers, _vision_timeout_for
+
+router = APIRouter(prefix="/api/essays", tags=["作文"])
+
+
+def _clean_images(body: AiEssayRequest) -> List[str]:
+    images = [str(img).strip() for img in body.images if str(img or "").strip()]
+    if not images and body.image_base64.strip():
+        images = [body.image_base64.strip()]
+    return images
+
+
+def _transcribe(images: List[str], started: float) -> tuple:
+    """手写稿 → 转录文本：视觉通道按序回退，全败降级本地 OCR。
+
+    返回 (text, error_message)。遵循「先提文字再分析」，禁止单次超大视觉生成。
+    """
+
+    def remaining() -> float:
+        return max(0.0, settings.AI_OCR_TOTAL_TIMEOUT - (time.monotonic() - started))
+
+    last_error = ""
+    for vision_model, vision_base_url, vision_api_key in _vision_providers():
+        if remaining() <= 2:
+            break
+        try:
+            text = ai_essay.extract_essay_text(
+                images,
+                timeout=_vision_timeout_for(vision_model, remaining()),
+                model=vision_model,
+                base_url=vision_base_url,
+                api_key=vision_api_key,
+            )
+        except Exception as exc:
+            last_error = str(exc)
+            continue
+        if text:
+            return text, ""
+    if local_ocr.is_available():
+        parts = []
+        for img in images:
+            try:
+                got = local_ocr.recognize_base64(img)
+            except Exception as exc:
+                last_error = last_error or str(exc)
+                continue
+            if got:
+                parts.append(got)
+        text = "\n\n".join(parts)
+        if text:
+            return text, ""
+    return "", last_error or "视觉通道与本地 OCR 均未能提取文字"
+
+
+@router.post("/grade", dependencies=[Depends(ai_rate_limit)])
+def grade_essay(body: AiEssayRequest):
+    """批改一篇英语作文：图片先原样转录，再按考研评分档批改并存档。"""
+    started = time.monotonic()
+    kind = body.kind if body.kind in ESSAY_KINDS else "e2_long"
+    essay_text = body.text.strip()
+    transcript_warning = ""
+    if not essay_text:
+        images = _clean_images(body)
+        if not images:
+            return error(400, "请提供作文图片或直接粘贴作文文本")
+        try:
+            essay_text, transcript_warning = _transcribe(images, started)
+        except Exception as exc:
+            return error(502, _ai_error_message(exc))
+        if not essay_text:
+            return error(502, f"作文图片识别失败：{transcript_warning}")
+    try:
+        result = ai_essay.grade_essay(
+            essay_text,
+            kind,
+            prompt_text=body.prompt_text,
+            instruction=body.instruction,
+            timeout=max(5, int(settings.AI_TIMEOUT)),
+        )
+    except AiNotConfigured:
+        return error(400, "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY 等")
+    except Exception as exc:
+        return error(502, _ai_error_message(exc))
+
+    record_id = None
+    if body.persist:
+        conn = get_connection()
+        try:
+            cur = conn.execute(
+                "INSERT INTO essay_records (kind, prompt_text, essay_text, score, max_score,"
+                " result_json, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))",
+                (
+                    kind,
+                    body.prompt_text.strip(),
+                    essay_text,
+                    result["score"],
+                    result["max_score"],
+                    ai_essay.essay_result_json(result),
+                ),
+            )
+            record_id = cur.lastrowid
+            conn.commit()
+        finally:
+            conn.close()
+    result["record_id"] = record_id
+    if transcript_warning:
+        result["transcript_warning"] = transcript_warning
+    return ok(result, "批改完成")
+
+
+def _row_brief(row) -> dict:
+    return {
+        "id": row["id"],
+        "kind": row["kind"],
+        "kind_name": (ESSAY_KINDS.get(row["kind"]) or {}).get("name", ""),
+        "prompt_text": row["prompt_text"],
+        "score": row["score"],
+        "max_score": row["max_score"],
+        "created_at": row["created_at"],
+        "excerpt": (row["essay_text"] or "")[:80],
+    }
+
+
+@router.get("")
+def list_essays(
+    kind: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(15, ge=1, le=100),
+):
+    """作文批改历史（按时间倒序，服务端分页）。"""
+    conn = get_connection()
+    try:
+        where = ""
+        params: list = []
+        if kind and kind in ESSAY_KINDS:
+            where = "WHERE kind = ?"
+            params.append(kind)
+        total = conn.execute(f"SELECT COUNT(*) AS c FROM essay_records {where}", params).fetchone()[
+            "c"
+        ]
+        rows = conn.execute(
+            f"SELECT * FROM essay_records {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            [*params, per_page, (page - 1) * per_page],
+        ).fetchall()
+        return ok({"items": [_row_brief(r) for r in rows], "total": total})
+    finally:
+        conn.close()
+
+
+@router.get("/{essay_id}")
+def get_essay(essay_id: int):
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM essay_records WHERE id = ?", (essay_id,)).fetchone()
+        if row is None:
+            return error(404, "作文记录不存在")
+        try:
+            result = json.loads(row["result_json"] or "{}")
+        except (TypeError, ValueError):
+            result = {}
+        brief = _row_brief(row)
+        brief["essay_text"] = row["essay_text"]
+        brief["result"] = result
+        return ok(brief)
+    finally:
+        conn.close()
+
+
+@router.delete("/{essay_id}")
+def delete_essay(essay_id: int):
+    conn = get_connection()
+    try:
+        cur = conn.execute("DELETE FROM essay_records WHERE id = ?", (essay_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            return error(404, "作文记录不存在")
+        return ok({"deleted": essay_id})
+    finally:
+        conn.close()

@@ -121,6 +121,21 @@ class AiEnglishRequest(BaseModel):
     instruction: str = Field(default="", max_length=5000)
 
 
+class AiEssayRequest(BaseModel):
+    """英语作文批改：图片（手写稿拍照，先原样转录）或直接粘贴作文文本。"""
+
+    images: List[str] = Field(default_factory=list, max_length=10)
+    image_base64: str = Field(default="", max_length=20000000)
+    text: str = Field(default="", max_length=50000)
+    # 作文类型：e1_short / e1_long / e2_short / e2_long
+    kind: str = Field(default="e2_long", max_length=20)
+    # 作文题目/要求（可选，提供后按要点覆盖度批改）
+    prompt_text: str = Field(default="", max_length=10000)
+    instruction: str = Field(default="", max_length=5000)
+    # 是否存档到作文记录（默认存）
+    persist: bool = True
+
+
 class JudgeRequest(BaseModel):
     user_answer: str = Field(min_length=1)
 

@@ -68,6 +68,11 @@ const routes = [
         component: () => import('../views/PapersView.vue'),
       },
       {
+        path: 'essays',
+        name: 'essay-bank',
+        component: () => import('../views/EssayView.vue'),
+      },
+      {
         path: 'design',
         name: 'design-gallery',
         component: () => import('../views/DesignView.vue'),
@@ -93,6 +98,7 @@ const TITLE_MAP = {
   knowledge: '知识点库',
   formulas: '公式背诵',
   'subject-guide': '科目指南',
+  'essay-bank': '作文档案',
 }
 router.afterEach((to) => {
   const title = TITLE_MAP[to.name]
@@ -119,6 +125,7 @@ export const NAV_ORDER = [
   'knowledge',
   'formulas',
   'paper-bank',
+  'essay-bank',
   'practice',
   'subject-guide',
   'design-gallery',

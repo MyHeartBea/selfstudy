@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import request from '../api/request'
 import MistakeForm from '../components/MistakeForm.vue'
 import EnglishAnalysisPanel from '../components/EnglishAnalysisPanel.vue'
+import EssayPanel from '../components/EssayPanel.vue'
 import { getClipboardImage } from '../utils/clipboard'
 import { compressImageFile } from '../utils/image'
 import { createMistakeDraft } from '../composables/mistakeDraft'
@@ -29,6 +30,7 @@ const imageBase64 = ref('')
 const referenceImage = ref('')
 const referenceBase64 = ref('')
 const moreImages = ref([]) // 英语整篇多张原文/选项图（附加主图）
+const essayPanel = ref(null)
 const pasteTarget = ref('main') // 下张粘贴目标：main=继续加主图 / reference=参考图
 const ocrRawText = ref('')
 const aiWarning = ref('')
@@ -234,6 +236,11 @@ function onPaste(event) {
   const file = getClipboardImage(event)
   if (!file) return
   event.preventDefault()
+  // 作文模式：照片归作文台，不改动主图/参考图那套状态
+  if (activeTab.value === 'essay') {
+    essayPanel.value?.addImageFile(file)
+    return
+  }
   activeTab.value = 'image'
   // 主图未就绪时作为主图；已就绪时按当前「粘贴目标」分流：主图(继续追加)或参考图
   if (!previewImage.value) {
@@ -377,13 +384,14 @@ onUnmounted(() => {
         <div class="view-kicker">Smart Capture</div>
         <h2>智能录入</h2>
         <p class="view-desc">
-          粘贴题干或上传图片，可附加解题要求与参考图，AI 按你的思路整理成完整错题。
+          粘贴题干或上传图片，可附加解题要求与参考图，AI
+          按你的思路整理成完整错题；英语作文可拍照手写稿按考研评分档批改。
         </p>
       </div>
     </div>
 
-    <!-- 研墨三步流程轴 -->
-    <div class="ink-steps" aria-hidden="true">
+    <!-- 研墨三步流程轴（作文台自成一套批改流程，不适用） -->
+    <div v-show="activeTab !== 'essay'" class="ink-steps" aria-hidden="true">
       <div class="ink-step" :class="{ active: flowStep === 1, done: flowStep > 1 }">
         <i class="serif">壹</i><span>投料 · 粘贴或上传</span>
       </div>
@@ -412,6 +420,7 @@ onUnmounted(() => {
         :tabs="[
           { name: 'text', label: '粘贴题干' },
           { name: 'image', label: '上传图片' },
+          { name: 'essay', label: '英语作文批改' },
         ]"
       />
 
@@ -436,7 +445,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-else class="tab-body">
+      <div v-else-if="activeTab === 'image'" class="tab-body">
         <div class="capture-actions">
           <label class="btn btn-primary btn-md pick-label">
             <Icon v-if="analyzing" name="refresh" :size="15" class="spin" />
@@ -538,6 +547,11 @@ onUnmounted(() => {
             开始识别并解析
           </UiButton>
         </div>
+      </div>
+
+      <!-- 作文台用 v-show：长篇手写稿/批改结果不能被切 Tab 抹掉 -->
+      <div v-show="activeTab === 'essay'" class="tab-body">
+        <EssayPanel ref="essayPanel" />
       </div>
     </div>
 

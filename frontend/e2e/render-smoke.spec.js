@@ -21,6 +21,7 @@ const ROUTES = [
   { path: '/formulas', marker: /公式/ },
   { path: '/subjects', marker: /科目|指南/ },
   { path: '/papers', marker: /真题|卷/ },
+  { path: '/essays', marker: /作文/ },
 ]
 
 for (const route of ROUTES) {

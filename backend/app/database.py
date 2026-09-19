@@ -130,7 +130,7 @@ def init_database() -> None:
 
 
 # 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描
-MIGRATION_VERSION = 9
+MIGRATION_VERSION = 10
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> Optional[str]:
@@ -271,6 +271,23 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         """
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_exam_questions_paper ON exam_questions(paper_id)")
+
+    # 英语作文批改存档（v10）：旧库升级补建（新库 DDL 已含，IF NOT EXISTS 幂等）
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS essay_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            kind TEXT DEFAULT 'e2_long',
+            prompt_text TEXT DEFAULT '',
+            essay_text TEXT DEFAULT '',
+            score INTEGER DEFAULT 0,
+            max_score INTEGER DEFAULT 15,
+            result_json TEXT DEFAULT '{}',
+            created_at DATETIME
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_essay_records_kind ON essay_records(kind)")
 
     _ensure_math_categories(conn)
     _ensure_english_categories(conn)

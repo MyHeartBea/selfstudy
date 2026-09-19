@@ -13,6 +13,8 @@ import {
   mockApi,
   knowledgeRows,
   formulaRows,
+  essayRows,
+  essayResult,
   guardPageErrors,
   expectAllApiStubbed,
 } from './fixtures.js'
@@ -91,6 +93,57 @@ test.describe('卡片整块可点', () => {
     await card.locator('.formula-preview').click()
 
     await expect(page.getByRole('dialog').locator('.modal-title')).toHaveText(formulaRows[0].title)
+
+    expectAllApiStubbed(calls)
+    expect(errors, `页面报错：${errors.join(' | ')}`).toHaveLength(0)
+  })
+
+  test('点作文卡正文打开批改详情（逐词改错要真渲染）', async ({ page }) => {
+    const errors = guardPageErrors(page)
+    const calls = await mockApi(page)
+    await page.goto('/essays')
+
+    const card = page.locator('.ea-card', { hasText: essayRows[0].excerpt })
+    await expect(card).toBeVisible()
+    await card.locator('.ea-excerpt').click()
+
+    const dialog = page.getByRole('dialog')
+    // 正向断言标题：详情弹窗与确认弹窗都可能是"某个弹窗"，只断言可见验不出打开了哪个
+    await expect(dialog.locator('.modal-title')).toHaveText('作文批改详情')
+    await expect(dialog.locator('.er-score')).toHaveText(String(essayResult.score))
+    // 改错结果必须真的落到 DOM：LCS 逐词拆片，只有 go→goes 这一处变动
+    await expect(dialog.locator('.er-corr-item .d-del')).toHaveText('go')
+    await expect(dialog.locator('.er-corr-item .d-ins')).toHaveText('goes')
+
+    expectAllApiStubbed(calls)
+    expect(errors, `页面报错：${errors.join(' | ')}`).toHaveLength(0)
+  })
+
+  test('点删除按钮只弹确认框，确认后卡片消失（@click.stop 生效）', async ({ page }) => {
+    const errors = guardPageErrors(page)
+    let deleted = false
+    const calls = await mockApi(page, {
+      '/api/essays': () =>
+        deleted ? { items: [], total: 0 } : { items: essayRows, total: essayRows.length },
+      '/api/essays/301': ({ method }) => {
+        if (method === 'DELETE') deleted = true
+        return { ...essayRows[0], essay_text: essayResult.raw_transcript, result: essayResult }
+      },
+    })
+    await page.goto('/essays')
+
+    const card = page.locator('.ea-card', { hasText: essayRows[0].excerpt })
+    await card.locator('.ea-del').click()
+
+    // 打开的是确认框（标题即"详情没开"的正向证明），不是作文详情弹窗
+    const confirm = page.getByRole('dialog')
+    await expect(confirm.locator('.modal-title')).toHaveText('删除这条作文记录？')
+    await expect(confirm.locator('.confirm-msg')).toContainText('不可恢复')
+
+    await confirm.getByRole('button', { name: '确定' }).click()
+    // 断言"结果已渲染"而不是请求发过：删除后列表换成空态
+    await expect(page.getByText('还没有批改记录')).toBeVisible()
+    await expect(card).toHaveCount(0)
 
     expectAllApiStubbed(calls)
     expect(errors, `页面报错：${errors.join(' | ')}`).toHaveLength(0)
