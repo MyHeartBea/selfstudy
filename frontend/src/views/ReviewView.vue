@@ -1126,12 +1126,42 @@ onUnmounted(() => {
   text-align: center;
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-xl);
-  animation: done-in 0.5s var(--spring) both;
+  /* 完成页编舞（Scroll Morph 案例的队形思想，一次性播放）：
+     容器只做薄纱显影 -> 标题/小结/积压/操作按 --stagger-2 逐段聚拢 ->
+     印章最后落下收束（呼应文案「朱砂印为证」）。reduced-motion 由
+     base.css 全局规则压停，各段直接落末帧。 */
+  animation: done-veil var(--dur-2) var(--ease-enter) both;
 }
-@keyframes done-in {
+@keyframes done-veil {
   from {
     opacity: 0;
-    transform: translateY(22px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+  }
+}
+.done-title,
+.done-sub,
+.done-backlog,
+.done-actions {
+  animation: gather-in var(--dur-4) var(--ease-spring) both;
+}
+.done-title {
+  animation-delay: var(--stagger-2);
+}
+.done-sub {
+  animation-delay: calc(var(--stagger-2) * 2);
+}
+.done-backlog {
+  animation-delay: calc(var(--stagger-2) * 3);
+}
+.done-actions {
+  animation-delay: calc(var(--stagger-2) * 4);
+}
+@keyframes gather-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.92);
   }
   to {
     opacity: 1;
@@ -1156,7 +1186,9 @@ onUnmounted(() => {
     inset 0 2px 0 rgba(255, 255, 255, 0.25);
   animation:
     stamp-in 0.6s var(--spring) both,
-    stamp-thud 0.3s var(--ease) 0.38s;
+    stamp-thud 0.3s var(--ease) both;
+  /* 印章在内容聚拢完之后才落下（第 5 拍），thud 紧跟 stamp-in 落地 */
+  animation-delay: calc(var(--stagger-2) * 5), calc(var(--stagger-2) * 5 + 0.6s);
   margin-bottom: 8px;
 }
 @keyframes stamp-in {

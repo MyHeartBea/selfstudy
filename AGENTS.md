@@ -301,3 +301,15 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ⑩**加载失败态与空态分家**：新增 `ui/UiLoadError.vue`，六个整屏页（错题/知识点/公式/生词/复习/卷库）不再把取数失败伪装成"暂无数据"（详见 6.5 那条；`ReviewView` 尤其要紧——失败会被当成"今天已经刷完"）。顺带修出：`MistakeListView` 漏解构 `loadError` 导致错误 UI 永不渲染、`FormulaView` 用 `<Icon>` 却没 import 导致背诵完成页图标静默消失、`ReviewView` 快捷键面板里 9 个 `↵` 与 `MistakeListView` 难度 chip 的 `★` 字符图标（改成 `icons.js` 新增的 `star` 实心五角星 + `aria-label`/`aria-pressed`）。
   ⑪**这类 bug 现在有测试兜了**：`tests/templateBindings.test.js` 用 Vue 编译器扫全量 SFC（未解析的模板标识符 + 未 import 的组件），带幽灵变量自检；顺手清掉 `EnglishAnalysisPanel` 里最后两个字符图标（选项正确标记的 `✓` 换成 `<Icon name="check">`、写入 `approach` 的 `❌ ` 前缀换成「【答错】」）。
   测试：**后端 148、前端 61 + E2E 31**（`--workers=2` 下全绿；单 worker 会因并发争抢假红）。
+
+- **2026-09-19 前端设计质量批次（impeccable + design-taste-frontend 双 skill 走查后，skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`）**：
+  ①**三级文字对比度达标 WCAG AA**：`--ink-3` 浅 `#9a917d→#726852`、深 `#7c7361→#93897a`——旧值在 surface 上只有约 3:1，全站占位符/微注/「共 N 条」不达 4.5:1；换后 bg/surface/surface-2 三种底全部 ≥4.5:1，且与 `--ink-2` 仍保一档明度差；
+  ②**页首墨迹揭示编排**（base.css）：`.view-hero` 四段级联（眉标淡入 → 大标题 clip-path 自左向右展开 → 描述上浮 → 操作行淡入），全部引用 `--dur/--stagger/--ease` 令牌，`prefers-reduced-motion: no-preference` 包裹，初始态只写在 keyframes 里配 `fill: both`（禁动画环境直接落末帧，不会白屏标题）；**只许作用于 view-hero 子元素，不许挪到 `.page`**（CSS 动画压内联 transform 的旧坑）；
+  ③**错题列表头部 6 按钮 → 3 控件**：自主练习升 primary（唯一主 CTA），导出/打印/Anki/导入收进「导出与工具」UiDropdown；隐藏 file input 改 `ref` 触发（复用 `useImportExport` 现成的 `fileInput`）；
+  ④**两个概念性动效锚点**：统计页大数字 `ink-bloom` 墨晕显影（blur+scale 一次性，与 useCountUp 叠加）；复习完成页编舞 = 容器薄纱 → 标题/小结/积压/操作按 `--stagger-2` 逐段 `gather-in` → 印章第 5 拍最后落下（呼应「朱砂印为证」，原来的印章是和内容同时出现的）；
+  ⑤**动效硬编码收编**：`cubic-bezier(0.22,0.8,0.36,1)` 就是 `--ease` 的手写原文，4 处（UiButton×2 / MistakeListView×2 / FormulaView）收编为 `var(--ease-enter)`，`0.2s→var(--dur-2)`；**墨韵编排家族（`0.22,1.12` 系列、0.5-1s 大位移）是刻意手感，保留不收**；
+  ⑥杂项：`.page` 对齐 `var(--content-max)`（1200→1150）、`.field-input` 加 `caret-color: var(--accent)`、打印块补全全部新动效的末帧豁免；
+  ⑦**/design 画廊**新增「动效 · 页首墨迹揭示」节（`:key` 重播样例 + 全站三锚点清单）。
+  **有意保留**（skill 建议砍但属于品牌件，别再"修"）：英文眉标 `view-kicker`（全站报头装置）、自定义光标 AppCursor（用户点名要的效果）。
+  ⚠️ **E2E 不要和浏览器截图/自动化会话并行跑**：资源争抢会假红 8 个（capture/card-click/render-smoke 全中，症状全是"element not found"；单独重跑 1 分钟全绿）。
+  测试：后端 148 未动、前端 61 + E2E 31 全绿。

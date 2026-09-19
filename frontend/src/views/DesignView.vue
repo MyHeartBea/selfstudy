@@ -86,6 +86,9 @@ async function askConfirm() {
   })
   if (ok) toast.success('已删除（演示）')
 }
+
+// 页首编排样例的重播钥匙：换 key 重新挂载 h2，ink-reveal 就会再播一次
+const revealKey = ref(0)
 </script>
 
 <template>
@@ -125,6 +128,28 @@ async function askConfirm() {
           A/B/C/D，数字答案带容差判分。数字使用等宽排版 <span class="num">0123456789</span>。
         </p>
       </div>
+    </section>
+
+    <!-- 动效 -->
+    <section class="sec">
+      <h2>动效 · 页首墨迹揭示</h2>
+      <div class="view-hero demo-hero">
+        <div class="view-hero-copy">
+          <div class="view-kicker">Ink Reveal</div>
+          <h2 :key="revealKey">今日待复习 107</h2>
+          <p class="view-desc">
+            换页时页首四段按 --stagger-2 级联，大标题以 clip-path 自左向右展开。
+          </p>
+        </div>
+        <div class="header-actions">
+          <UiButton size="sm" variant="outline" @click="revealKey++">重播揭示</UiButton>
+        </div>
+      </div>
+      <p class="cap">
+        全站三个动效锚点：页首四段级联（本样例，换页时自动播放）· 统计页大数字墨晕显影 ·
+        复习完成页「内容聚拢、落章收束」。全部引用 --dur / --stagger / --ease 令牌，
+        prefers-reduced-motion 下由 base.css 全局规则压停直接落末帧，打印快照强制末帧。
+      </p>
     </section>
 
     <!-- 玻璃卡与骑缝 -->
@@ -387,6 +412,12 @@ h1 {
 .cap {
   font-size: 12.5px;
   color: var(--ink-3);
+}
+
+/* 页首编排样例：直接复用全站 .view-hero（含入场动画），只收窄占位 */
+.demo-hero {
+  max-width: 640px;
+  margin-bottom: 14px;
 }
 
 .swatches {

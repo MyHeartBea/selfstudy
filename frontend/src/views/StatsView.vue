@@ -880,6 +880,22 @@ onBeforeUnmount(() => {
   color: var(--accent);
   letter-spacing: -0.02em;
   text-shadow: 0 2px 24px color-mix(in srgb, var(--accent) 22%, transparent);
+  /* 英雄区唯一动效锚点：大数字墨晕显影（从虚到实），与 useCountUp 的
+     数字滚动叠加 —— easylog 案例的结论：动效要讲概念（今日分量落纸），
+     而不是再添一个装饰。一次性播放，reduced-motion 由全局规则压停。 */
+  animation: ink-bloom var(--dur-5) var(--ease-enter) 0.12s both;
+}
+@keyframes ink-bloom {
+  from {
+    opacity: 0;
+    filter: blur(10px);
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: scale(1);
+  }
 }
 .hero-delta {
   font-size: 13px;

@@ -128,6 +128,7 @@ img {
   background: var(--surface);
   font-size: 13.5px;
   color: var(--ink);
+  caret-color: var(--accent);
   outline: none;
   transition:
     border-color 0.15s,
@@ -167,7 +168,7 @@ textarea.field-input {
    transform 属性 —— 之前 .page 的 translateY 淡入会把 JS 写的 translate3d
    水平位移整段吃掉，这就是"换页动画方向不对/根本没动"连修五次的真因。 */
 .page {
-  max-width: 1200px;
+  max-width: var(--content-max);
   margin: 0 auto;
   padding: 28px 32px 64px;
 }
@@ -240,6 +241,59 @@ textarea.field-input {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+/* ── 页首入场编排（墨迹揭示）──────────────────────────────────────────
+   换页时容器由 AppLayout.playPageEnter 平移，页首内四段再按 --stagger-2
+   级联：kicker 淡入、大标题自左向右"墨迹展开"（clip-path）、描述上浮、
+   操作行淡入。一屏只保留这一个动效锚点，其余内容交给 v-reveal。
+   - 只作用于 view-hero 子元素、绝不碰 .page：CSS 动画在层叠里会压住内联
+     transform，套到页面根上会把 JS 换页位移整段吃掉（连修五次的旧坑）；
+   - 初始态只写在 keyframes 里并配 fill both：reduced-motion 全局把时长压成
+     0.01ms 后直接落到末帧，不会出现"永远看不见的标题"；
+   - 标题揭示的负 inset 是给宋体上伸部/下伸部留的余量，终态不做任何裁切。 */
+@media (prefers-reduced-motion: no-preference) {
+  .view-kicker {
+    animation: hero-fade-up var(--dur-3) var(--ease-enter) both;
+  }
+  .view-hero h2 {
+    animation: ink-reveal var(--dur-5) var(--ease-enter) var(--stagger-2) both;
+  }
+  .view-desc {
+    animation: hero-fade-up var(--dur-3) var(--ease-enter) calc(var(--stagger-2) * 2) both;
+  }
+  .header-actions {
+    animation: hero-fade-in var(--dur-3) var(--ease-enter) calc(var(--stagger-2) * 3) both;
+  }
+}
+
+@keyframes ink-reveal {
+  from {
+    clip-path: inset(-0.18em 102% -0.18em -0.05em);
+  }
+  to {
+    clip-path: inset(-0.18em -0.05em -0.18em -0.05em);
+  }
+}
+
+@keyframes hero-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hero-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* 卡片 -> 纸片 */
@@ -378,6 +432,19 @@ textarea.field-input {
   body {
     background: #fff !important;
     font-size: 12px;
+  }
+  /* 打印是静态快照：入场编排如果还没播完会被截在半途，直接落到末帧 */
+  .view-kicker,
+  .view-hero h2,
+  .view-desc,
+  .hero-value,
+  .done-stage,
+  .done-title,
+  .done-sub,
+  .done-backlog,
+  .done-actions,
+  .stamp {
+    animation: none !important;
   }
   .deck {
     padding: 0 !important;

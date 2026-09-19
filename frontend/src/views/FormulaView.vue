@@ -537,7 +537,7 @@ onMounted(loadFormulas)
   height: 100%;
   border-radius: 999px;
   background: var(--green);
-  transition: width 0.4s cubic-bezier(0.22, 0.8, 0.36, 1);
+  transition: width 0.4s var(--ease-enter);
 }
 .recite-complete {
   display: flex;

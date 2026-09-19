@@ -69,7 +69,7 @@ function spawnRipple(event) {
     border-color 0.15s,
     color 0.15s,
     box-shadow 0.15s,
-    transform 0.09s cubic-bezier(0.22, 0.8, 0.36, 1);
+    transform 0.09s var(--ease-enter);
   user-select: none;
 }
 .btn:active:not(:disabled) {
@@ -91,7 +91,7 @@ function spawnRipple(event) {
     transparent 62%
   );
   transform: scale(0);
-  animation: ripple-run 0.62s cubic-bezier(0.22, 0.8, 0.36, 1) forwards;
+  animation: ripple-run 0.62s var(--ease-enter) forwards;
 }
 @keyframes ripple-run {
   to {

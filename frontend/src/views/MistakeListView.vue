@@ -129,8 +129,31 @@ const detailKey = ref(0)
 const { batchRunning, bulkPause, bulkResume, bulkSetRealExam, bulkSetOther, bulkDelete } =
   useBulkActions({ selectedIds, onDone: loadMistakes })
 
-const { importDialogVisible, pendingImport, importing, exportJson, onImportFile, confirmImport } =
-  useImportExport({ onImported: loadMistakes })
+const {
+  fileInput,
+  importDialogVisible,
+  pendingImport,
+  importing,
+  exportJson,
+  onImportFile,
+  confirmImport,
+} = useImportExport({ onImported: loadMistakes })
+
+// 头部动作收敛为一主一辅一菜单：练习是主 CTA，随机抽题高频，四个低频
+// 导入/导出动作收进菜单 —— 同一决策点可见选项不超过 4 个。
+const toolItems = [
+  { label: '导出 JSON 备份', command: 'export-json', icon: 'download' },
+  { label: '导入 JSON 备份', command: 'import-json', icon: 'upload' },
+  { label: '打印错题集', command: 'print', icon: 'notebook' },
+  { label: '导出 Anki 卡组', command: 'anki', icon: 'layers' },
+]
+
+function runTool(cmd) {
+  if (cmd === 'export-json') exportJson()
+  else if (cmd === 'import-json') fileInput.value?.click()
+  else if (cmd === 'print') printPage()
+  else if (cmd === 'anki') exportAnki()
+}
 
 function openDetail(id) {
   detailId.value = id
@@ -246,7 +269,7 @@ watch(
         <p class="view-desc">统一管理、筛选和复习你的考研错题。</p>
       </div>
       <div class="header-actions">
-        <UiButton variant="outline" @click="startPractice">
+        <UiButton variant="primary" @click="startPractice">
           <Icon name="pencil" :size="15" />
           自主练习
         </UiButton>
@@ -261,28 +284,18 @@ watch(
           <Icon name="refresh" :size="15" />
           随机抽题
         </UiDropdown>
-        <UiButton variant="outline" @click="exportJson">
-          <Icon name="download" :size="15" />
-          导出
-        </UiButton>
-        <UiButton variant="outline" @click="printPage">
-          <Icon name="notebook" :size="15" />
-          打印
-        </UiButton>
-        <UiButton variant="outline" :loading="exportingAnki" @click="exportAnki">
+        <UiDropdown :items="toolItems" @command="runTool">
           <Icon name="layers" :size="15" />
-          Anki 卡组
-        </UiButton>
-        <label class="btn btn-outline btn-md import-label">
-          <Icon name="upload" :size="15" />
-          导入
-          <input
-            type="file"
-            accept=".json,application/json"
-            class="visually-hidden"
-            @change="onImportFile"
-          />
-        </label>
+          导出与工具
+        </UiDropdown>
+        <input
+          ref="fileInput"
+          type="file"
+          accept=".json,application/json"
+          class="visually-hidden"
+          aria-label="导入 JSON 备份文件"
+          @change="onImportFile"
+        />
       </div>
     </div>
 
@@ -655,7 +668,7 @@ watch(
 }
 .fold-enter-active,
 .fold-leave-active {
-  transition: all 0.22s cubic-bezier(0.22, 0.8, 0.36, 1);
+  transition: all var(--dur-2) var(--ease-enter);
 }
 .fold-enter-from,
 .fold-leave-to {
@@ -724,7 +737,7 @@ watch(
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
   background: var(--accent-soft);
   border-radius: var(--r-md);
-  animation: bulk-in 0.2s cubic-bezier(0.22, 0.8, 0.36, 1);
+  animation: bulk-in var(--dur-2) var(--ease-enter);
 }
 @keyframes bulk-in {
   from {
