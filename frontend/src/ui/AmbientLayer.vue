@@ -233,11 +233,22 @@ function unmountInkCanvas() {
     <div class="ink-blob ib1"></div>
     <div class="ink-blob ib2"></div>
     <div class="ink-blob ib3"></div>
-    <canvas ref="inkCanvasEl" class="ink-canvas"></canvas>
     <svg class="mountains" viewBox="0 0 1440 220" preserveAspectRatio="none">
       <path d="M0 200 Q 180 90 360 150 T 720 130 T 1080 160 T 1440 120 V220 H0 Z" opacity=".5" />
       <path d="M0 220 Q 240 150 480 185 T 960 175 T 1440 190 V220 H0 Z" opacity=".8" />
     </svg>
+    <!-- 近景山脊：第三层（更暗更近），滚动视差走自己的速度 -->
+    <svg
+      class="mountains-near"
+      viewBox="0 0 1440 220"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path d="M0 220 Q 260 118 540 184 T 1060 172 T 1440 196 V220 H0 Z" opacity=".9" />
+    </svg>
+    <!-- 雾带：山脚两道纸色薄雾，把三层山隔开（空气透视） -->
+    <span class="mist m1" aria-hidden="true"></span>
+    <span class="mist m2" aria-hidden="true"></span>
     <div class="ink-char c1">研</div>
     <div class="ink-char c2">墨</div>
     <div class="grain"></div>
@@ -311,6 +322,15 @@ function unmountInkCanvas() {
   mix-blend-mode: multiply;
 }
 [data-theme='dark'] .amb-blob {
+  mix-blend-mode: screen;
+}
+/* 极光与墨渍吃同一套主题混色：浅色=颜料沁纸，深色=暗处发亮 */
+:root:not([data-theme='dark']) .aurora,
+:root:not([data-theme='dark']) .ink-blob {
+  mix-blend-mode: multiply;
+}
+[data-theme='dark'] .aurora,
+[data-theme='dark'] .ink-blob {
   mix-blend-mode: screen;
 }
 .b1 {
@@ -436,6 +456,71 @@ function unmountInkCanvas() {
   fill: var(--ink);
 }
 
+/* 近景山脊：第三层（更暗更近、行程更大），与远景山速差拉开层深 */
+.mountains-near {
+  position: absolute;
+  bottom: -12px;
+  left: 0;
+  width: 100%;
+  height: 180px;
+  opacity: 0.075;
+  animation: mountains-near-drift linear both;
+  animation-duration: auto;
+  animation-timeline: scroll(root);
+}
+@keyframes mountains-near-drift {
+  from {
+    transform: translateY(72px);
+  }
+  to {
+    transform: translateY(-96px);
+  }
+}
+[data-theme='dark'] .mountains-near {
+  opacity: 0.12;
+}
+.mountains-near path {
+  fill: var(--ink);
+}
+
+/* 山脚雾带：纸色薄雾横陈两层，空气透视把三层山隔开 */
+.mist {
+  position: absolute;
+  left: -6%;
+  width: 112%;
+  height: 84px;
+  pointer-events: none;
+  filter: blur(16px);
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--bg) 46%, transparent) 42%,
+    color-mix(in srgb, var(--bg) 66%, transparent) 58%,
+    transparent
+  );
+  animation: mist-drift linear both;
+  animation-duration: auto;
+  animation-timeline: scroll(root);
+}
+@keyframes mist-drift {
+  from {
+    transform: translateY(44px);
+  }
+  to {
+    transform: translateY(-52px);
+  }
+}
+.mist.m1 {
+  bottom: 132px;
+  opacity: 0.9;
+}
+.mist.m2 {
+  bottom: 58px;
+  height: 70px;
+  opacity: 0.55;
+  animation-range: cover 0% cover 80%;
+}
+
 /* 墨字水印：与远山反向缓移（滚动叙事的第二层） */
 .ink-char {
   position: absolute;
@@ -473,6 +558,8 @@ function unmountInkCanvas() {
 }
 @media (prefers-reduced-motion: reduce) {
   .mountains,
+  .mountains-near,
+  .mist,
   .ink-char {
     animation: none;
   }

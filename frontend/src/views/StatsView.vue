@@ -319,6 +319,31 @@ onBeforeUnmount(() => {
       <!-- 巨型竖排「今日」：非对称编辑网格的锚（Ink Dynasty 的竖排书法转译）。
            装饰层在左、信息在右，窄屏整体退场。 -->
       <span class="hero-mega serif" aria-hidden="true">今日</span>
+      <!-- 环境字瀑（Ink Dynasty 文字瀑布的静音转译）：几枚宋体字以极低透明度
+           缓落洇散。纯 CSS 合成器动画（零 rAF），reduced-motion / 窄屏隐藏。 -->
+      <div class="mega-fall" aria-hidden="true">
+        <span style="--fx: 6%; --fd: 96s; --fdel: -12s; --fsz: 52px; --fo: 0.05; --frot: 3deg"
+          >研</span
+        >
+        <span style="--fx: 21%; --fd: 78s; --fdel: -51s; --fsz: 30px; --fo: 0.04; --frot: -4deg"
+          >墨</span
+        >
+        <span style="--fx: 38%; --fd: 110s; --fdel: -30s; --fsz: 40px; --fo: 0.045; --frot: 2deg"
+          >题</span
+        >
+        <span style="--fx: 55%; --fd: 88s; --fdel: -67s; --fsz: 26px; --fo: 0.04; --frot: -2deg"
+          >错</span
+        >
+        <span style="--fx: 69%; --fd: 120s; --fdel: -8s; --fsz: 58px; --fo: 0.05; --frot: 4deg"
+          >记</span
+        >
+        <span style="--fx: 84%; --fd: 82s; --fdel: -44s; --fsz: 34px; --fo: 0.04; --frot: -3deg"
+          >忆</span
+        >
+        <span style="--fx: 93%; --fd: 102s; --fdel: -72s; --fsz: 44px; --fo: 0.045; --frot: 2deg"
+          >纸</span
+        >
+      </div>
       <div class="view-hero-copy">
         <div class="view-kicker">Learning Analytics</div>
         <!-- 标题逐行揭示：外层做遮罩，内层做位移（参考稿的 line / line__i 手法） -->
@@ -916,6 +941,79 @@ onBeforeUnmount(() => {
 }
 .view-hero:hover .hero-mega {
   opacity: 0.11;
+}
+/* 巨字入场 = 笔锋显影：自上而下 clip 揭示 + 墨晕聚焦（vertical-rl 的
+   "书写方向"就是自上而下）。fill 用 backwards：播完释放回自然样式，
+   上面的 hover 浮出过渡才不会被动画末帧钉死。reduced-motion 不播。 */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-mega {
+    animation: mega-reveal var(--dur-5) var(--ease-enter) var(--stagger-2) backwards;
+  }
+}
+@keyframes mega-reveal {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    opacity: 0.075;
+    filter: blur(0);
+    clip-path: inset(0 0 -0.12em 0);
+  }
+}
+
+/* 环境字瀑：整层自裁切，字从上缘落入、下缘洇出。压在页首内容之下
+   （z-index 0，内容层 z-index 1），pointer-events 全免。 */
+.mega-fall {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+.mega-fall span {
+  position: absolute;
+  top: 0;
+  left: var(--fx);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: var(--fsz);
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0;
+  user-select: none;
+}
+.stats-page .view-hero > .view-hero-copy,
+.stats-page .view-hero > .header-actions {
+  position: relative;
+  z-index: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mega-fall span {
+    animation: mega-fall var(--fd) linear var(--fdel) infinite;
+  }
+}
+@keyframes mega-fall {
+  0% {
+    transform: translateY(-60px) rotate(var(--frot, 0deg));
+    opacity: 0;
+  }
+  10% {
+    opacity: var(--fo);
+  }
+  80% {
+    opacity: var(--fo);
+  }
+  100% {
+    transform: translateY(330px) rotate(calc(var(--frot, 0deg) * -1));
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce), (max-width: 900px) {
+  .mega-fall {
+    display: none;
+  }
 }
 .stats-page .view-hero {
   /* 给竖排大字让位：信息块整体右移（窄屏由下方媒体查询收回） */

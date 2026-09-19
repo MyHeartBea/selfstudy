@@ -340,3 +340,11 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ③**氛围 blob 有机化 + 主题混色**：drift 关键帧加中途位移（像墨在水里游）；浅色 `mix-blend-mode: multiply`（墨沁进纸）、深色 `screen`（墨在暗处发亮）；
   ④**排版**：`.view-hero h2` 流体字号 `clamp(30px, 2.4vw+16px, 46px)`（10 个页面一齐跟上统计页）；统计页巨型「今日」hover 时 opacity 0.075→0.11（纸下有字，扫过浮出）；
   ⑤**UI**：`[data-theme='dark'] .gcard-body::before` 上缘 8% 白渐变受光边（深场玻璃立起来；浅色不加，会显脏）。
+
+- **2026-09-19 墨韵 3.3 背景与进入动画批（用户点名"学习 motionsites 案例，重点优化背景和进入动画"）**：
+  ①**环境字瀑**（StatsView `.mega-fall`）：Ink Dynasty 文字瀑布的静音转译 —— 统计页页首 7 枚宋体字（研墨题错记忆纸）以 0.04-0.05 透明度自上缘缓落、下缘洇出（60-120s CSS 合成器循环，零 rAF；reduced-motion 与 ≤900px 整层 display:none）。⚠️ 落程用 `translateY(-60px→330px)` **像素**而不是百分比（百分比是元素自身高，不是容器高）；裁切靠 `.mega-fall{overflow:hidden}` 自身，不要给 `.view-hero` 加 overflow（会裁掉 ::after 双细线）；
+  ②**巨字笔锋显影**：`.hero-mega` 入场 = 自上而下 clip 揭示 + blur 8px 聚焦（vertical-rl 的书写方向），`fill: backwards` 播完释放——用 `both` 会把末帧钉死、hover 浮出过渡失效；
+  ③⚠️ **层序规则别用 `:not()` 反选整层子元素**：`.view-hero > :not(.mega-fall)` 会把同为装饰的 `.hero-mega`（absolute）也覆盖成 relative，巨字掉进 flex 流、页首被撑到 556px（实测）。层序只精确给内容块（`.view-hero-copy` / `.header-actions`）；
+  ④**三层远山 + 雾带**（AmbientLayer）：新增 `.mountains-near` 近景山脊（更暗更近、行程更大）+ 两道纸色雾带 `.mist`（空气透视），全部 CSS scroll-driven（`animation-timeline: scroll(root)`）各走各速；
+  ⑤**主题混色补全**：`.aurora` / `.ink-blob` 也吃 multiply（浅）/ screen（深），与 `.amb-blob` 一致；
+  ⑥顺手修掉：AmbientLayer 模板里遗留的**第二个落墨画布**（初版残留在 .ambient 内，与外层 fixed 画布叠了同一个 z-index 白占合成层），已删，全站只剩一个。
