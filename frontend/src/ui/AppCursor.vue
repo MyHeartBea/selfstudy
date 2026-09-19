@@ -145,11 +145,12 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: 50% auto auto 50%;
-  width: 9px;
-  height: 9px;
+  width: 14px;
+  height: 14px;
   border-radius: 50% 50% 50% 0;
   background: var(--accent);
   transform: translate(-50%, -50%) rotate(-45deg);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 /* 按下：墨滴落纸 —— 一圈墨晕从指针向外扩散（一次性） */
 .cur.is-press {
@@ -161,18 +162,18 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 1.5px solid var(--accent);
+  border: 2px solid var(--accent);
   opacity: 0;
   animation: cur-ripple 0.55s var(--ease-exit) forwards;
 }
 @keyframes cur-ripple {
   from {
-    opacity: 0.55;
+    opacity: 0.8;
     transform: scale(1);
   }
   to {
     opacity: 0;
-    transform: scale(2.1);
+    transform: scale(2.4);
   }
 }
 

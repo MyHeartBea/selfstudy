@@ -320,7 +320,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ③**掌握度/遗忘语义化**：错题卡新增 `.ink-due`「今日到期/逾期 N 天 · 墨迹将干」状态章（SM-2 的 next_review_at 到期才渲染，字段缺失静默不渲染；与复习队列"今日到期"同口径 = `due <= 今日 23:59`）；统计页平均掌握度 chip 改为**墨滴**（`.ink-lvl`，opacity=掌握度）；
   ④**统计首屏非对称重构**：巨型竖排「今日」水印（`.hero-mega`，writing-mode vertical-rl + `--fs-mega`）立于页首左，信息块右移（≤900px 整体退场）——Ink Dynasty 竖排书法的转译；
   ⑤**复习完成页升格**：新增 `ui/InkRain.vue` **内容文字雨**（本轮队列题干的真实汉字在卷宗框内缓落晕开；rAF 自停 + visibilitychange 停 + reduced-motion 不渲染；队列题干在内存里直接取，零新增请求）；印章落地后**两圈墨环晕开**（scoped `ink-ring` keyframes，延迟对齐 stamp 落地拍点）；礼花升级为**洒金**（confetti.js 金箔条 2.6:1 + 金/朱砂色板）；
-  ⑥**氛围层**（AmbientLayer）：新增**落墨画布** —— 点击纸面墨滴洇开（window pointerdown 被动监听，Canvas 2D 径向渐变，rAF 自停）；远山/墨字水印改 **CSS scroll-driven** 视差（`animation-timeline: scroll(root)`，Firefox 静态兜底；`.c1/.c2` 的旋转改用独立 `rotate` 属性避免被动画 transform 覆盖）；
+  ⑥**氛围层**（AmbientLayer）：新增**落墨画布** —— 点击纸面墨滴洇开。⚠️ **画布必须 fixed 悬在内容层之上**（`z-index: 1400`，礼花层同款）：初版挂在 `.ambient`（z-index 0）里，墨滴被玻璃卡/不透明容器压住完全不可见（用户实测"点了没反应"）；墨色 spawn 时读一次 `--ink`（深色主题=浅墨，否则深墨画在深底上看不见）；画布 buffer 尺寸用 `clientWidth`（用 innerWidth 会与 CSS 尺寸错位一个滚动条宽）；湿边（咖啡环效应描边）让浅底上有轮廓；远山/墨字水印改 **CSS scroll-driven** 视差（`animation-timeline: scroll(root)`，Firefox 静态兜底；`.c1/.c2` 的旋转改用独立 `rotate` 属性避免被动画 transform 覆盖）；
   ⑦**Dock 磁吸**：图标被指针吸引（只写 `--mag-x/y` 变量、每次 pointermove 一帧 rAF 批处理、先读后写、离场归零、reduced-motion/触屏不绑定）；**光标悬锋**：命中可点元素内芯变毛笔尖（teardrop），按下滴墨涟漪；
   ⑧**纸牌落桌**：v-reveal 入场带随机倾角 —— `.card-grid` 按 nth-child 三拍预设 `--reveal-tilt`（纯 CSS，指令零改动）。
   **刻意不做**（都有理由，别"补"）：BootCalibration 不重画（五轮实测打磨出的撕裂开屏是资产不是负债）；pageFlip 不接入换页（km-flip.css 里记录了 Vue Transition 四连败，JS 单路径是结论）；OKLCH 全量换算（零视觉收益、有回归风险）；字重 300（体积不划算）；卷宗纸感/模考试卷纸（下一批）。
