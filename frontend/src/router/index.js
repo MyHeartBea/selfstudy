@@ -73,6 +73,12 @@ const routes = [
         component: () => import('../views/EssayView.vue'),
       },
       {
+        // 维护页：不进 Dock 导航，由命令面板（Ctrl+K）或直链进入
+        path: 'integrity',
+        name: 'data-integrity',
+        component: () => import('../views/IntegrityView.vue'),
+      },
+      {
         path: 'design',
         name: 'design-gallery',
         component: () => import('../views/DesignView.vue'),
@@ -99,6 +105,7 @@ const TITLE_MAP = {
   formulas: '公式背诵',
   'subject-guide': '科目指南',
   'essay-bank': '作文档案',
+  'data-integrity': '数据体检',
 }
 router.afterEach((to) => {
   const title = TITLE_MAP[to.name]
@@ -128,6 +135,7 @@ export const NAV_ORDER = [
   'essay-bank',
   'practice',
   'subject-guide',
+  'data-integrity',
   'design-gallery',
   'mistake-edit',
 ]

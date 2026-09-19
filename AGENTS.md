@@ -32,9 +32,9 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（227 个）
-cd frontend && npm test                                  # Vitest 111 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
-cd frontend && npm run test:e2e                          # Playwright 43 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（240 个）
+cd frontend && npm test                                  # Vitest 118 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd frontend && npm run test:e2e                          # Playwright 45 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
 cd backend && ruff check app tests && ruff format --check app tests
@@ -103,6 +103,11 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - **全站"按关键词 LIKE"只有一个口径：`search_service.like_pattern()` + `ESCAPE ''`**：`%`/`_` 是用户
   内容而不是查询语法（搜 `50%` 命中一切含 5 的东西就是静默给错数据）。新增可搜字段要复用它，别自己
   拼 `f"%{q}%"`；跨实体搜索也只改 `search_service.search_all`（响应形状已按"分组 + 每组 total"钉好）。
+- **图片引用判定只有一个口径：`integrity_service`**（`GET /api/system/integrity` 与
+  `scripts/clean_orphan_images.py` 都 import 它，脚本不再自带一套规则）。**库里新增带图片的列必须登记进
+  `IMAGE_REF_SOURCES`**，否则那些图会被判成孤儿、`--apply` 就真删掉（真题图示题当初就是这么差点被误删）。
+  按 **basename** 归并引用（错题存 `images/x.png`、真题存 `/images/exam_papers/1/p0.webp`，前缀不一样）。
+  体检页与端点**只读**，删除永远要显式 `--apply`，且自动备份**不含图片目录**（删了找不回来）。
 - **导入判重宁可漏判不可误判**：`mistake_service.question_fingerprint()` 归一后不足 8 字（纯图片题）
   **返回空串 = 不判重、照常入库**。误判的代价是"导入时静默丢题"，比"重复导入翻倍"严重；新增去重时
   保留这条返回空串的语义，并在响应里回 `duplicates:[{index, existing_id}]` + `message` 说明跳过几条。
@@ -283,6 +288,8 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - 实测效果：可导入候选 **1 份 → 59 份**、年份空 0 份、答案配 55/59、无重复。
 - **知识点 ↔ 错题链接（`GET /api/knowledge/linked-mistakes?tag=`）**：按 `mistake_tag_map` 找该知识点下的错题 + 统计（几题/平均掌握/累计答错/今天到期/从未复习）。知识点名与错题标签只有 83/134 同名，所以支持 **`related_tags` 兜底**：名称没直接命中就用关联标签找，响应里 `matched_by`（tag_name/related_tags/none）标明命中方式、`hit_tags` 是真正挂有错题的标签。前端在知识点详情弹窗底部展示（含逐题「练这题」与「练这些题」）。
   - ⚠️ `knowledge_service` 里**不能顶层** `from app.database import mistake_to_dict`：`database.py` 反过来要 import 本模块的 `canonical_tags`，会循环导入。用局部导入（见 `_mistake_to_dict`）。
+- **数据体检页（只读）**：`/integrity`（不进 Dock，命令面板 Ctrl+K「数据体检」可达）显示"没人引用的文件"与
+  "记录指向的图不见了"两张清单，**页面上没有任何删除入口**；判定与巡检脚本同源（见第 3 节）。
 - **全站搜索 / 命令面板**：`GET /api/search?q=&limit=`（`search_service`）一次问错题/知识点/公式/生词/作文，
   空组不返回；`Ctrl+K` 面板的作用域 chips 是**对已取回结果做本地过滤**（不重新请求），
   列表一维（键盘）+ 分组渲染（`visibleSections()` 带扁平下标），落地页统一吃 `?search=`、知识点走 `?tag=`。
@@ -313,6 +320,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 227、前端 Vitest 111、E2E 43**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 71%（门槛 55%）。
+- 测试基线：**后端 240、前端 Vitest 118、E2E 45**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 71%（门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

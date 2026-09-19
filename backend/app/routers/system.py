@@ -9,7 +9,8 @@ from app import metrics
 from app.config import settings
 from app.database import get_connection, list_snapshots, snapshot_database
 from app.responses import error, ok, server_error
-from app.services import review_service, search_service, stats_service
+from app.services import integrity_service, review_service, search_service, stats_service
+from app.services.mistake_service import _images_dir
 
 router = APIRouter(prefix="/api", tags=["系统"])
 
@@ -80,6 +81,27 @@ def search(
     conn = get_connection()
     try:
         return ok(search_service.search_all(conn, q, limit))
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.get("/system/integrity")
+def system_integrity(
+    limit: int = Query(200, ge=1, le=1000, description="每个清单最多返回多少条"),
+    keep_days: float = Query(1.0, ge=0, le=30, description="最近 N 天生成的文件不算孤儿"),
+):
+    """**只读**数据体检：图片文件与库里引用对不对得上。
+
+    两类问题分开报：`orphans`（文件没人引用，内容仍可被 /images/<name> 直接访问）、
+    `missing`（行指向一张不存在的图，页面上就是个破图）。判定口径与
+    `scripts/clean_orphan_images.py` 共用 `integrity_service`，不会两边各说一套。
+    **这个接口不删任何东西**，清理仍然是脚本的 `--apply`（默认 dry-run）。
+    """
+    conn = get_connection()
+    try:
+        return ok(integrity_service.scan(conn, _images_dir(), keep_days=keep_days, limit=limit))
     except Exception as exc:
         return server_error(exc)
     finally:

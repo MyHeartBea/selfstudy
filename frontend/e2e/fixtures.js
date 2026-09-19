@@ -237,6 +237,30 @@ function readBody(request) {
   }
 }
 
+/**
+ * 数据体检（`/api/system/integrity`，只读巡检页）的报告。
+ * 形状照 `integrity_service.scan()`：字段名写错页面会静默显示 0（不报错），
+ * 所以这里的键要与后端逐一对应。
+ */
+export const integrityReport = {
+  referenced: 50,
+  files: 152,
+  bytes_total: 15000000,
+  orphans: [
+    { rel: 'images/dead.png', size: 5000, mtime: '2026-08-01', kind: 'image' },
+    { rel: 'images/_thumbs/dead.webp', size: 900, mtime: '2026-08-02', kind: 'thumb' },
+  ],
+  orphan_total: 102,
+  orphan_bytes: 1123456,
+  orphan_truncated: true,
+  protected_recent: 21,
+  missing: [{ name: 'gone.png', refs: ['mistakes#12'] }],
+  missing_total: 1,
+  unparseable_refs: 0,
+  keep_days: 1,
+  images_dir_exists: true,
+}
+
 export async function mockApi(page, overrides = {}) {
   const calls = []
   // 用正则而不是 glob：glob `**/api/**` 要求 api 后还有 `/`，会漏掉 `/api/subjects`
@@ -344,6 +368,7 @@ function resolver(path, method, overrides) {
   if (path === '/api/formulas') return formulaRows
   // 命令面板的全站搜索：漏打桩会让 Ctrl+K 用例假绿（groups 为空 → 面板只显示"没有匹配结果"）
   if (path === '/api/search') return { q: '中值', limit: 5, total: 5, groups: searchGroups }
+  if (path === '/api/system/integrity') return integrityReport
   if (path === '/api/mistakes') return { items: [], total: 0 }
   if (path === '/api/mistakes/approaches') return []
   if (path === '/api/vocab') return { items: [], total: 0 }

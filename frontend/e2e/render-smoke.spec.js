@@ -22,6 +22,8 @@ const ROUTES = [
   { path: '/subjects', marker: /科目|指南/ },
   { path: '/papers', marker: /真题|卷/ },
   { path: '/essays', marker: /作文/ },
+  // 只读巡检页（不在 Dock 里，直链/命令面板进入）：漏打桩会让它显示成"没查到"
+  { path: '/integrity', marker: /数据体检/ },
 ]
 
 for (const route of ROUTES) {

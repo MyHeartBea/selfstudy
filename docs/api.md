@@ -33,6 +33,14 @@
   - `items` 只给跳转与预览需要的字段（`title`/`subtitle` 是**以命中位置为中心**截的一段摘要，
     换行折叠成一行），不给整条记录 —— 面板不该拉解析全文
   - `q` 里的 `%` `_` 按**字面量**匹配（`search_service.like_pattern` + `ESCAPE '\'`，全站搜的单一口径）
+- `GET /api/system/integrity?limit=200&keep_days=1`：**只读数据体检**（图片文件 <-> 库里引用），
+  **这个接口不删任何东西**。返回 `{referenced, files, bytes_total, orphans:[{rel,size,mtime,kind}],
+  orphan_total, orphan_bytes, orphan_truncated, protected_recent, missing:[{name,refs}], missing_total,
+  unparseable_refs, keep_days, images_dir_exists}`
+  - 两类问题分开报：`orphans` = 文件没人引用（内容仍可被 `/images/<name>` 直接访问）、
+    `missing` = 记录指向一张不存在的图（页面上是破图）
+  - `refs` 是 `["mistakes#12", ...]` 这样的定位串；`kind` ∈ `image|thumb|exam_page`
+  - 判定口径与 `scripts/clean_orphan_images.py` **共用** `integrity_service`（见 AGENTS 第 3 节）
 - `GET /api/snapshots?limit=20`：数据快照列表（启动备份 + 导入前快照）
 - `POST /api/snapshots?label=manual`：手动打一份快照（批量操作前建议先点）
   - `POST /api/mistakes/batch`（`action=delete`）与 `POST /api/import` 会**自动先打快照**，
