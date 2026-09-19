@@ -87,8 +87,13 @@ function onThumbError(item, event) {
       v-for="(img, index) in showList"
       :key="index"
       class="question-image"
+      role="button"
+      tabindex="0"
+      :aria-label="`放大第 ${index + 1} 张题干配图（共 ${previewList.length} 张）`"
       :title="'点击放大（' + (index + 1) + '/' + previewList.length + '）'"
-      @click="openPreview(images.indexOf(img))"
+      @click="openPreview(index)"
+      @keydown.enter.prevent="openPreview(index)"
+      @keydown.space.prevent="openPreview(index)"
     >
       <img
         :src="displaySrc(img)"
@@ -151,6 +156,10 @@ function onThumbError(item, event) {
 .question-image:hover {
   border-color: var(--accent);
   box-shadow: var(--shadow-1);
+}
+.question-image:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .question-image img {
   display: block;

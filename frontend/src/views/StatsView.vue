@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import request from '../api/request'
+import { toast } from '../ui/toast'
 import { sourceTypeColor, subjectColor } from '../composables/useBaseData'
 import { useCountUp } from '../utils/useCountUp'
 import ReviewHeatmap from '../components/ReviewHeatmap.vue'
@@ -256,6 +257,7 @@ const subjectMerged = computed(() => {
 
 async function loadStats() {
   loading.value = true
+  let failed = false
   try {
     // 优先走聚合接口，回退到两个独立接口
     const res = await request.get('/dashboard', { silent: true })
@@ -263,16 +265,21 @@ async function loadStats() {
     reviewStats.value = res.data.data.reviews
   } catch (err) {
     try {
-      const [res, reviewRes] = await Promise.all([
-        request.get('/stats'),
-        request.get('/reviews/stats'),
+      // 回退请求必须 silent：不静默时拦截器会给每个失败的请求各弹一条 toast
+      // （两个一起挂就是同屏两条重复报错），而 catch 吞掉后页面仍是全 0，看不出失败。
+      // 用 allSettled 而不是 all —— 只要有一个接口活了就先渲染出来，别因另一个白屏。
+      const [res, reviewRes] = await Promise.allSettled([
+        request.get('/stats', { silent: true }),
+        request.get('/reviews/stats', { silent: true }),
       ])
-      stats.value = res.data.data
-      reviewStats.value = reviewRes.data.data
+      if (res.status === 'fulfilled') stats.value = res.value.data.data
+      if (reviewRes.status === 'fulfilled') reviewStats.value = reviewRes.value.data.data
+      failed = res.status === 'rejected' || reviewRes.status === 'rejected'
     } catch (err2) {
-      // 错误提示由请求拦截器统一处理
+      failed = true
     }
   } finally {
+    if (failed) toast.error('统计数据加载失败，页面数字可能不完整')
     loading.value = false
     // 下一帧触发生长动画
     requestAnimationFrame(() => {

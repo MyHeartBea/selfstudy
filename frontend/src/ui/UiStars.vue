@@ -1,9 +1,9 @@
 <script setup>
 /**
  * 难度星级（v2 重做）：逐星填充，支持半星，彻底解决百分比裁切错位。
- * readonly 只读展示；交互模式点击设置 1-5。
+ * readonly 只读展示；交互模式是可键盘操作的 radiogroup（方向键改分、Home/End 到端点）。
  */
-import { computed } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 
 const props = defineProps({
   modelValue: { type: Number, default: 0 },
@@ -22,25 +22,83 @@ function fillFor(index) {
   return `${Math.min(1, Math.max(0, v)) * 100}%`
 }
 
+const slots = ref([])
+function setSlot(el, i) {
+  if (el) slots.value[i] = el
+}
+
+// 焦点跟随：键盘操作后要把焦点挪到新选中的那颗星上（roving tabindex）。
+// 未选中（0 星）时落在第 1 颗，保证组内始终有一个 Tab 落点。
+const cursor = ref(-1)
+const tabTarget = computed(() => {
+  if (cursor.value >= 0) return cursor.value
+  return Math.min(4, Math.max(0, Math.round(display.value) - 1))
+})
+
 function pick(index) {
   if (props.readonly) return
-  emit('update:modelValue', index + 1)
+  const i = Math.min(4, Math.max(0, index))
+  cursor.value = i
+  emit('update:modelValue', i + 1)
+}
+
+function focusSlot(i) {
+  nextTick(() => slots.value[i]?.focus())
+}
+
+function onKey(event, index) {
+  if (props.readonly) return
+  const k = event.key
+  if (k === 'ArrowRight' || k === 'ArrowUp') {
+    event.preventDefault()
+    const i = Math.min(4, index + 1)
+    pick(i)
+    focusSlot(i)
+  } else if (k === 'ArrowLeft' || k === 'ArrowDown') {
+    event.preventDefault()
+    const i = Math.max(0, index - 1)
+    pick(i)
+    focusSlot(i)
+  } else if (k === 'Home') {
+    event.preventDefault()
+    pick(0)
+    focusSlot(0)
+  } else if (k === 'End') {
+    event.preventDefault()
+    pick(4)
+    focusSlot(4)
+  } else if (k === 'Enter' || k === ' ' || k === 'Spacebar') {
+    event.preventDefault()
+    pick(index)
+  }
 }
 </script>
 
 <template>
-  <span class="stars" :class="{ readonly }" role="img" :aria-label="`难度 ${display} / 5`">
+  <span
+    class="stars"
+    :class="{ readonly }"
+    :role="readonly ? 'img' : 'radiogroup'"
+    :aria-label="`难度 ${display} / 5`"
+  >
     <span
       v-for="(s, i) in 5"
       :key="i"
+      :ref="(el) => setSlot(el, i)"
       class="star-slot"
       :class="{ interactive: !readonly }"
+      :role="readonly ? undefined : 'radio'"
+      :aria-checked="readonly ? undefined : display === i + 1"
+      :aria-label="readonly ? undefined : `${i + 1} 星`"
+      :tabindex="readonly ? undefined : tabTarget === i ? 0 : -1"
       :style="{ width: size + 'px', height: size + 'px' }"
       :title="readonly ? '' : `${i + 1} 星`"
       @click="pick(i)"
+      @keydown="onKey($event, i)"
     >
       <svg
         class="star-bg"
+        aria-hidden="true"
         :width="size"
         :height="size"
         viewBox="0 0 24 24"
@@ -53,6 +111,7 @@ function pick(index) {
       </svg>
       <span class="star-clip" :style="{ width: fillFor(i) }">
         <svg
+          aria-hidden="true"
           :width="size"
           :height="size"
           viewBox="0 0 24 24"
@@ -83,6 +142,11 @@ function pick(index) {
 }
 .star-slot.interactive:hover .star-bg {
   color: var(--gold);
+}
+.star-slot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 .star-bg {
   display: block;

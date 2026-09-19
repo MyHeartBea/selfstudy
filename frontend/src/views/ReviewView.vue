@@ -1,7 +1,7 @@
 <script setup>
 /** 复习/练习流程：今日队列与四种练习模式共用，按题型给出作答组件 */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
 import ChoiceAnswer from '../components/ChoiceAnswer.vue'
@@ -167,6 +167,22 @@ const paperTitle = ref('')
 const paperYear = ref('')
 const paperSubject = ref('')
 let mockTimer = 0
+
+// —— 模考中途离开保护 ——
+// 模考作答只暂存在内存（未交卷不写库），刷新 / 换页 / 关标签页都会让整场作废且毫无提示。
+// 浏览器挽留（beforeunload）+ 站内路由挽留（onBeforeRouteLeave）两条路都要堵：前者管刷新和关页，
+// 后者管 Dock 导航和「练这些题」直通链接。
+const mockAnsweredCount = computed(
+  () => Object.values(mockAnswers.value).filter((v) => String(v || '').trim()).length,
+)
+const mockAtRisk = computed(() => isMock.value && !done.value && mockAnsweredCount.value > 0)
+
+function onMockBeforeUnload(event) {
+  if (!mockAtRisk.value) return
+  event.preventDefault()
+  // Chrome 要求设置 returnValue 才弹原生挽留框（内容被浏览器忽略，写空串即可）
+  event.returnValue = ''
+}
 
 // 卷面题的阅读原文：优先本题自带，否则沿用上一题的（完形/阅读题组共用）
 const displayPassage = computed(() => {
@@ -673,10 +689,24 @@ function onKeydown(event) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('beforeunload', onMockBeforeUnload)
+})
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('beforeunload', onMockBeforeUnload)
   stopMockTimer()
+})
+
+onBeforeRouteLeave(async () => {
+  if (!mockAtRisk.value) return true
+  const go = await confirmDialog({
+    title: '离开模考？',
+    message: `本场已作答 ${mockAnsweredCount.value} 题但尚未交卷，离开后这些作答全部丢失。`,
+    confirmText: '仍要离开',
+  })
+  return go === true
 })
 </script>
 

@@ -292,6 +292,7 @@ onUnmounted(() => {
 
 // —— 搜索关键词高亮：CSS Custom Highlight API（不改动 RichText 的 DOM，KaTeX 安全） ——
 const HIGHLIGHT_KEY = 'km-search-hit'
+const listRoot = ref(null)
 
 watch(
   [items, () => filters.search, page],
@@ -301,8 +302,13 @@ watch(
     CSS.highlights.delete(HIGHLIGHT_KEY)
     const term = String(filters.search || '').trim()
     if (!term) return
+    // 查询限定在本页根节点内，不用 document.querySelectorAll：弹窗（UiModal）teleport 到 body 后
+    // 与列表同处一个 document，而 .question-text 是个通用类名 —— 一旦列表外的组件复用该类名，
+    // 全局查询就会把 Range 画到列表外（并留住指向已卸载节点的引用）。
+    const scope = listRoot.value
+    if (!scope) return
     const ranges = []
-    document.querySelectorAll('.card-grid .question-text').forEach((el) => {
+    scope.querySelectorAll('.question-text').forEach((el) => {
       const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
       const nodes = []
       while (walker.nextNode()) nodes.push(walker.currentNode)
@@ -324,7 +330,7 @@ watch(
 </script>
 
 <template>
-  <div class="page km-editorial">
+  <div ref="listRoot" class="page km-editorial">
     <div class="view-hero">
       <div class="view-hero-copy">
         <div class="view-kicker">Mistake Library</div>

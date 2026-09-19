@@ -1,6 +1,6 @@
 <script setup>
 /** 知识点库：筛选 + 分页表格 + 编辑/创建弹窗 + AI 总结 + 一键练习 */
-import { onMounted, reactive, ref, toRef } from 'vue'
+import { onMounted, reactive, ref, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -208,6 +208,20 @@ onMounted(() => {
   }
   loadKnowledge()
 })
+
+// 标签直达（错题详情弹窗「查看知识点」= /knowledge?tag=x）：
+// 人已经在知识点页时再点别的标签，vue-router 只换 query、组件复用，onMounted 不会重跑，
+// 于是点了没任何反应。所以 query 变化要自己接上筛选与重新取数。
+watch(
+  () => route.query.tag,
+  (value) => {
+    const tag = value == null ? '' : String(value)
+    if (tag === filters.tag) return
+    filters.tag = tag
+    page.value = 1
+    loadKnowledge()
+  },
+)
 </script>
 
 <template>

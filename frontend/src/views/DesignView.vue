@@ -1,6 +1,6 @@
 <script setup>
 /** /design 组件画廊：设计令牌与基件的一站式打磨场（不进导航，仅开发评审用） */
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import UiButton from '../ui/UiButton.vue'
 import UiTag from '../ui/UiTag.vue'
@@ -32,6 +32,10 @@ const checked = ref(true)
 const stars = ref(3)
 const page = ref(2)
 const pageSize = ref(10)
+// 分页演示态：total 写成具名常量，页码上限随之推导，
+// 免得模板里散一个 83、换每页条数后「当前第 x 页」显示出一个不存在的页。
+const demoTotal = 83
+const demoPages = computed(() => Math.max(1, Math.ceil(demoTotal / pageSize.value)))
 
 const palette = [
   ['--bg', '纸面'],
@@ -365,10 +369,12 @@ onBeforeUnmount(() => {
             <UiPagination
               v-model:page="page"
               v-model:page-size="pageSize"
-              :total="83"
+              :total="demoTotal"
               @change="() => {}"
             />
-            <span class="cap">当前第 {{ page }} 页 · 每页 {{ pageSize }} 条</span>
+            <span class="cap">
+              当前第 {{ page }} / {{ demoPages }} 页 · 每页 {{ pageSize }} 条
+            </span>
           </div>
         </GlassCard>
       </div>

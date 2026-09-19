@@ -204,3 +204,32 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 
 **测试**：后端 **182**（新增 `tests/test_data_safety.py` 14 个：图片泄漏 2 + 快照降级 1 + PUT 附加字段 3 + 批改存档 2 + 判分口径 4 + 空文字闸 2）、前端 Vitest **75**、E2E **37** 全绿；ruff check/format、eslint、prettier、`npm run build` 均干净。
 **文档**：AGENTS.md 第 3 节加"数据路径禁止静默失败"三条铁律（快照降级 / AI 结果不许被 INSERT 带走 / 删行必删文件）+ PUT 附加字段语义 + 字母题判分单一口径；第 5 节补"提不到文字必须报错"；`docs/api.md` 补 `/api/essays` 整节（上一批漏了）与三处契约说明。
+
+## 2026-09-19 · 全栈体检第 2 批：P0 键盘与录入保护包（`待补哈希`）
+
+体检表里 P0 的第二批：全是"鼠标用户看不见、键盘用户进不去 / 一次误点就丢一整场"的问题。
+
+**F6 全站错误边界（`utils/errorBoundary.js`，新）**
+- 改前全站没有 `app.config.errorHandler`、没有 `window.onerror`：任一组件在 setup/render 抛错 → `#app` 停在半渲染（实测就是白屏），而收启动屏的逻辑挂在挂载成功之后 → 白屏上还可能压着遮罩，用户只能手动刷新，刷新前什么信息都不留。
+- 现在：`installWindowGuards()` + `installErrorBoundary(app)`，`app.mount('#app')` 包 try/catch。面板 `#km-fatal` 用**原生 DOM** 建（走到这里 Vue 本身已不可信），`role="alert"` + 重新加载/回首页/知道了三键，一次会话只弹一次（闸门不随「知道了」重置，避免砸脸）。资源 404 的 `error` 事件没有 `event.error`，按此过滤；`unhandledrejection` 只写日志不弹窗（接口 4xx/5xx 已由 axios 拦截器弹过 toast）。
+- 单测 8 个（`tests/errorBoundary.test.js`）。happy-dom **没有 `PromiseRejectionEvent` 构造器**，用普通 `Event` 挂 `reason` 才能派发。
+
+**U1 难度星级键盘可达（`ui/UiStars.vue`）**
+- 改前整组是 `role="img"` 的裸 span、无 tabindex、只有 `@click` → 录入页**必填项**「难度」对键盘用户完全不可达（`MistakeForm.vue:383`）。
+- 现在 `role="radiogroup"` + 每颗星 `role="radio"`，**roving tabindex**（组内唯一 Tab 落点 = 选中那颗，0 星时落第 1 颗），←/→/↑/↓ 加减、Home/End 到端点、Enter/Space 确认，`nextTick` 里把焦点跟到新选中星；`:focus-visible` 用 `var(--accent)` 描边。只读模式保持 `role="img"` 且**不暴露任何 tabindex**（列表卡片不该被 Tab 逐个穿过）。半星（AI 给 3.5）展示不变，键盘落点取整。
+- 单测 8 个 + E2E 1 条。**为什么必须补 E2E**：VTU 的 `trigger('keydown')` 是直接在元素上派发事件，等于跳过"这个元素根本进不了 Tab 序列"这个真缺陷；`keyboard-guard.spec.js` 改成"聚焦星级前面的复选框 → 按一次 Tab → `activeElement` 必须是 `[role=radio]`"，改前这条必然红。
+- 顺带：`QuestionImages.vue` 的 `figure` 补 `role="button" tabindex="0"` + Enter/Space + `:focus-visible`，并把 `openPreview(images.indexOf(img))` 改成 `openPreview(index)`（`showList` 是前缀切片，下标本就等价；按 URL 找会在图片重复时全跳到第 1 张，且哪天改成非前缀切片就**静默**错位）。
+
+**U6 模考中途离开保护（`views/ReviewView.vue`）**
+- 模考作答只暂存在内存（未交卷不写库），改前刷新 / 点 Dock / 点「重新选题」都会让整场作废且**零提示**。
+- 两道挽留：`beforeunload`（刷新、关标签页）+ `onBeforeRouteLeave`（站内导航，配全局 `ConfirmHost`，所以弹窗不会被路由卸载带走）。判据是 `mockAnsweredCount > 0` —— 一题未答没有东西可丢，拦住就是骚扰。监听器在 `onMounted`/`onUnmounted` 成对注册。
+- E2E 覆盖整条链（未作答放行 → 作答后弹确认并报"已作答 1 题" → 取消留在原地且答案还在 → 确认才走）。
+
+**U14 六处已确认 bug**
+- `KnowledgeView`：`?tag=` 只在 `onMounted` 读一次 → 人已经在知识点页时从错题详情点别的标签，vue-router 只换 query、组件复用、钩子不重跑，**点了没任何反应**。补 `watch(() => route.query.tag)`（同步筛选 + `page=1` + 重新取数）。
+- `StatsView.loadStats`：`/dashboard` 失败后回退的两个请求**没带 silent** → 拦截器各弹一条 toast（同屏两条重复报错），而 catch 吞掉后页面仍是全 0。改成 silent + `Promise.allSettled`（一个接口活了就先渲染）+ 一条汇总 toast。
+- `MistakeListView` 搜索高亮：`document.querySelectorAll('.card-grid .question-text')` 换成页根 `ref="listRoot"` 内的查询。当前类名恰好只在列表里用（`UiModal` 又 teleport 到 body），所以**不是在线故障**，但 `.question-text` 是通用类名、全局查询会把 Range 画到列表外并留悬空引用 —— 按"高亮只属于本页"收敛。
+- `DesignView` 分页演示：模板里裸写 `:total="83"` → 提为 `demoTotal` 并派生 `demoPages`，标题改成「当前第 2 / 9 页」，换每页条数后不再可能显示一个不存在的页。
+- 复核记录：体检表里这条写的是"高亮会串到复习页"，实测 `.question-text` 只在 `MistakeCard` 出现，**结论按实况改写成"防外溢的收敛"**，没有夸大成 bug（上一批 B9 也是同类自我纠正）。
+
+**测试与自查**：后端 **182**（未改后端）；前端 Vitest **91**（+8 errorBoundary、+8 UiStars）；E2E **39**（+2）全绿，跑两遍无假红；ruff / eslint / prettier / `npm run build` 干净。生产 8000 真机（深色主题）：`/design` 零 console 消息；Tab 落点 `aria-label="3 星"`、`:focus-visible` 命中、描边 `rgb(224,88,61) 2px`；按 → 后 `aria-checked` 与 tabindex 一起移到第 4 颗、组标签变「难度 4 / 5」；坏图片不触发错误面板，派生 `ErrorEvent` 则面板出现（`role=alert`、z-index 9999、深色卡面 + 朱砂边）。

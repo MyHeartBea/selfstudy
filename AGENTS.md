@@ -33,8 +33,8 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 
 # 测试
 cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（182 个）
-cd frontend && npm test                                  # Vitest 75 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
-cd frontend && npm run test:e2e                          # Playwright 37 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
+cd frontend && npm test                                  # Vitest 91 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd frontend && npm run test:e2e                          # Playwright 39 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
 cd backend && ruff check app tests && ruff format --check app tests
@@ -228,6 +228,9 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - **故意不接的三处**：`StatsView` 十几个面板各自取数，整屏错误态会盖掉已成功的面板；`SubjectView` 每个科目的指南单独兜底（缺指南≠加载失败）；`PracticeView` 的试卷下拉只是模考的一个数据源，失败时留空即可。**轮询型加载（`PapersView.loadPapers`）只在 `!papers.length` 时才报失败**，否则导入流水线每 2.5s 轮一次、一次网络抖动就把已显示的卷库换成错误态。
   - **踩过的坑**：`useMistakeFilters` 早就 return 了 `loadError`，模板也写了 `v-if="loadError"`，但视图的解构里漏了它 —— 错误 UI 永远渲染不出来。用 composable 的返回值前先在解构里核对一遍。
 - **用了 `<Icon>` 却没 `import Icon` / 模板里引用了 setup 没导出的变量**：两类 bug **三道关卡全放过** —— `vite build` 不报错（编译成 `_ctx.xxx` 或 `resolveComponent("X")`，运行时只是 undefined）、ESLint 没有对应规则、单测不渲染那条分支就看不见。实际各踩一起（`FormulaView` 背诵完成页图标静默消失、`MistakeListView` 漏解构 `loadError` 导致错误 UI 永不渲染）。**现在由 `tests/templateBindings.test.js` 兜住**：拿 Vue 自己的编译器把 `src/**/*.vue` 全过一遍，断言没有 `_ctx.<标识符>`、没有非内置的 `resolveComponent("<X>")`，并自带"故意引用幽灵变量必须被抓到"的自检。新增全局组件/指令时要去那张内置名单里登记。
+- **交互型基件必须键盘可达，只读展示不许带 role/tabindex**：`UiStars` 现在是 `role="radiogroup"` + 每颗星 `role="radio"`，**roving tabindex**（组内只有一个 Tab 落点：选中那颗，未选中则第 1 颗），方向键/Home/End 改分并把焦点跟过去。改之前它是 `role="img"` 的裸 span，录入页**必填项**「难度」对键盘用户完全不可达（`tests/uiStars.test.js` + E2E `keyboard-guard.spec.js` 各兜一半：单测验按键，E2E 验"Tab 真能落进来"——`trigger('keydown')` 直接派发事件，永远抓不到 tabindex 缺失）。同理题干配图 `figure` 补了 `role="button" tabindex="0"` + Enter/Space。
+- **全站致命错由 `utils/errorBoundary.js` 兜住**：`main.js` 里 `installWindowGuards()` + `installErrorBoundary(app)`，`app.mount()` 包了 try/catch；组件渲染抛错会收起启动屏并弹原生 `#km-fatal` 面板（role=alert，一次会话只弹一次，留「知道了」）。面板**必须**用原生 DOM 而不是 Vue（走到这里应用本身已经不可信）。新增的全站监听照此成对注册，别在页面里各自 `window.onerror`。资源 404 的 `error` 事件没有 `event.error`，已按此过滤，不要改成 capture 监听把 404 也变成弹窗。
+- **模考（`mode=mock`）离开保护**：作答只暂存在内存，`ReviewView` 用 `beforeunload`（管刷新/关页）+ `onBeforeRouteLeave`（管站内导航）两道挽留，且**只在已作答 ≥1 题时**拦人（一题未答没有东西可丢，拦住就是骚扰）。给"未落库的输入"加保护时照这个分工：两条路缺一不可，且要有 dirty 判据。
 
 **门面页**：`StatsView`=Bento 网格（英雄卡+进度环+速览徽章+AreaChart 趋势+复习负荷预报+AI 错因周报+模考成绩趋势+Heatmap+薄弱点直通+科目分析墨条）；`ReviewView`=沉浸舞台（流光进度线+StageBadge+巨型汉字数字背景+玻璃题卡+落章完成页+模考成绩单分支）；生词闪卡=真 3D 翻面（preserve-3d 双面卡）；公式背诵=翻卡 reveal 动效。四题型作答/全键盘流/判分反馈链（脉冲/抖动）逻辑层未动。
 
@@ -285,6 +288,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。
-- 测试基线：**后端 182、前端 Vitest 75、E2E 37**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
+- 测试基线：**后端 182、前端 Vitest 91、E2E 39**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。
