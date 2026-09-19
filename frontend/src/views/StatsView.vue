@@ -829,9 +829,26 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* 全幅覆盖：旧版 420px 局部晕在宽屏上只染到卡片一角，
+     未染到的区域读起来像"框中框"（用户实测反馈）。
+     改为大半径百分比晕 + 整卡基染，整张卡是一个连续的墨面。 */
   background:
-    radial-gradient(420px 260px at 8% 0%, var(--accent-soft), transparent 70%),
-    radial-gradient(380px 240px at 100% 100%, var(--teal-soft), transparent 70%);
+    radial-gradient(
+      125% 125% at 10% -6%,
+      color-mix(in srgb, var(--accent) 22%, transparent),
+      transparent 64%
+    ),
+    radial-gradient(
+      110% 115% at 106% 108%,
+      color-mix(in srgb, var(--teal) 18%, transparent),
+      transparent 58%
+    ),
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--accent) 10%, transparent),
+      transparent 46%,
+      color-mix(in srgb, var(--teal) 8%, transparent)
+    );
 }
 .streak-chip {
   position: absolute;
@@ -1810,11 +1827,13 @@ onBeforeUnmount(() => {
 /* 观感统一：三块读作"同一组"，而不是浮在背景上的三张卡。
    实测几何本来就对齐，用户感知到的"错位"来自观感不统一 ——
    英雄卡有暖色光晕与醒目四角，两张瓷砖是素面。 */
+/* 组版容器框已拆除（用户实测："卡框没有完全覆盖外面的框"）——
+   外框 + 内卡两层信号读起来就是错位。现在 .bento-top 只做网格布线，
+   每张卡自己是唯一的框，与其余页面的卡片语言一致。 */
 .stats-page .bento-top {
-  /* 极淡容器底 + 统一描边，把两列收进同一个视野里 */
-  background: color-mix(in srgb, var(--surface) 55%, transparent);
-  border: 1px solid var(--line);
-  padding: 10px;
+  background: none;
+  border: 0;
+  padding: 0;
 }
 .stats-page .bento-top > * {
   border: 1px solid var(--line) !important;
