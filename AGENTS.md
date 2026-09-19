@@ -324,6 +324,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ⑦**Dock 磁吸**：图标被指针吸引（只写 `--mag-x/y` 变量、每次 pointermove 一帧 rAF 批处理、先读后写、离场归零、reduced-motion/触屏不绑定）；**光标悬锋**：命中可点元素内芯变毛笔尖（teardrop），按下滴墨涟漪；
   ⑧**纸牌落桌**：v-reveal 入场带随机倾角 —— `.card-grid` 按 nth-child 三拍预设 `--reveal-tilt`（纯 CSS，指令零改动）。
   **刻意不做**（都有理由，别"补"）：BootCalibration 不重画（五轮实测打磨出的撕裂开屏是资产不是负债）；pageFlip 不接入换页（km-flip.css 里记录了 Vue Transition 四连败，JS 单路径是结论）；OKLCH 全量换算（零视觉收益、有回归风险）；字重 300（体积不划算）；卷宗纸感/模考试卷纸（下一批）。
+  ⚠️ **统计页卡片 root 不许画背景/边框/内边距**（用户三轮实测的"框中框/槽中卡"真因）：报刊层的 `.stats-page :is(.b-hero, .b-tile, .span2, .span3) { background/border/padding !important }` 曾让圆角玻璃卡浮在一块更大的方形底上 —— 浅色下 root 底与纸色同形看不出来，**深色下原形毕露**。现在的约定：root 全透明（`background: transparent !important; border: 0 !important; padding: 0 !important`），可见卡片只有 `.gcard-body`（玻璃+渐变描边，height:100% 铺满格位），留白全在 gcard-body 自身 padding；`.bento-top` 的组版容器框（10px padding+边框+底色）也已拆除。**双主题必须都截图**——浅色下同形的问题深色必现。
   测试：前端 61 + E2E 31 全绿；双主题真机回看通过（竖排大字/墨滴/将干章逐项 DOM+截图验证）。
 
 - **2026-09-19 墨韵 3.0 续批（用户反馈"光标太丑要毛笔"+ 提升清单）**：

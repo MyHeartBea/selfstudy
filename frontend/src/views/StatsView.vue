@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
         <UiEmpty v-else text="近 7 天暂无复习记录" icon="chart" />
       </GlassCard>
 
-      <GlassCard class="tint-card">
+      <GlassCard>
         <h3 class="panel-title" data-reveal-lines>掌握度墨阶</h3>
         <p class="cap" data-reveal-words>{{ stats.total_mistakes }} 道错题 · 墨色越深掌握越牢</p>
         <div class="m-steps" data-grow="steps">
@@ -794,14 +794,6 @@ onBeforeUnmount(() => {
 }
 .span3 {
   grid-column: span 3;
-}
-/* 掌握度墨阶卡：黛青淡染，给纯文字 bento 一格背景差异 */
-.tint-card {
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--teal) 13%, var(--surface)),
-    var(--surface) 62%
-  );
 }
 
 /* 英雄卡 */
@@ -1824,9 +1816,6 @@ onBeforeUnmount(() => {
   grid-template-rows: repeat(2, minmax(0, 1fr));
   align-items: stretch;
 }
-/* 观感统一：三块读作"同一组"，而不是浮在背景上的三张卡。
-   实测几何本来就对齐，用户感知到的"错位"来自观感不统一 ——
-   英雄卡有暖色光晕与醒目四角，两张瓷砖是素面。 */
 /* 组版容器框已拆除（用户实测："卡框没有完全覆盖外面的框"）——
    外框 + 内卡两层信号读起来就是错位。现在 .bento-top 只做网格布线，
    每张卡自己是唯一的框，与其余页面的卡片语言一致。 */
@@ -1835,21 +1824,21 @@ onBeforeUnmount(() => {
   border: 0;
   padding: 0;
 }
-.stats-page .bento-top > * {
-  border: 1px solid var(--line) !important;
-}
 /*
-  不要给 .bento-top > * > * 再加左右内边距。
-  实测踩到：.b-tile 自身是 `padding: 32px 0px`（仅竖直），
-  而它的内层 .gcard-body 又有 `padding: 24px 32px` —— 两层叠加后
-  卡片背景比内容宽约 30px（左右各 30），读起来就是"内容陷在凹槽里"，
-  这也是被连续两轮感知为"错位"的真正原因（外框坐标是对的，错在内边距叠加）。
-  所以留白只在容器层统一给，卡片自身不再重复加。
+  卡片 root 一律不画背景/边框/内边距（2026-09-19 二次实测：
+  报刊层给的 `background: var(--surface)` + 上下 clamp(18-32px) padding
+  让圆角玻璃卡浮在一块更大的方形底上 —— 浅色下与纸色同形看不出来，
+  深色下原形毕露，就是用户截图里的"槽中卡"）。
+  可见卡片只有 .gcard-body（玻璃 + 渐变描边），它 height:100% 铺满格位。
+  留白全部交给 .gcard-body 自身的 padding（24px 26px），不再双层叠加。
 */
-.stats-page .bento-top > * {
-  /* 让卡片内容与外框对齐：保留竖直呼吸，左右交给内层 body */
-  padding-left: 0;
-  padding-right: 0;
+.stats-page .bento-top > *,
+.stats-page :is(.b-hero, .b-tile, .span2, .span3) {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 .stats-page .bento-top > * {
   height: 100%;
@@ -1858,12 +1847,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   justify-content: center;
-}
-.stats-page :is(.b-hero, .b-tile, .span2, .span3) {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  border: 1px solid var(--line) !important;
-  background: var(--surface) !important;
 }
 /* 章节之间拉开发丝线 */
 .stats-page :is(.fc-strip, .report-strip) {
