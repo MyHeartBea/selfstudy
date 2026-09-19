@@ -333,3 +333,10 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ③复习完成页新增 **`ui/YearRing.vue` 数据年轮**：每道题一段弧（朱砂=答对、淡墨=答错，错题弧均匀穿插），印章落地 1s 后按 1.4s 顺时针生长、rAF 自停，reduced-motion 直接画完整；
   ④错题详情弹窗末尾**卷宗骑缝章**（章盖卷末右下，in-flow 定位免纠缠）；
   ⑤InkRain 触屏（pointer: coarse）密度减半；完成页 **Enter 直达返回错题列表**（onKeydown 的 done 分支）；/design 新增 **FPS 自检卡**（验收线 ≥55，reduced-motion 停测）。
+
+- **2026-09-19 墨韵 3.2 五维度批次（动画/背景/排版/UI/交互复查）**：
+  ①**换页墨扫**（AppLayout + base.css `.page-wipe`）：换页时一条朱砂/墨柔光带随方向扫过纸面（0.62s 一次性、纯 transform、`--wipe-from` 由 pageDir 给方向、z-index 930 压内容不压弹层、reduced-motion 下 display:none 且 playPageEnter 不触发）；
+  ②**笔过留痕（飞白）**：AmbientLayer 的 onMove 加速度门限（>2.2px/ms）+ 节流（140ms），快速扫过时复用落墨画布 spawn 更淡更急散的墨丝（`trail` 参数：r 4-10 / alpha 0.10-0.15 / decay 0.9），零新增监听与 rAF；
+  ③**氛围 blob 有机化 + 主题混色**：drift 关键帧加中途位移（像墨在水里游）；浅色 `mix-blend-mode: multiply`（墨沁进纸）、深色 `screen`（墨在暗处发亮）；
+  ④**排版**：`.view-hero h2` 流体字号 `clamp(30px, 2.4vw+16px, 46px)`（10 个页面一齐跟上统计页）；统计页巨型「今日」hover 时 opacity 0.075→0.11（纸下有字，扫过浮出）；
+  ⑤**UI**：`[data-theme='dark'] .gcard-body::before` 上缘 8% 白渐变受光边（深场玻璃立起来；浅色不加，会显脏）。

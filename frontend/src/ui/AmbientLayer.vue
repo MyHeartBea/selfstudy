@@ -15,11 +15,29 @@ let mx = 0,
   my = 0,
   gx = 0,
   gy = 0
+/* 飞白节流状态（笔过留痕用） */
+let lastX = 0
+let lastY = 0
+let lastTrail = 0
+let lastTrailAt = 0
 
 function onMove(e) {
   mx = e.clientX
   my = e.clientY
   startAmbient()
+  /* 笔过留痕（飞白）：毛笔快速扫过纸面时，笔后留下极淡的墨丝慢慢洇散。
+     速度门限（瞬时速度 >2.2px/ms 才算"扫"）+ 节流（≥140ms 一条），
+     复用落墨画布的渲染与自停循环，零新增监听、零新增 rAF。 */
+  const now = performance.now()
+  const dt = now - lastTrail || 16
+  const speed = Math.hypot(mx - lastX, my - lastY) / dt
+  lastX = mx
+  lastY = my
+  lastTrail = now
+  if (speed > 2.2 && now - lastTrailAt > 140) {
+    lastTrailAt = now
+    spawnInkDrop(mx, my, true)
+  }
 }
 
 onMounted(() => {
@@ -122,14 +140,16 @@ function readInkColor() {
   }
 }
 
-function spawnInkDrop(x, y) {
+function spawnInkDrop(x, y, trail = false) {
   readInkColor()
   inkDrops.push({
     x,
     y,
-    r: 8 + Math.random() * 12,
-    vr: 60 + Math.random() * 80, // px/s 洇开速度
-    alpha: 0.34 + Math.random() * 0.12,
+    r: trail ? 4 + Math.random() * 6 : 8 + Math.random() * 12,
+    vr: trail ? 30 + Math.random() * 40 : 60 + Math.random() * 80, // px/s 洇开速度
+    /* 飞白 = 更淡更急散：一条若有似无的墨丝，而不是一团墨 */
+    alpha: trail ? 0.1 + Math.random() * 0.05 : 0.34 + Math.random() * 0.12,
+    decay: trail ? 0.9 : 0.95,
   })
   if (!inkRaf) inkRaf = requestAnimationFrame(inkLoop)
 }
@@ -147,7 +167,7 @@ function inkLoop(now) {
   for (const d of inkDrops) {
     d.r += d.vr * dt
     d.vr *= 0.92 // 洇开减速：像真墨在纤维里停住
-    d.alpha *= 0.95
+    d.alpha *= d.decay
     const g = inkCtx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r)
     g.addColorStop(0, `rgba(${ir}, ${ig}, ${ib}, ${d.alpha.toFixed(3)})`)
     g.addColorStop(0.55, `rgba(${ir}, ${ig}, ${ib}, ${(d.alpha * 0.62).toFixed(3)})`)
@@ -278,12 +298,20 @@ function unmountInkCanvas() {
   }
 }
 
-/* 视差光斑 */
+/* 视差光斑（材质：墨沁进纸/在暗处发亮 —— 主题混色）
+   浅色 multiply = 颜料渗进宣纸纤维；深色 screen = 墨在暗处微微发亮。
+   合成层处理，无 JS 成本；isolation 由 .ambient 的层叠上下文兜住。 */
 .amb-blob {
   position: absolute;
   border-radius: 50%;
   filter: blur(90px);
   will-change: transform;
+}
+:root:not([data-theme='dark']) .amb-blob {
+  mix-blend-mode: multiply;
+}
+[data-theme='dark'] .amb-blob {
+  mix-blend-mode: screen;
 }
 .b1 {
   width: 560px;
@@ -301,19 +329,26 @@ function unmountInkCanvas() {
   background: radial-gradient(circle at 60% 40%, var(--blob2), transparent 65%);
   animation: drift2 34s ease-in-out infinite alternate;
 }
+/* 漂移有机化：不只是缩放，路径里有位移起伏（像墨在水里游） */
 @keyframes drift1 {
-  from {
+  0% {
     transform: translate(0, 0) scale(1);
   }
-  to {
+  50% {
+    transform: translate(-46px, 34px) scale(1.09);
+  }
+  100% {
     transform: translate(-70px, 60px) scale(1.15);
   }
 }
 @keyframes drift2 {
-  from {
+  0% {
     transform: translate(0, 0) scale(1.08);
   }
-  to {
+  45% {
+    transform: translate(58px, -30px) scale(0.98);
+  }
+  100% {
     transform: translate(90px, -70px) scale(0.94);
   }
 }

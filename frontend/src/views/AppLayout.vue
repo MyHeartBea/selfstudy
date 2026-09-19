@@ -248,6 +248,7 @@ onUnmounted(() => {
    再用 rAF 逐步推到 0。只动 transform / opacity。
    方向由 pageDir（导航顺序决定）给出。 */
 const deckInner = ref(null)
+const wipeEl = ref(null)
 let pageAnimRaf = 0
 let contentRaf = 0
 
@@ -257,6 +258,15 @@ function playPageEnter() {
   const el = deckInner.value
   if (!el) return
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+  // 换页墨扫：一条朱砂/墨色柔光带随新页滑入同步扫过纸面（一次性，纯 transform）。
+  // 方向与页面滑入方向一致；reduced-motion 时整个函数早已 return，不会触发。
+  if (wipeEl.value) {
+    wipeEl.value.style.setProperty('--wipe-from', pageDir.value === 'next' ? '-103%' : '103%')
+    wipeEl.value.classList.remove('run')
+    void wipeEl.value.offsetWidth // 强制 reflow 重启动画
+    wipeEl.value.classList.add('run')
+  }
 
   // 方向：next = 新页在当前页右边 -> 新页从右侧进来
   const fromX = pageDir.value === 'next' ? 5.5 : -5.5
@@ -419,6 +429,9 @@ onUnmounted(() => {
         <router-view />
       </div>
     </main>
+
+    <!-- 换页墨扫：一次性的朱砂/墨色柔光带扫过纸面（playPageEnter 触发） -->
+    <div ref="wipeEl" class="page-wipe" aria-hidden="true"></div>
 
     <CommandPalette />
 

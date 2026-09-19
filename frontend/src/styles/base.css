@@ -237,6 +237,42 @@ textarea.field-input {
   background: var(--line-strong);
 }
 
+/* ── 换页墨扫（AppLayout.playPageEnter 触发，方向跟随换页方向）────────
+   一次性的朱砂/墨色柔光带扫过纸面：换页 = 翻页时墨被带起的瞬间。
+   纯 transform 动画、pointer-events:none、reduced-motion 下 playPageEnter
+   根本不会触发它。z-index 930：压在内容上、压不过弹层。 */
+.page-wipe {
+  position: fixed;
+  inset: 0;
+  z-index: 930;
+  pointer-events: none;
+  transform: translateX(var(--wipe-from, -103%));
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in srgb, var(--accent) 7%, transparent) 36%,
+    color-mix(in srgb, var(--ink) 13%, transparent) 50%,
+    color-mix(in srgb, var(--accent) 7%, transparent) 64%,
+    transparent 100%
+  );
+}
+.page-wipe.run {
+  animation: page-wipe-sweep 0.62s var(--ease-move) both;
+}
+@keyframes page-wipe-sweep {
+  from {
+    transform: translateX(var(--wipe-from, -103%));
+  }
+  to {
+    transform: translateX(calc(var(--wipe-from, -103%) * -1));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-wipe {
+    display: none;
+  }
+}
+
 .view-kicker {
   display: inline-block;
   font-size: 11px;
@@ -257,7 +293,8 @@ textarea.field-input {
 
 .view-hero h2 {
   font-family: var(--font-display);
-  font-size: 38px;
+  /* 流体字号：小屏不挤、宽屏有气势（统计页早已如此，其余 10 页一齐跟上） */
+  font-size: clamp(30px, 2.4vw + 16px, 46px);
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: 0.02em;

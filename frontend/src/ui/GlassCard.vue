@@ -47,6 +47,17 @@ defineProps({
     box-shadow 0.35s var(--ease),
     transform 0.35s var(--ease);
 }
+/* 暗色玻璃上缘受光：深场里玻璃"立起来"需要一道受光边（craft-floor 材质
+   条款），浅色下纸面本来就亮，高光反而显脏，故只给深色主题。 */
+[data-theme='dark'] .gcard-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, #fff 8%, transparent), transparent 9%);
+  z-index: 1;
+}
 
 .pad .gcard-body {
   padding: 24px 26px;

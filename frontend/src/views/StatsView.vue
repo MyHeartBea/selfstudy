@@ -910,6 +910,12 @@ onBeforeUnmount(() => {
   opacity: 0.075;
   pointer-events: none;
   user-select: none;
+  /* 纸下有字：鼠标扫过页首时水印浮出来一点（用父级 hover 触发，
+     mega 自身 pointer-events:none 不拦任何点击） */
+  transition: opacity var(--dur-4) var(--ease-enter);
+}
+.view-hero:hover .hero-mega {
+  opacity: 0.11;
 }
 .stats-page .view-hero {
   /* 给竖排大字让位：信息块整体右移（窄屏由下方媒体查询收回） */
