@@ -88,7 +88,11 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - `origin = https://github.com/MyHeartBea/selfstudy.git`，分支 `main`，Git Credential Manager 已登录。
   - 若 push 报代理（`127.0.0.1:7897`）不可达：`git -c http.proxy= -c https.proxy= push -u origin main`（本机直连 github 是通的）。
 - `.env`、数据库、`node_modules`、`dist`、日志一律**不入库**。
-- C 盘空间紧张：临时文件一律放 `D:\temp`。
+- **C 盘空间紧张：所有缓存 / 下载 / 临时文件一律放 D 盘**，C 盘只留程序本体。
+  - 临时文件放 `D:\temp`（不要用系统 `%TEMP%`，它已在 C 盘积了几个 GB）。
+  - 工具缓存放 `D:\caches\`，已配好的：pip（`pip.ini` 的 `global.cache-dir=D:\caches\pip`）、npm（已在 `D:\temp\npm-cache`）、impeccable skill 引擎（用户环境变量 `IMPECCABLE_HOME=D:\caches\impeccable`）、Playwright 浏览器（`PLAYWRIGHT_BROWSERS_PATH=D:\caches\ms-playwright`）。
+  - 给新工具装东西 / 下载引擎前，**先查它有没有缓存目录配置项**（环境变量或 config），把它指到 D 盘再执行；默认会写 `~` 或 `%LOCALAPPDATA%` 的都要改道。
+  - 尚在 C 盘的大头（迁移有风险，动前先问）：`~\.cache\codex-runtimes`（约 1.3GB，Agent CLI 自身运行时）、`~\.cargo`（约 600MB，迁移动 PATH）、系统 `%TEMP%`（约 4GB，只可清旧文件）。
 - **密钥不打印**：`backend/.env`、`~\.openviking\ov.conf` 里的任何 key，一律不得输出到对话 / 日志 / 提交。
 
 ## 4. AI 配置（backend/.env，不入库）
