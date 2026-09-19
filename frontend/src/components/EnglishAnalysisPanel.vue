@@ -1,5 +1,5 @@
 <script setup>
-/** 英语整篇精读面板：原文(分段) → 全文翻译 → 句子拆解 → 猜词&重点短语(全选入生词本) → 题目列表(多题)。
+/** 英语整篇精读面板：原文(分段)、全文翻译、句子拆解、猜词&重点短语(全选入生词本)、题目列表(多题)。
  * 点词查义；多题可「存为另一题」切到表单保存。 */
 import { computed, reactive, ref } from 'vue'
 
@@ -280,7 +280,7 @@ async function saveAll() {
       analysis: q.analysis || base.analysis || '',
       difficulty: q.difficulty || base.difficulty || 3,
       difficulty_points: q.difficulty_points || base.difficulty_points || '',
-      approach: (wrong ? '❌ 本题答错，需重点复习；' : '') + (q.approach || base.approach || ''),
+      approach: (wrong ? '【答错】需重点复习；' : '') + (q.approach || base.approach || ''),
       wrong: wrong,
     }
   }
@@ -436,7 +436,9 @@ async function saveAll() {
             >
               <span class="ep-option-letter">{{ 'ABCD'[k] }}</span>
               <span class="ep-option-text"><MathText :text="q[ok]" /></span>
-              <span v-if="q.correct_answer === 'ABCD'[k]" class="ep-correct">✓</span>
+              <span v-if="q.correct_answer === 'ABCD'[k]" class="ep-correct">
+                <Icon name="check" :size="13" />
+              </span>
             </div>
           </div>
           <p v-else class="ep-answer">答案：<MathText :text="q.correct_answer" /></p>
@@ -882,6 +884,8 @@ async function saveAll() {
   color: var(--accent-ink);
 }
 .ep-correct {
+  display: inline-flex;
+  align-items: center;
   color: var(--green);
   font-weight: 700;
 }

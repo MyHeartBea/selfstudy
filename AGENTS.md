@@ -32,7 +32,7 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 
 # 测试
 cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（148 个）
-cd frontend && npm test                                  # Vitest 53 个；含 DOM 级交互回归（happy-dom）
+cd frontend && npm test                                  # Vitest 61 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
 cd frontend && npm run test:e2e                          # Playwright 31 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
@@ -212,7 +212,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - **「加载失败」和「暂无数据」是两个状态，不许共用一条 `v-else-if="!items.length"`**：失败时数据有没有根本未知，却会掉进空态（拦截器只弹 3 秒 toast），用户以为库是空的。整屏数据集的页面用 `ui/UiLoadError.vue`（`text` + 可选 `hint` + `@retry`，与 `UiEmpty` 同尺寸同语言，只是朱砂色 + 重试按钮）：`MistakeListView` / `KnowledgeView` / `FormulaView` / `VocabView` / `ReviewView` / `PapersView` 已接。加载函数一律 `loading` + `loadError` 两个 ref 配对：开头 `loadError=false`，catch 里置 true。
   - **故意不接的三处**：`StatsView` 十几个面板各自取数，整屏错误态会盖掉已成功的面板；`SubjectView` 每个科目的指南单独兜底（缺指南≠加载失败）；`PracticeView` 的试卷下拉只是模考的一个数据源，失败时留空即可。**轮询型加载（`PapersView.loadPapers`）只在 `!papers.length` 时才报失败**，否则导入流水线每 2.5s 轮一次、一次网络抖动就把已显示的卷库换成错误态。
   - **踩过的坑**：`useMistakeFilters` 早就 return 了 `loadError`，模板也写了 `v-if="loadError"`，但视图的解构里漏了它 —— 错误 UI 永远渲染不出来。用 composable 的返回值前先在解构里核对一遍。
-- **用了 `<Icon>` 却没 `import Icon`**：不报错、不红、ESLint 也没有对应规则，只是**图标静默消失**（`FormulaView` 背诵完成页就是这样）。改完前端跑一次全量扫描：列出每个 `.vue` 里 `<大写字母` 用到的组件名，减去 `import` 进来的与 `Teleport/Transition/TransitionGroup/RouterView/RouterLink` 等内置，剩下的就是漏 import 的（`app.component` 全站只注册了 `v-reveal` 指令，没有全局组件）。
+- **用了 `<Icon>` 却没 `import Icon` / 模板里引用了 setup 没导出的变量**：两类 bug **三道关卡全放过** —— `vite build` 不报错（编译成 `_ctx.xxx` 或 `resolveComponent("X")`，运行时只是 undefined）、ESLint 没有对应规则、单测不渲染那条分支就看不见。实际各踩一起（`FormulaView` 背诵完成页图标静默消失、`MistakeListView` 漏解构 `loadError` 导致错误 UI 永不渲染）。**现在由 `tests/templateBindings.test.js` 兜住**：拿 Vue 自己的编译器把 `src/**/*.vue` 全过一遍，断言没有 `_ctx.<标识符>`、没有非内置的 `resolveComponent("<X>")`，并自带"故意引用幽灵变量必须被抓到"的自检。新增全局组件/指令时要去那张内置名单里登记。
 
 **门面页**：`StatsView`=Bento 网格（英雄卡+进度环+速览徽章+AreaChart 趋势+复习负荷预报+AI 错因周报+模考成绩趋势+Heatmap+薄弱点直通+科目分析墨条）；`ReviewView`=沉浸舞台（流光进度线+StageBadge+巨型汉字数字背景+玻璃题卡+落章完成页+模考成绩单分支）；生词闪卡=真 3D 翻面（preserve-3d 双面卡）；公式背诵=翻卡 reveal 动效。四题型作答/全键盘流/判分反馈链（脉冲/抖动）逻辑层未动。
 
@@ -295,4 +295,5 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ⑧**回归踩坑（务必读 6.5 的两条 ⚠️）**：把 `BootCalibration.runAnim` 从 setInterval 改成纯 rAF 之后，后台标签页里合成器不排帧，撕裂阶段永不结束，遮罩以 `pointer-events:auto` 压住整页（`/design` 实测）—— 装饰性动效才用纯 rAF，驱动流程的时间线一律「wall-clock + setInterval 兜底」；复现开关就是 `document.hidden === true`；
   ⑨**叠层焦点与滚动锁**：`UiModal` 现在负责焦点圈（Tab 不跑出面板）+ 关闭后归还焦点 + `aria-labelledby`，监听改为 `{immediate:true}`（以 `modelValue=true` 直接挂载的弹窗此前既没焦点也没 Esc）；滚动锁收敛到 `ui/scrollLock.js` 的**全站计数**（原来 UiModal/CommandPalette/QuestionImages 各写各的，Ctrl+K 在弹窗之上唤起再关掉会把弹窗的锁一起解掉）。
   ⑩**加载失败态与空态分家**：新增 `ui/UiLoadError.vue`，六个整屏页（错题/知识点/公式/生词/复习/卷库）不再把取数失败伪装成"暂无数据"（详见 6.5 那条；`ReviewView` 尤其要紧——失败会被当成"今天已经刷完"）。顺带修出：`MistakeListView` 漏解构 `loadError` 导致错误 UI 永不渲染、`FormulaView` 用 `<Icon>` 却没 import 导致背诵完成页图标静默消失、`ReviewView` 快捷键面板里 9 个 `↵` 与 `MistakeListView` 难度 chip 的 `★` 字符图标（改成 `icons.js` 新增的 `star` 实心五角星 + `aria-label`/`aria-pressed`）。
-  测试：**后端 148、前端 57 + E2E 31**（`--workers=2` 下全绿；单 worker 会因并发争抢假红）。
+  ⑪**这类 bug 现在有测试兜了**：`tests/templateBindings.test.js` 用 Vue 编译器扫全量 SFC（未解析的模板标识符 + 未 import 的组件），带幽灵变量自检；顺手清掉 `EnglishAnalysisPanel` 里最后两个字符图标（选项正确标记的 `✓` 换成 `<Icon name="check">`、写入 `approach` 的 `❌ ` 前缀换成「【答错】」）。
+  测试：**后端 148、前端 61 + E2E 31**（`--workers=2` 下全绿；单 worker 会因并发争抢假红）。
