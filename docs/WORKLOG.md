@@ -169,7 +169,7 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 **验证**：后端 165 + ruff check/format 干净；前端 eslint(0 warning) + prettier + Vitest **70** + `npm run build`；E2E **37** 全绿（`card-click` 新增作文卡整卡可点与"删除只弹确认框、确认后卡片换成空态"两条真命中用例，`render-smoke` 加 `/essays`）。生产 8000 重启后真机自查：`/essays` 浅色（印章空态/Dock 高亮正确）、`/capture` 深色作文 Tab，零 console/page 错误。
 ⚠️ **未验到的部分**：DeepSeek 与智谱两把 key 目前都是 `402 Insufficient Balance`，**真实批改的 prompt 效果无法端到端确认**（代码路径到 AI 调用前正常，失败会以 502 + 明确 message 返回）。充值后需补一次真机批改。
 
-## 2026-09-19 · 全局考研倒计时印批 + 作文批改真机复核（用户：DeepSeek 已充值；倒计时要全局、更醒目更大）
+## 2026-09-19 · 全局考研倒计时印批 + 作文批改真机复核（`d8c82c4`，用户：DeepSeek 已充值；倒计时要全局、更醒目更大）
 **真机复核（上一批欠的一次验证，已补上）**：`POST /api/essays/grade`（e2_long，一段故意写错的 132 词图表作文，`persist:true`）→ 200，`record_id=1`，**9/15 第三档**，四维 3/2/2/2（和=总分，归一化没触发重算），8 条逐句改错**全部成立**（`the number...have`→`has`、`The chart show`→`shows`、描述 2021-2023 数据用现在时→过去时、`There have two reasons`→`There are`、`is convenience`→`are convenient`、`make a good use of`→`make good use of`），并给出「字数不足 150 必须降档」的定档理由 + 967 字同题范文。结论：**评分严格度与改错质量达标，不需要调 prompt/档位**。
 ⚠️ 踩坑：curl 的 `-d '{...中文...}'` 在 Windows 上会被 argv 码页弄成非法 UTF-8，FastAPI 直接 400 `There was an error parsing the body`（**不是**接口的问题）。带中文的 JSON 请求一律写成文件再 `--data-binary "@file"`。
 
