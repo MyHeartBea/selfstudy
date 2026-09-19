@@ -189,7 +189,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 **ui/ 基件一览**（全部零依赖，API 与 v1 兼容）：
 - `UiButton`（variant=primary|ghost|outline|danger|success|subtle；primary=印章渐变+涟漪）、`UiModal`（玻璃+渐变描边，zIndex 可叠）、`UiTabs/UiSelect/UiDropdown/UiCheckbox/UiPagination/UiProgress/UiStars/UiTag/UiEmpty/ToastHost/ConfirmHost/CommandPalette/Icon(icons.js 内联 SVG)`；
-- v2 新增：`GlassCard`（渐变描边玻璃+流光，#badge 骑缝）、`MetricTile`（tone=accent|teal|gold|green|violet|blue，#spark 插槽）、`RingProgress`（渐变环+生长动画）、`AreaChart`（手写 SVG 面积图，颜色传 `var(--xxx)` 自动跟主题）、`BarRow`、`Heatmap`（data=[{date,count}]，级联入场）、`Skeleton`（variant=text|rect|circle）、`StageBadge`（骑缝徽章，top:-15px）。
+- v2 新增：`GlassCard`（渐变描边玻璃+流光，#badge 骑缝）、`MetricTile`（tone=accent|teal|gold|green|violet|blue，#spark 插槽）、`RingProgress`（渐变环+生长动画）、`AreaChart`（手写 SVG 面积图，颜色传 `var(--xxx)` 自动跟主题）、`BarRow`、`Heatmap`（data=[{date,count}]，级联入场）、`Skeleton`（variant=text|rect|circle）、`StageBadge`（骑缝徽章，top:-15px）、`UiLoadError`（加载失败态，与 `UiEmpty` 成对，见 6.5 硬规则）。
 - ⚠️ scoped CSS 教训：`:global(A) B` 会被错编译成「把 B 的样式套到 A」（Phase 1 曾把 Dock 的 transform 套到 body 导致整页左移）；组合选择器要写 `:global(A B)`。
 - ⚠️ **换页动画只有 JS 一条路径**：`AppLayout.playPageEnter()` 用 rAF 写内联 `transform/opacity`，**没有** Vue `<Transition>`（连续四版实测不可靠，已放弃）。因此**绝不能再给 `.page` 或页面根节点加 CSS `animation`**：CSS 动画在层叠里压过内联样式、且它锁的是整个 `transform` 属性，会把 JS 写的水平位移整段吃掉 —— 「换页没动画/方向反了」连修五次（`4772524`→`c570ed0`）的真因就是这个，`base.css` 里那条 `animation: page-in .36s` 已删。首个路由靠 `watch(route.path, {immediate:true})` 补入场。
 - ⚠️ **UI 动效**逐帧用 `requestAnimationFrame` + `performance.now()`（定时器不吃帧时钟，后台标签页会被推迟到动画早该结束后才补帧），`whenContentReady`/翻页/氛围层都按此收敛并带 `cancelAnimationFrame`。
@@ -209,6 +209,10 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - **`prefers-reduced-motion`**：`base.css` 除压时长外还必须带 `animation-iteration-count: 1 !important`，否则光斑/骨架屏/加载圈会以 0.01ms 的节奏**无限空转**；`useCountUp` 在 `immediate` 路径上也要先看偏好再决定开滚。
 - **`will-change` 不许常驻在列表项上**：一屏 20 张卡 = 20 个空转的 GPU 合成层。只在真正需要的那一刻开：`.tilt:hover`、`.reveal-pending:not(.reveal-in)`（`v-reveal` 显现完就关层，因为 `reveal-pending` 类不摘）。同理 `.tilt`/`.reveal-*` 的时长与缓动也已收进令牌，不再是手写的 `cubic-bezier(0.22,0.8,0.36,1)`。
 - **`UiModal` 负责焦点与滚动锁**：打开时把焦点放进面板（`tabindex="-1"` + `aria-labelledby`，内容自己抢焦点如 `ConfirmHost` 的输入框则不抢回），Tab/Shift+Tab 圈在面板内，关闭时把焦点还给触发元素。滚动锁是**模块级计数**（普通 `<script>` 块里，`<script setup>` 里的 `let` 是每实例的）—— 弹窗可叠加，各实例各写 `body.overflow=''` 会让关内层解开外层。新增弹窗直接用 `UiModal`，不要在页面里自己锁滚动。
+- **「加载失败」和「暂无数据」是两个状态，不许共用一条 `v-else-if="!items.length"`**：失败时数据有没有根本未知，却会掉进空态（拦截器只弹 3 秒 toast），用户以为库是空的。整屏数据集的页面用 `ui/UiLoadError.vue`（`text` + 可选 `hint` + `@retry`，与 `UiEmpty` 同尺寸同语言，只是朱砂色 + 重试按钮）：`MistakeListView` / `KnowledgeView` / `FormulaView` / `VocabView` / `ReviewView` / `PapersView` 已接。加载函数一律 `loading` + `loadError` 两个 ref 配对：开头 `loadError=false`，catch 里置 true。
+  - **故意不接的三处**：`StatsView` 十几个面板各自取数，整屏错误态会盖掉已成功的面板；`SubjectView` 每个科目的指南单独兜底（缺指南≠加载失败）；`PracticeView` 的试卷下拉只是模考的一个数据源，失败时留空即可。**轮询型加载（`PapersView.loadPapers`）只在 `!papers.length` 时才报失败**，否则导入流水线每 2.5s 轮一次、一次网络抖动就把已显示的卷库换成错误态。
+  - **踩过的坑**：`useMistakeFilters` 早就 return 了 `loadError`，模板也写了 `v-if="loadError"`，但视图的解构里漏了它 —— 错误 UI 永远渲染不出来。用 composable 的返回值前先在解构里核对一遍。
+- **用了 `<Icon>` 却没 `import Icon`**：不报错、不红、ESLint 也没有对应规则，只是**图标静默消失**（`FormulaView` 背诵完成页就是这样）。改完前端跑一次全量扫描：列出每个 `.vue` 里 `<大写字母` 用到的组件名，减去 `import` 进来的与 `Teleport/Transition/TransitionGroup/RouterView/RouterLink` 等内置，剩下的就是漏 import 的（`app.component` 全站只注册了 `v-reveal` 指令，没有全局组件）。
 
 **门面页**：`StatsView`=Bento 网格（英雄卡+进度环+速览徽章+AreaChart 趋势+复习负荷预报+AI 错因周报+模考成绩趋势+Heatmap+薄弱点直通+科目分析墨条）；`ReviewView`=沉浸舞台（流光进度线+StageBadge+巨型汉字数字背景+玻璃题卡+落章完成页+模考成绩单分支）；生词闪卡=真 3D 翻面（preserve-3d 双面卡）；公式背诵=翻卡 reveal 动效。四题型作答/全键盘流/判分反馈链（脉冲/抖动）逻辑层未动。
 
@@ -290,4 +294,5 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ⑦**`.gitattributes`** 治掉 `core.autocrlf=true` 造成的 10 个伪差异（需 `git add --renormalize .` 才生效）；
   ⑧**回归踩坑（务必读 6.5 的两条 ⚠️）**：把 `BootCalibration.runAnim` 从 setInterval 改成纯 rAF 之后，后台标签页里合成器不排帧，撕裂阶段永不结束，遮罩以 `pointer-events:auto` 压住整页（`/design` 实测）—— 装饰性动效才用纯 rAF，驱动流程的时间线一律「wall-clock + setInterval 兜底」；复现开关就是 `document.hidden === true`；
   ⑨**叠层焦点与滚动锁**：`UiModal` 现在负责焦点圈（Tab 不跑出面板）+ 关闭后归还焦点 + `aria-labelledby`，监听改为 `{immediate:true}`（以 `modelValue=true` 直接挂载的弹窗此前既没焦点也没 Esc）；滚动锁收敛到 `ui/scrollLock.js` 的**全站计数**（原来 UiModal/CommandPalette/QuestionImages 各写各的，Ctrl+K 在弹窗之上唤起再关掉会把弹窗的锁一起解掉）。
-  测试：**后端 148、前端 53 + E2E 31**（`--workers=2` 下全绿；单 worker 会因并发争抢假红）。
+  ⑩**加载失败态与空态分家**：新增 `ui/UiLoadError.vue`，六个整屏页（错题/知识点/公式/生词/复习/卷库）不再把取数失败伪装成"暂无数据"（详见 6.5 那条；`ReviewView` 尤其要紧——失败会被当成"今天已经刷完"）。顺带修出：`MistakeListView` 漏解构 `loadError` 导致错误 UI 永不渲染、`FormulaView` 用 `<Icon>` 却没 import 导致背诵完成页图标静默消失、`ReviewView` 快捷键面板里 9 个 `↵` 与 `MistakeListView` 难度 chip 的 `★` 字符图标（改成 `icons.js` 新增的 `star` 实心五角星 + `aria-label`/`aria-pressed`）。
+  测试：**后端 148、前端 57 + E2E 31**（`--workers=2` 下全绿；单 worker 会因并发争抢假红）。

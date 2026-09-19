@@ -28,6 +28,7 @@ import MistakeDetailModal from '../components/MistakeDetailModal.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
+import UiLoadError from '../ui/UiLoadError.vue'
 import UiPagination from '../ui/UiPagination.vue'
 import UiModal from '../ui/UiModal.vue'
 import UiDropdown from '../ui/UiDropdown.vue'
@@ -64,6 +65,7 @@ const init = readFiltersFromQuery()
 
 const {
   loading,
+  loadError,
   items,
   total,
   filters,
@@ -98,7 +100,7 @@ sortBy.value = init.sort
 page.value = init.page
 if (activeFilterCount.value > 2) showMore.value = true
 
-// 筛选变化 → 同步 URL（replace 不产生历史记录）
+// 筛选变化后同步 URL（replace 不产生历史记录）
 let syncTimer = null
 watch(
   [filters, sortBy, page],
@@ -187,7 +189,7 @@ async function exportAnki() {
     link.download = `考研错题_anki_${new Date().toISOString().slice(0, 10)}.tsv`
     link.click()
     URL.revokeObjectURL(url)
-    toast.success('已导出 Anki TSV，在 Anki 中「文件 → 导入」即可')
+    toast.success('已导出 Anki TSV，在 Anki 中「文件 > 导入」即可')
   } catch (err) {
     toast.error('Anki 导出失败')
   } finally {
@@ -372,6 +374,8 @@ watch(
               type="button"
               class="diff-chip"
               :class="{ active: filters.difficulties.includes(n) }"
+              :aria-pressed="filters.difficulties.includes(n)"
+              :aria-label="'难度 ' + n + ' 星'"
               @click="
                 () => {
                   const idx = filters.difficulties.indexOf(n)
@@ -380,7 +384,7 @@ watch(
                 }
               "
             >
-              {{ '★'.repeat(n) }}
+              <Icon v-for="s in n" :key="s" name="star" :size="11" />
             </button>
           </div>
           <input
@@ -430,14 +434,12 @@ watch(
       </div>
     </div>
     <template v-else>
-      <div v-if="loadError" class="load-error card card-pad">
-        <Icon name="alert" :size="22" />
-        <div>
-          <div class="load-error-title">错题列表加载失败</div>
-          <div class="muted">请检查后端服务是否运行，然后重试。</div>
-        </div>
-        <UiButton variant="primary" @click="loadMistakes">重新加载</UiButton>
-      </div>
+      <UiLoadError
+        v-if="loadError"
+        text="错题列表加载失败"
+        hint="请检查后端服务是否运行，然后重试。"
+        @retry="loadMistakes"
+      />
       <UiEmpty v-else-if="!items.length" text="暂无错题，去录入一道吧" icon="inbox">
         <UiButton variant="primary" @click="router.push('/capture')">智能录入</UiButton>
       </UiEmpty>
@@ -676,6 +678,9 @@ watch(
   gap: 4px;
 }
 .diff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
   height: 30px;
   padding: 0 9px;
   border: 1px solid var(--line-strong);
@@ -684,8 +689,10 @@ watch(
   color: var(--line-strong);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.13s;
-  letter-spacing: 0.05em;
+  transition:
+    color var(--dur-2) var(--ease-enter),
+    border-color var(--dur-2) var(--ease-enter),
+    background var(--dur-2) var(--ease-enter);
 }
 .diff-chip:hover {
   border-color: var(--gold);
@@ -736,17 +743,6 @@ watch(
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 14px;
-}
-
-.load-error {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  color: var(--red);
-}
-.load-error-title {
-  font-weight: 700;
-  color: var(--ink);
 }
 
 .pagination-wrap {

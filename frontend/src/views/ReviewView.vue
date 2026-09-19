@@ -16,6 +16,7 @@ import { confetti } from '../utils/confetti'
 import { scoreLetters } from '../utils/examScoring'
 import UiButton from '../ui/UiButton.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
+import UiLoadError from '../ui/UiLoadError.vue'
 import Icon from '../ui/Icon.vue'
 import GlassCard from '../ui/GlassCard.vue'
 import StageBadge from '../ui/StageBadge.vue'
@@ -29,6 +30,7 @@ const queue = ref([])
 const queueInfo = ref(null)
 const index = ref(0)
 const loading = ref(false)
+const loadError = ref(false)
 const selected = ref(null)
 const answered = ref(false)
 const revealed = ref(false)
@@ -294,6 +296,7 @@ async function submitMock(auto = false) {
 
 async function loadQueue() {
   loading.value = true
+  loadError.value = false
   try {
     let res
     if (route.query.paper_id) {
@@ -362,7 +365,9 @@ async function loadQueue() {
     }
     if (isMock.value && queue.value.length) startMockTimer()
   } catch (err) {
-    // 错误提示由请求拦截器统一处理
+    // toast 由拦截器统一弹；复习页必须区分"今日无题"和"没取到题"，
+    // 否则取题失败会被当成今天已经刷完，用户直接收工走人。
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -925,44 +930,51 @@ onUnmounted(() => {
 
           <div class="kbd-hints">
             <template v-if="isMock"
-              ><span><kbd>1-4</kbd> 作答</span><span><kbd>↵</kbd> 下一题 / 末题交卷</span></template
+              ><span><kbd>1-4</kbd> 作答</span
+              ><span><kbd>Enter</kbd> 下一题 / 末题交卷</span></template
             >
             <template v-else-if="isMulti && !answered"
-              ><span><kbd>1-4</kbd> 勾选/取消</span><span><kbd>↵</kbd> 提交</span></template
+              ><span><kbd>1-4</kbd> 勾选/取消</span><span><kbd>Enter</kbd> 提交</span></template
             >
             <template v-else-if="isChoice && !answered"
               ><span><kbd>1-4</kbd>/<kbd>A-D</kbd> 选选项</span
-              ><span><kbd>↵</kbd> 确认</span></template
+              ><span><kbd>Enter</kbd> 确认</span></template
             >
             <template v-else-if="isChoice && reviewSaved"
-              ><span><kbd>↵</kbd> 下一题</span></template
+              ><span><kbd>Enter</kbd> 下一题</span></template
             >
             <template v-else-if="isTranslation && judgeResult"
-              ><span><kbd>↵</kbd>/<kbd>Q</kbd> 译对了</span
+              ><span><kbd>Enter</kbd>/<kbd>Q</kbd> 译对了</span
               ><span><kbd>W</kbd> 没译好</span></template
             >
             <template v-else-if="isTranslation"
-              ><span><kbd>Ctrl+↵</kbd> 提交译文</span></template
+              ><span><kbd>Ctrl+Enter</kbd> 提交译文</span></template
             >
             <template v-else-if="isFill && judgeResult"
-              ><span><kbd>↵</kbd> 下一题</span
+              ><span><kbd>Enter</kbd> 下一题</span
               ><span><kbd>Q</kbd>/<kbd>W</kbd> 记住/没记住</span></template
             >
             <template v-else-if="isSolution && gradeResult"
-              ><span><kbd>↵</kbd> 按分数保存</span></template
+              ><span><kbd>Enter</kbd> 按分数保存</span></template
             >
             <template v-else-if="!isChoice && !isFill && !isSolution && !isTranslation"
               ><span><kbd>空格</kbd> 显示答案</span
               ><span><kbd>Q</kbd>/<kbd>W</kbd> 记住/没记住</span></template
             >
             <template v-else-if="isFill || isSolution"
-              ><span><kbd>Ctrl+↵</kbd> 提交作答</span></template
+              ><span><kbd>Ctrl+Enter</kbd> 提交作答</span></template
             >
           </div>
         </GlassCard>
       </div>
     </template>
 
+    <UiLoadError
+      v-else-if="loadError"
+      text="今日队列没取到"
+      hint="后端没响应，重试一下。这并不表示「今天没有要复习的题」。"
+      @retry="loadQueue"
+    />
     <UiEmpty v-else-if="!loading" :text="emptyText" icon="check" />
     <GlassCard v-else class="stage-card" :hover="false">
       <div style="display: flex; flex-direction: column; gap: 14px">

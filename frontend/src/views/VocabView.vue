@@ -13,6 +13,7 @@ import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
+import UiLoadError from '../ui/UiLoadError.vue'
 import UiModal from '../ui/UiModal.vue'
 import UiPagination from '../ui/UiPagination.vue'
 import Icon from '../ui/Icon.vue'
@@ -25,6 +26,7 @@ const nMastered = useCountUp(computed(() => stats.value.mastered))
 
 // —— 词表 ——
 const loading = ref(false)
+const loadError = ref(false)
 const items = ref([])
 const page = ref(1)
 const pageSize = ref(20)
@@ -33,6 +35,7 @@ const filters = reactive({ search: '', mastery: null, kind: '', sort: 'created_d
 
 async function loadList() {
   loading.value = true
+  loadError.value = false
   try {
     const params = { page: page.value, page_size: pageSize.value, sort: filters.sort }
     if (filters.search.trim()) params.search = filters.search.trim()
@@ -43,6 +46,8 @@ async function loadList() {
     items.value = data?.items || []
     total.value = data?.total || 0
   } catch (err) {
+    // toast 由请求拦截器统一弹；这里只记"这一屏是失败、不是没数据"
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -494,8 +499,9 @@ async function exportAnki() {
         <span class="count-tip">共 {{ total }} 词</span>
       </div>
 
+      <UiLoadError v-if="loadError" text="生词本加载失败" @retry="loadList" />
       <UiEmpty
-        v-if="!items.length && !loading"
+        v-else-if="!items.length && !loading"
         text="生词本还是空的，粘贴词表批量导入或逐个添加"
         icon="book"
       />

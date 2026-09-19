@@ -12,11 +12,14 @@ import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
+import UiLoadError from '../ui/UiLoadError.vue'
 import UiModal from '../ui/UiModal.vue'
+import Icon from '../ui/Icon.vue'
 
 const categories = ['高等数学', '线性代数', '概率统计', '英语背诵', '政治背诵', '408背诵', '其他']
 
 const loading = ref(false)
+const loadError = ref(false)
 const items = ref([])
 const filters = reactive({
   category: '',
@@ -52,11 +55,13 @@ const filteredItems = computed(() => {
 
 async function loadFormulas() {
   loading.value = true
+  loadError.value = false
   try {
     const res = await request.get('/formulas')
     items.value = res.data.data || []
   } catch (err) {
-    // 错误提示由请求拦截器统一处理
+    // toast 由请求拦截器统一弹；这里只记"这一屏是失败、不是没数据"
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -219,8 +224,9 @@ onMounted(loadFormulas)
       <span class="count-tip">共 {{ filteredItems.length }} 条</span>
     </div>
 
+    <UiLoadError v-if="loadError" text="公式加载失败" @retry="loadFormulas" />
     <UiEmpty
-      v-if="!filteredItems.length && !loading"
+      v-else-if="!filteredItems.length && !loading"
       text="暂无公式，点击右上角新增"
       icon="sigma"
     />

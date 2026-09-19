@@ -13,6 +13,7 @@ import MathText from '../components/MathText.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiTag from '../ui/UiTag.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
+import UiLoadError from '../ui/UiLoadError.vue'
 import GlassCard from '../ui/GlassCard.vue'
 import StageBadge from '../ui/StageBadge.vue'
 import Icon from '../ui/Icon.vue'
@@ -22,6 +23,7 @@ const router = useRouter()
 const scanning = ref(false)
 const candidates = ref([])
 const papers = ref([])
+const loadError = ref(false)
 const selected = ref(null) // 选中的卷（含 questions）
 const importing = ref({})
 let pollTimer = 0
@@ -69,8 +71,11 @@ async function loadPapers() {
   try {
     const res = await request.get('/papers', { silent: true })
     papers.value = res.data.data || []
+    loadError.value = false
   } catch (err) {
-    // 静默
+    // 轮询失败（导入流水线跑着时每 2.5s 一次）不该把已经显示的卷库换成错误态，
+    // 所以只在"手上什么都没有"时才报失败。
+    if (!papers.value.length) loadError.value = true
   }
 }
 
@@ -185,8 +190,14 @@ onUnmounted(stopPolling)
           导入流水线运行中…
         </span>
       </div>
+      <UiLoadError
+        v-if="loadError"
+        text="卷库加载失败"
+        hint="请检查后端服务是否运行，然后重试。这并不表示卷库是空的。"
+        @retry="loadPapers"
+      />
       <UiEmpty
-        v-if="!papers.length"
+        v-else-if="!papers.length"
         text="卷库还是空的——从下方扫描结果里挑一份真题导入"
         icon="notebook"
       />

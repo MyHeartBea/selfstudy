@@ -22,11 +22,13 @@ import UiModal from '../ui/UiModal.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
+import UiLoadError from '../ui/UiLoadError.vue'
 import UiPagination from '../ui/UiPagination.vue'
 import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
 
 const loading = ref(false)
+const loadError = ref(false)
 const router = useRouter()
 const route = useRoute()
 const items = ref([])
@@ -51,6 +53,7 @@ const { subSubjectOptions } = useSubSubject(toRef(filters, 'subjectId'))
 
 async function loadKnowledge() {
   loading.value = true
+  loadError.value = false
   try {
     const params = {
       page: page.value,
@@ -69,7 +72,8 @@ async function loadKnowledge() {
       total.value = data?.total || 0
     }
   } catch (err) {
-    // 错误提示由请求拦截器统一处理
+    // toast 由请求拦截器统一弹；这里只记"这一屏是失败、不是没数据"
+    loadError.value = true
   } finally {
     loading.value = false
     // 详情弹窗打开时，列表刷新后同步最新内容（如刚做完 AI 总结）
@@ -258,6 +262,7 @@ onMounted(() => {
         </div>
       </div>
     </template>
+    <UiLoadError v-else-if="loadError" text="知识点加载失败" @retry="loadKnowledge" />
     <UiEmpty v-else-if="!items.length" text="暂无知识点，录入错题或手动添加" icon="book" />
     <template v-else>
       <div class="k-grid">
