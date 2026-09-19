@@ -295,7 +295,7 @@ E2E **39** 全绿；ruff / eslint / prettier / `npm run build` 干净，`katex-*
 `/vocab` 30 张卡、`/knowledge` 9 张（=page_size）+ 分页器、`/formulas` 7 张（"共 7 条"与库一致）、
 `/essays` 平均得分率 60%（=库里那条 9/15，说明 items 真的穿过 composable 到了 computed）；四页零 console 消息。
 
-## 2026-09-19 · 全栈体检第 4 批：AI 通道遥测 + 静默降级显形 + 密钥脱敏（N1 / C5 / C6）
+## 2026-09-19 · 全栈体检第 4 批：AI 通道遥测 + 静默降级显形 + 密钥脱敏（N1 / C5 / C6，`72f63eb`）
 
 **N1「建 AI 网关」按实况降级成"在唯一漏斗处记账"**：grep 过一遍 `backend/`，`chat/completions` 的出口
 只有 `ai_service._chat` 一条（没有第二处 urllib/httpx 直连端点）。既然只有一个出口，再包一层
