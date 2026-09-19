@@ -325,3 +325,10 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   ⑧**纸牌落桌**：v-reveal 入场带随机倾角 —— `.card-grid` 按 nth-child 三拍预设 `--reveal-tilt`（纯 CSS，指令零改动）。
   **刻意不做**（都有理由，别"补"）：BootCalibration 不重画（五轮实测打磨出的撕裂开屏是资产不是负债）；pageFlip 不接入换页（km-flip.css 里记录了 Vue Transition 四连败，JS 单路径是结论）；OKLCH 全量换算（零视觉收益、有回归风险）；字重 300（体积不划算）；卷宗纸感/模考试卷纸（下一批）。
   测试：前端 61 + E2E 31 全绿；双主题真机回看通过（竖排大字/墨滴/将干章逐项 DOM+截图验证）。
+
+- **2026-09-19 墨韵 3.0 续批（用户反馈"光标太丑要毛笔"+ 提升清单）**：
+  ①**AppCursor 整体重做为毛笔**：Lucide `brush` path 做笔身（30px，斜握 6°），**笔锋尖端 = 指针热区**（0×0 锚点 + 图标左下角对齐）；悬停可点元素 = 提笔转朱砂 + 锋下浮出 34px 细墨环；按下 = 压笔（前倾下沉）+ 锋尖滴墨涟漪；tip 处 5px teardrop 墨点保精度。旧"圆点/圆环"版本已删；
+  ②统计页 `.bento` 改**非对称杂志网格**：三列不等宽（1.4fr/1fr/1.2fr）+ 薄弱卡与热力图换位（行序交错）+ 掌握度卡 `.tint-card` 黛青淡染（bento 背景多样性）；
+  ③复习完成页新增 **`ui/YearRing.vue` 数据年轮**：每道题一段弧（朱砂=答对、淡墨=答错，错题弧均匀穿插），印章落地 1s 后按 1.4s 顺时针生长、rAF 自停，reduced-motion 直接画完整；
+  ④错题详情弹窗末尾**卷宗骑缝章**（章盖卷末右下，in-flow 定位免纠缠）；
+  ⑤InkRain 触屏（pointer: coarse）密度减半；完成页 **Enter 直达返回错题列表**（onKeydown 的 done 分支）；/design 新增 **FPS 自检卡**（验收线 ≥55，reduced-motion 停测）。

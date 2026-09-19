@@ -279,6 +279,11 @@ async function deleteCurrent() {
           <ReviewHistory :records="reviewHistory" />
         </details>
       </div>
+
+      <!-- 卷宗骑缝章：章盖在卷末（内容流末尾右下），随卷宗滚动，语义正确且免定位纠缠 -->
+      <div class="dossier-foot">
+        <span class="dossier-seal serif" aria-hidden="true">研</span>
+      </div>
     </template>
     <template #footer>
       <UiButton variant="primary" @click="openEdit">编辑</UiButton>
@@ -293,6 +298,31 @@ async function deleteCurrent() {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* 卷宗骑缝章：详情 = 一份卷宗，卷末右下盖一方朱砂印 */
+.dossier-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 6px 2px;
+}
+.dossier-seal {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--accent-grad);
+  color: #fff;
+  font-size: 25px;
+  font-weight: 900;
+  transform: rotate(8deg);
+  opacity: 0.88;
+  box-shadow:
+    0 3px 10px rgba(168, 51, 32, 0.32),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+  user-select: none;
 }
 
 .english-detail {

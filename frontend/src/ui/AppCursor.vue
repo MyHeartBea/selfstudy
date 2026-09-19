@@ -1,20 +1,16 @@
 <!--
-  AppCursor —— 自定义光标（学参考稿的命中扩张）
+  AppCursor —— 毛笔光标（「数字文房」的门面件）
   ===========================================================================
-  学自参考稿：
-    · 命中可交互元素时光标从 9px **扩张到 54px** 并转强调色
-      —— 这是明确的"这里可点"回执，比我上一版 2.1 倍缩放大胆得多
-    · **直径过渡**而不是 scale：小圆点用 scale 放大会糊边（参考稿也是改宽高）
-    · 按下时再收一点（34px），给点击一个可见回执
-
-  与 v2 的适配：
-    · 强调色用 v2 的 --accent（朱砂），不引入新颜色
-    · **仍不移除原生光标**（与参考稿不同，它写了 cursor:none）：
-      这是可用性底线 —— JS 失效时用户不至于"没有指针"。
-      若你要严格照参考稿隐藏原生指针，说一声我改。
-    · 触屏 / prefers-reduced-motion 下不渲染
-
-  位置用 transform 驱动（不触发布局），rAF + lerp 0.2 跟随。
+  用户点名要"图形化、像毛笔"的指针，取代之前的"小圆点/圆环"。
+  设计：
+    · 笔身用 Lucide `brush` 的原始 path（仓库图标纪律：只从 Lucide 取形），
+      30px，斜握姿态；**笔锋尖端就是指针热区** —— 指到哪，笔锋落在哪
+    · 悬停可点元素：笔提起并转朱砂（is-hover），锋下浮出细墨环标示目标
+    · 按下：压笔（笔身前倾 + 下沉），锋尖滴墨 —— 一圈墨晕向外洇开（一次性）
+  纪律（沿袭上一版）：
+    · 位置 transform 驱动（不触发布局），rAF + lerp 0.2 跟随
+    · 触屏 / prefers-reduced-motion 下整个组件不渲染
+    · body.km-custom-cursor 挂载成功才隐藏原生指针（脚本失效时指针仍在）
 -->
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
@@ -65,7 +61,7 @@ function loop() {
   cy += (y - cy) * 0.2
   const el = cur.value
   if (el) {
-    el.style.transform = `translate3d(${cx.toFixed(1)}px, ${cy.toFixed(1)}px, 0) translate(-50%, -50%)`
+    el.style.transform = `translate3d(${cx.toFixed(1)}px, ${cy.toFixed(1)}px, 0)`
     el.classList.toggle('is-hover', hovering)
     el.classList.toggle('is-press', pressed)
   }
@@ -104,63 +100,111 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <span ref="cur" class="cur" aria-hidden="true"></span>
+  <span ref="cur" class="cur" aria-hidden="true">
+    <i class="cur__ripple"></i>
+    <i class="cur__ring"></i>
+    <!-- Lucide "brush"：斜握笔杆，锋在左下 —— 左下角对齐指针热区 -->
+    <svg
+      class="cur__brush"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
+      <path
+        d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"
+      />
+    </svg>
+    <i class="cur__tip"></i>
+  </span>
 </template>
 
 <style scoped>
+/* 锚点：0x0 元素钉在指针坐标上，笔锋/墨环都相对它定位 */
 .cur {
   position: fixed;
   top: 0;
   left: 0;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--ink);
+  width: 0;
+  height: 0;
   z-index: 9500;
   pointer-events: none;
   transform: translate3d(-200px, -200px, 0);
-  transition:
-    width 0.45s var(--ease),
-    height 0.45s var(--ease),
-    background 0.45s var(--ease),
-    opacity 0.3s ease;
+  color: var(--ink);
+  opacity: 1;
   will-change: transform;
 }
-/* 命中：扩张到 54px，但**改为细描边环 + 透明内芯**。
-   为什么不像参考稿那样直接变实心强调色：参考稿的底色是 #060607（近黑），
-   实心 #FF4D1C 在暗底上是"亮起来"；v2 是米色底，大面积实心朱砂会变成
-   一团刺眼的红 —— 这就是用户说"鼠标太丑"的原因。
-   在浅底上改用"环"：同样传达"可点"，但只占一圈线。 */
-.cur.is-hover {
-  width: 54px;
-  height: 54px;
-  background: transparent;
-  border: 1.5px solid var(--accent);
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--accent) 35%, transparent);
-}
-/* 命中时内芯变成一滴悬锋：墨滴收尖朝上，像倒提的毛笔尖
-   （teardrop = 三个 50% 圆角 + 一个直角，旋转 -45° 使尖角朝上），
-   保留"指针尖"的位置感，同时把"可点"的回执从几何圆升级成笔的隐喻 */
-.cur.is-hover::after {
-  content: '';
+
+/* 笔身：锋尖（图标左下）对齐锚点；默认斜握 6° */
+.cur__brush {
   position: absolute;
-  inset: 50% auto auto 50%;
-  width: 14px;
-  height: 14px;
-  border-radius: 50% 50% 50% 0;
-  background: var(--accent);
-  transform: translate(-50%, -50%) rotate(-45deg);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  left: -7px;
+  top: -24px;
+  width: 30px;
+  height: 30px;
+  transform: rotate(6deg);
+  transform-origin: 20% 78%;
+  filter: drop-shadow(0 1px 2px color-mix(in srgb, var(--ink) 24%, transparent));
+  transition:
+    transform 0.35s var(--spring),
+    color 0.25s var(--ease);
 }
-/* 按下：墨滴落纸 —— 一圈墨晕从指针向外扩散（一次性） */
-.cur.is-press {
+
+/* 锋尖墨点：落在锚点上的那粒墨，保证"指到哪"的精度感 */
+.cur__tip {
+  position: absolute;
+  left: -2.5px;
+  top: -2.5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--ink);
+  transform: rotate(-45deg);
+  transition: background 0.25s var(--ease);
+}
+
+/* 悬停可点元素：提笔转朱砂 + 锋下浮出细墨环 */
+.cur.is-hover {
+  color: var(--accent);
+}
+.cur.is-hover .cur__brush {
+  transform: rotate(-7deg) scale(1.1) translate(-1px, -2px);
+}
+.cur.is-hover .cur__tip {
+  background: var(--accent);
+}
+.cur__ring {
+  position: absolute;
+  left: -17px;
+  top: -17px;
   width: 34px;
   height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  opacity: 0;
+  transform: scale(0.55);
+  transition:
+    opacity var(--dur-2) var(--ease),
+    transform var(--dur-3) var(--spring);
 }
-.cur.is-press::before {
-  content: '';
+.cur.is-hover .cur__ring {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 按下：压笔 —— 笔身前倾下沉，锋尖滴墨（墨晕一次性扩散） */
+.cur.is-press .cur__brush {
+  transform: rotate(14deg) scale(0.94) translate(1.5px, 2.5px);
+}
+.cur.is-press .cur__ripple {
   position: absolute;
-  inset: 0;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid var(--accent);
   opacity: 0;
@@ -169,11 +213,11 @@ onBeforeUnmount(() => {
 @keyframes cur-ripple {
   from {
     opacity: 0.8;
-    transform: scale(1);
+    transform: scale(0.9);
   }
   to {
     opacity: 0;
-    transform: scale(2.4);
+    transform: scale(2.3);
   }
 }
 

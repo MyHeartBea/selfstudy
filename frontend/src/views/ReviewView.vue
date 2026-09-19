@@ -23,6 +23,7 @@ import StageBadge from '../ui/StageBadge.vue'
 import Skeleton from '../ui/Skeleton.vue'
 import RingProgress from '../ui/RingProgress.vue'
 import InkRain from '../ui/InkRain.vue'
+import YearRing from '../ui/YearRing.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -516,7 +517,15 @@ onMounted(loadQueue)
 const KEY_TO_OPTION = { 1: 'A', 2: 'B', 3: 'C', 4: 'D', a: 'A', b: 'B', c: 'C', d: 'D' }
 
 function onKeydown(event) {
-  if (done.value || !current.value || loading.value) return
+  // 完成页：Enter 直达主操作（返回错题列表），键盘流不断线
+  if (done.value) {
+    if (event.key === 'Enter' && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault()
+      router.push('/mistakes')
+    }
+    return
+  }
+  if (!current.value || loading.value) return
   // 输入框聚焦时不拦截（填空/翻译/解答题作答中）
   const tag = event.target?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA') {
@@ -693,7 +702,10 @@ onUnmounted(() => {
     <template v-else-if="done">
       <div class="done-stage">
         <InkRain :chars="rainChars" />
-        <div class="stamp">已<br />完成</div>
+        <div class="stamp-wrap">
+          <YearRing :total="resultCount.correct + resultCount.wrong" :wrong="resultCount.wrong" />
+          <div class="stamp">已<br />完成</div>
+        </div>
         <h3 class="done-title">{{ practiceTitle ? '练习完成' : '今日复习完成' }}</h3>
         <p class="done-sub">
           答对 <b class="ok pop-num">{{ resultCount.correct }}</b> 题，答错
@@ -1222,6 +1234,17 @@ onUnmounted(() => {
   /* 印章在内容聚拢完之后才落下（第 5 拍），thud 紧跟 stamp-in 落地 */
   animation-delay: calc(var(--stagger-2) * 5), calc(var(--stagger-2) * 5 + 0.6s);
   margin-bottom: 8px;
+}
+/* 年轮容器：数据年轮（YearRing）垫在印章后方，印章落在年轮圆心上 */
+.stamp-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin-bottom: 8px;
+}
+.stamp-wrap > .year-ring {
+  position: absolute;
+  opacity: 0.85;
 }
 .stamp::before,
 .stamp::after {

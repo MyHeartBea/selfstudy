@@ -447,7 +447,7 @@ onBeforeUnmount(() => {
         <UiEmpty v-else text="近 7 天暂无复习记录" icon="chart" />
       </GlassCard>
 
-      <GlassCard>
+      <GlassCard class="tint-card">
         <h3 class="panel-title" data-reveal-lines>掌握度墨阶</h3>
         <p class="cap" data-reveal-words>{{ stats.total_mistakes }} 道错题 · 墨色越深掌握越牢</p>
         <div class="m-steps" data-grow="steps">
@@ -467,24 +467,6 @@ onBeforeUnmount(() => {
             <span class="m-label">{{ s.label }}</span>
           </div>
         </div>
-      </GlassCard>
-
-      <GlassCard class="span2 km-live">
-        <!-- 复合悬停装饰层 -->
-        <span class="km-live__ghost" aria-hidden="true">06</span>
-        <span class="km-live__rule" aria-hidden="true"></span>
-        <span class="km-live__corner tl" aria-hidden="true"></span>
-        <span class="km-live__corner tr" aria-hidden="true"></span>
-        <span class="km-live__corner bl" aria-hidden="true"></span>
-        <span class="km-live__corner br" aria-hidden="true"></span>
-        <span class="km-live__scan" aria-hidden="true"></span>
-        <div class="panel-head">
-          <h3 class="panel-title" data-reveal-lines>复习热力图</h3>
-          <UiButton size="sm" variant="ghost" @click="router.push('/review')">
-            去复习，点亮今天
-          </UiButton>
-        </div>
-        <ReviewHeatmap :days="119" data-reveal-lines />
       </GlassCard>
 
       <GlassCard>
@@ -520,6 +502,24 @@ onBeforeUnmount(() => {
         >
           直通薄弱练习
         </UiButton>
+      </GlassCard>
+
+      <GlassCard class="span2 km-live">
+        <!-- 复合悬停装饰层 -->
+        <span class="km-live__ghost" aria-hidden="true">06</span>
+        <span class="km-live__rule" aria-hidden="true"></span>
+        <span class="km-live__corner tl" aria-hidden="true"></span>
+        <span class="km-live__corner tr" aria-hidden="true"></span>
+        <span class="km-live__corner bl" aria-hidden="true"></span>
+        <span class="km-live__corner br" aria-hidden="true"></span>
+        <span class="km-live__scan" aria-hidden="true"></span>
+        <div class="panel-head">
+          <h3 class="panel-title" data-reveal-lines>复习热力图</h3>
+          <UiButton size="sm" variant="ghost" @click="router.push('/review')">
+            去复习，点亮今天
+          </UiButton>
+        </div>
+        <ReviewHeatmap :days="119" data-reveal-lines />
       </GlassCard>
 
       <!-- 复习负荷预报 -->
@@ -783,7 +783,9 @@ onBeforeUnmount(() => {
 /* ---------- 主 Bento ---------- */
 .bento {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 非对称杂志网格：三列刻意不等宽（宽-窄-中），
+     行序也交错（宽卡左右轮换），打破"三等分对称"的模板感 */
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.2fr);
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -792,6 +794,14 @@ onBeforeUnmount(() => {
 }
 .span3 {
   grid-column: span 3;
+}
+/* 掌握度墨阶卡：黛青淡染，给纯文字 bento 一格背景差异 */
+.tint-card {
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--teal) 13%, var(--surface)),
+    var(--surface) 62%
+  );
 }
 
 /* 英雄卡 */

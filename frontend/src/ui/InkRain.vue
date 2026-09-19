@@ -21,6 +21,13 @@ const props = defineProps({
 const wrapEl = ref(null)
 const canvasEl = ref(null)
 
+/* 触屏设备减密度：粗指针（手机/平板）下字滴上限减半，诗意不添噪 */
+const effectiveMax = (() => {
+  if (typeof window === 'undefined') return props.max
+  if (window.matchMedia('(pointer: coarse)').matches) return Math.max(8, Math.round(props.max / 2))
+  return props.max
+})()
+
 let ctx = null
 let raf = 0
 let running = false
@@ -38,6 +45,7 @@ function spawnDrop() {
   const w = el.clientWidth
   const h = el.clientHeight
   if (!w || !h) return
+  if (drops.length >= effectiveMax) return
   drops.push({
     ch: pickChar(),
     x: Math.random() * w,
@@ -59,8 +67,8 @@ function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000 || 0.016)
   last = now
   ctx.clearRect(0, 0, el.clientWidth, h)
-  // 补员：平均每 240ms 一滴，直到上限
-  if (now - spawnAt > 240 && drops.length < props.max) {
+  // 补员：平均每 240ms 一滴，直到上限（触屏为减半后的 effectiveMax）
+  if (now - spawnAt > 240 && drops.length < effectiveMax) {
     spawnDrop()
     spawnAt = now
   }

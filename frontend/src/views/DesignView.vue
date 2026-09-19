@@ -1,6 +1,6 @@
 <script setup>
 /** /design 组件画廊：设计令牌与基件的一站式打磨场（不进导航，仅开发评审用） */
-import { ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import UiButton from '../ui/UiButton.vue'
 import UiTag from '../ui/UiTag.vue'
@@ -89,6 +89,38 @@ async function askConfirm() {
 
 // 页首编排样例的重播钥匙：换 key 重新挂载 h2，ink-reveal 就会再播一次
 const revealKey = ref(0)
+
+// —— FPS 自检卡：动效批次的性能闸门（P5 验收标准：≥55 优）——
+const fps = ref(0)
+const frameMs = ref(0)
+let fpsRaf = 0
+let fpsFrames = 0
+let fpsT0 = 0
+const fpsVerdict = ref('测速中…')
+
+function fpsLoop(now) {
+  fpsFrames++
+  if (now - fpsT0 >= 500) {
+    frameMs.value = Math.round(((now - fpsT0) / fpsFrames) * 10) / 10
+    fps.value = Math.round((fpsFrames * 1000) / (now - fpsT0))
+    fpsVerdict.value =
+      fps.value >= 55 ? '流畅 · 达标' : fps.value >= 30 ? '一般 · 关注' : '卡顿 · 需优化'
+    fpsFrames = 0
+    fpsT0 = now
+  }
+  fpsRaf = requestAnimationFrame(fpsLoop)
+}
+onMounted(() => {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    fpsVerdict.value = 'reduced-motion：已停测'
+    return
+  }
+  fpsT0 = performance.now()
+  fpsRaf = requestAnimationFrame(fpsLoop)
+})
+onBeforeUnmount(() => {
+  if (fpsRaf) cancelAnimationFrame(fpsRaf)
+})
 </script>
 
 <template>
@@ -151,6 +183,16 @@ const revealKey = ref(0)
         磁吸与光标悬锋。全部引用 --dur / --stagger / --ease 令牌， prefers-reduced-motion 下由
         base.css 全局规则压停直接落末帧，打印快照强制末帧。
       </p>
+    </section>
+
+    <!-- 性能自检 -->
+    <section class="sec">
+      <h2>性能 · 动效自检</h2>
+      <div class="fps-card">
+        <b class="num km-num fps-val">{{ fps || '--' }}</b>
+        <span class="fps-unit">FPS</span>
+        <span class="cap">帧耗时 {{ frameMs }}ms · {{ fpsVerdict }}（验收线 ≥55）</span>
+      </div>
     </section>
 
     <!-- 玻璃卡与骑缝 -->
@@ -419,6 +461,29 @@ h1 {
 .demo-hero {
   max-width: 640px;
   margin-bottom: 14px;
+}
+
+/* FPS 自检卡 */
+.fps-card {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.fps-val {
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
+}
+.fps-unit {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
 }
 
 .swatches {
