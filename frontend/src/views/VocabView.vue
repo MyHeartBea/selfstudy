@@ -7,6 +7,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import request from '../api/request'
 import { useCountUp } from '../utils/useCountUp'
+import { formatTime } from '../composables/useBaseData'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
 import FlipCard from '../ui/FlipCard.vue'
@@ -31,9 +32,32 @@ const loading = ref(false)
 const loadError = ref(false)
 const items = ref([])
 const page = ref(1)
-const pageSize = ref(20)
+const pageSize = ref(15)
 const total = ref(0)
 const filters = reactive({ search: '', mastery: null, kind: '', sort: 'created_desc' })
+
+// —— 生词详情（整卡可点打开）——
+const detailVisible = ref(false)
+const detailRow = ref(null)
+
+function openVocabDetail(row) {
+  detailRow.value = row
+  detailVisible.value = true
+}
+
+/** 详情转编辑：先关详情再开编辑（两层弹窗可叠，但串行更干净） */
+function editFromDetail(row) {
+  if (!row) return
+  detailVisible.value = false
+  openEdit(row)
+}
+
+/** 详情转删除：确认后关详情再删 */
+async function removeFromDetail(row) {
+  if (!row) return
+  detailVisible.value = false
+  await remove(row)
+}
 
 async function loadList() {
   loading.value = true
@@ -641,7 +665,13 @@ async function exportAnki() {
           v-for="(row, i) in items"
           :key="row.id"
           class="vocab-card km-card card"
+          role="button"
+          tabindex="0"
+          :aria-label="`查看生词 ${row.word}`"
           :style="{ '--enter-delay': `calc(${Math.min(i, 11)} * var(--stagger-1))` }"
+          @click="openVocabDetail(row)"
+          @keydown.enter.prevent="openVocabDetail(row)"
+          @keydown.space.prevent="openVocabDetail(row)"
         >
           <span class="v-mark serif" aria-hidden="true">{{
             (row.word || 'A').slice(0, 1).toUpperCase()
@@ -667,8 +697,8 @@ async function exportAnki() {
               复 {{ row.review_count }} · 错 {{ row.wrong_count }}
             </span>
             <span class="vocab-ops">
-              <button class="op-link" @click="openEdit(row)">编辑</button>
-              <button class="op-link danger" @click="remove(row)">删除</button>
+              <button class="op-link" @click.stop="editFromDetail(row)">编辑</button>
+              <button class="op-link danger" @click.stop="remove(row)">删除</button>
             </span>
           </div>
         </article>
@@ -678,11 +708,56 @@ async function exportAnki() {
           v-model:page="page"
           v-model:page-size="pageSize"
           :total="total"
-          :sizes="[20, 50, 100]"
+          :sizes="[15, 30, 60]"
           @change="loadList"
         />
       </div>
     </template>
+
+    <!-- 生词详情（整卡可点打开） -->
+    <UiModal v-model="detailVisible" :title="detailRow ? '生词详情' : ''" size="md">
+      <div v-if="detailRow" class="vd">
+        <div class="vd-head">
+          <span class="vd-word serif">{{ detailRow.word }}</span>
+          <span v-if="detailRow.kind === 'phrase'" class="vocab-kind">词语</span>
+          <span
+            class="m-dots"
+            :title="masteryLabel(detailRow.mastery_level)"
+            :class="{ mastered: detailRow.mastery_level >= 5 }"
+          >
+            <i v-for="d in 5" :key="d" :class="{ on: d <= detailRow.mastery_level }"></i>
+          </span>
+        </div>
+        <p v-if="detailRow.phonetic" class="vd-phonetic">{{ detailRow.phonetic }}</p>
+        <div class="vd-sec">
+          <div class="block-label">释义</div>
+          <p class="vd-meaning">{{ detailRow.meaning || '—' }}</p>
+        </div>
+        <div v-if="detailRow.example" class="vd-sec">
+          <div class="block-label">例句</div>
+          <p class="vd-example">{{ detailRow.example }}</p>
+        </div>
+        <div v-if="detailRow.note" class="vd-sec">
+          <div class="block-label">笔记</div>
+          <p class="vd-note">{{ detailRow.note }}</p>
+        </div>
+        <div class="vd-meta">
+          <span class="count-tip">{{ masteryLabel(detailRow.mastery_level) }}</span>
+          <span class="count-tip"
+            >复习 {{ detailRow.review_count }} · 认错 {{ detailRow.wrong_count }}</span
+          >
+          <span v-if="detailRow.source" class="count-tip">来源 {{ detailRow.source }}</span>
+          <span v-if="detailRow.created_at" class="count-tip">{{
+            formatTime(detailRow.created_at).slice(0, 10)
+          }}</span>
+        </div>
+      </div>
+      <template #footer>
+        <UiButton variant="ghost" @click="detailVisible = false">关闭</UiButton>
+        <UiButton variant="outline" @click="editFromDetail(detailRow)">编辑</UiButton>
+        <UiButton variant="danger" @click="removeFromDetail(detailRow)">删除</UiButton>
+      </template>
+    </UiModal>
 
     <!-- 新增/编辑 -->
     <UiModal v-model="editVisible" :title="editingId ? '编辑生词' : '添加生词'" size="md">
@@ -1112,6 +1187,7 @@ async function exportAnki() {
   gap: 12px;
 }
 .vocab-card {
+  cursor: pointer;
   position: relative;
   overflow: hidden;
   padding: 14px 16px;
@@ -1195,6 +1271,53 @@ async function exportAnki() {
 }
 .vocab-card:hover .m-dots i.on {
   transform: scale(1.25);
+}
+/* 详情弹窗（整卡可点打开） */
+.vd-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vd-word {
+  font-size: 30px;
+  font-weight: 900;
+  color: var(--ink);
+  line-height: 1.2;
+}
+.vd-phonetic {
+  color: var(--ink-3);
+  font-size: 13.5px;
+  margin-top: 4px;
+}
+.vd-sec {
+  margin-top: 14px;
+}
+.vd-meaning {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--ink);
+}
+.vd-example {
+  font-size: 13.5px;
+  font-style: italic;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.vd-note {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.vd-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line-strong);
 }
 .vocab-meaning {
   font-size: 13px;

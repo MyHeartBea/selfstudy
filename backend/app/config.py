@@ -89,6 +89,8 @@ class Settings:
     # 错题积压时"今天到期 98 题"不必全做完；新题优先 + 逾期轮转，
     # 今天没轮到的题会按 last_reviewed_at 顺序在之后的日子里轮到（不淘汰、不毕业）。
     REVIEW_DAILY_LIMIT = int(os.environ.get("REVIEW_DAILY_LIMIT", "50"))
+    # 考研初试日期（用于统计页倒计时）。按 .env 的 EXAM_DATE=YYYY-MM-DD 覆盖。
+    EXAM_DATE = os.environ.get("EXAM_DATE", "2026-12-19")
     # 慢请求/错误监控阈值（毫秒）：超过则在日志里打 WARN 并在 /api/health 暴露计数
     SLOW_REQUEST_MS = int(os.environ.get("SLOW_REQUEST_MS", "3000"))
 

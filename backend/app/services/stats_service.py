@@ -2,6 +2,7 @@
 
 import sqlite3
 
+from app.config import settings
 from app.database import local_day_bounds_utc
 
 
@@ -73,4 +74,18 @@ def get_stats(conn: sqlite3.Connection) -> dict:
         "by_sub_subject": [dict(row) for row in sub_rows],
         "by_question_type": by_question_type,
         "by_source_type": by_source_type,
+        # 考研倒计时（日期在 backend/.env 用 EXAM_DATE=YYYY-MM-DD 覆盖）
+        "exam_countdown": _exam_countdown(),
     }
+
+
+def _exam_countdown() -> dict:
+    """距初试的天数（按服务器本地日期）。日期非法/已过时 days 落 0 并给 passed 标记。"""
+    from datetime import date
+
+    try:
+        exam = date.fromisoformat(settings.EXAM_DATE)
+    except ValueError:
+        return {"days": None, "date": settings.EXAM_DATE, "passed": False}
+    days = (exam - date.today()).days
+    return {"days": max(0, days), "date": settings.EXAM_DATE, "passed": days < 0}

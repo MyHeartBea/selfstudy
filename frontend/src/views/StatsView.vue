@@ -26,6 +26,10 @@ const stats = ref({
   by_question_type: [],
   by_source_type: [],
 })
+// 考研倒计时（/stats 返回 exam_countdown；缺字段时静默不显示）
+const examDays = computed(() => stats.value?.exam_countdown?.days ?? null)
+const examPassed = computed(() => !!stats.value?.exam_countdown?.passed)
+const examDate = computed(() => stats.value?.exam_countdown?.date || '')
 const reviewStats = ref({
   due_today: 0,
   reviewed_today: 0,
@@ -353,6 +357,14 @@ onBeforeUnmount(() => {
         <p class="view-desc" data-reveal-words>用数据看复习节奏，找到下一轮该攻克的薄弱点。</p>
       </div>
       <div class="header-actions">
+        <!-- 考研倒计时：日期在 backend/.env 用 EXAM_DATE=YYYY-MM-DD 配置 -->
+        <span
+          v-if="examDays !== null && !examPassed"
+          class="cd-strip"
+          :title="`初试日期 ${examDate}`"
+        >
+          距考研 <b class="serif num km-num">{{ examDays }}</b> 天
+        </span>
         <UiButton variant="primary" data-magnetic @click="router.push('/review')">
           <Icon name="refresh" :size="15" />
           开始今日复习
@@ -918,6 +930,24 @@ onBeforeUnmount(() => {
 }
 .hero-left {
   min-width: 0;
+}
+/* 考研倒计时条：页首右侧、主按钮左侧，朱砂宋体 */
+.cd-strip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 8px 16px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 12px;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+.cd-strip b {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--accent);
 }
 /* 巨型竖排「今日」：编辑式非对称锚点，完整立于页首左侧 */
 .hero-mega {

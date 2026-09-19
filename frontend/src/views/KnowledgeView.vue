@@ -33,7 +33,7 @@ const router = useRouter()
 const route = useRoute()
 const items = ref([])
 const page = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(9)
 const total = ref(0)
 const filters = reactive({
   subjectId: null,
@@ -354,7 +354,7 @@ onMounted(() => {
           v-model:page="page"
           v-model:page-size="pageSize"
           :total="total"
-          :sizes="[10, 20, 50, 100]"
+          :sizes="[9, 18, 45, 90]"
           @change="loadKnowledge"
         />
       </div>

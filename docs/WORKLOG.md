@@ -123,7 +123,7 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 - B3 首图视差（图片对象定位动画易抖，收益低）；C5 进度线滴墨（进度线已有流光，再加是堆）；E2 标签 pills（现状是文本输入框，非标签堆叠，不适用）；F4 分布条墨阶渐变（现有墨点语义已够）；PracticeView 预览（"今日出征"已存在）。
 测试：前端 Vitest 61 + E2E 31 全绿、build/lint 干净；真机抽验 chips/stepper/空态印章 DOM 命中。
 
-## 2026-09-19 · 复习分块批（`<hash>`，用户需求：今日复习按科目分块，默认只刷数学）
+## 2026-09-19 · 复习分块批（`e3b1a13`，用户需求：今日复习按科目分块，默认只刷数学）
 首个前后端协同功能批。
 **后端**：
 - `review_service.get_today_queue` 新增 `category` 参数（math/cs408/english/politics）：队列 SQL 加 `subject_id IN (...)` 过滤，dueTotal/remaining 按块统计；不传 = 全部（向后兼容，旧测试全过）。
@@ -138,3 +138,11 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 - E2E `fixtures.js` 补 `/api/reviews/blocks` 打桩（漏打桩会被 expectAllApiStubbed 判假红）。
 **真机验证**（重启 8000 后端后）：Tabs 显示 数学 80 / 408 16 / 英语 10 / 政治 1（真实到期数）；默认数学队列只出数学题；切 408 后队列 16 题、DOM 卡片显示"408计算机基础综合/计算机网络"、API 确认 subject_id 全部归属 408 块。
 测试：后端 153、前端 61 + E2E 31 全绿。
+
+## 2026-09-19 · 五项快修批（`<hash>`，用户四点反馈 + 倒计时立项）
+①**考研倒计时**：`config.py` 新增 `EXAM_DATE`（默认 2026-12-19，`.env` 可覆盖），`/api/stats` 返回 `exam_countdown{days,date,passed}`（非法日期 days=None、已过 passed=true，前端静默不显示）；统计页 hero 主按钮左侧虚线章条"距考研 N 天"（宋体大数字）。
+②**生词卡整卡可点**：卡片挂 role=button + 键盘 Enter/Space，点开**详情弹窗**（大字词头/音标/掌握度墨点/释义/例句/笔记/来源与复错数），页脚 关闭/编辑/删除；编辑与删除先关详情再动作。卡片原"编辑/删除"按钮补 `@click.stop`（AGENTS 6.5 整卡可点规范）。
+③**生词本每页 15**（pageSize 20→15，sizes [15,30,60]）。
+④**知识点每页 9**（pageSize 10→9，三列网格恰好 3×3，sizes [9,18,45,90]）。
+⑤**练习页高级筛选下拉被裁**（用户截图实测）：根因是 `details.adv-filter` 放在 `.deploy` 玻璃卡内，`gcard-body` 的 `overflow:hidden`（流光裁切用）把 UiSelect 下拉菜单整个裁掉。修法 = 提前闭合 GlassCard，把筛选挪出为独立 `.card.card-pad` 纸片（普通 .card 无 overflow 裁切）。真机确认 adv-filter 已不在 gcard-body 内。
+测试：后端 153 + ruff 全绿、前端 61 + E2E 31 全绿；真机四页 DOM 验收（倒计时 91 天/点卡出详情/portrait 词、page_size=9、adv-filter 出卡）。

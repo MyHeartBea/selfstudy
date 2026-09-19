@@ -278,76 +278,79 @@ onMounted(loadBaseData)
           </UiButton>
         </div>
       </div>
-
-      <details class="adv-filter">
-        <summary>
-          <Icon name="filter" :size="13" />
-          高级筛选
-          <Icon name="chevron-down" :size="13" class="adv-arrow" />
-        </summary>
-        <div class="filter-grid">
-          <div class="f-item km-item">
-            <label class="f-label">科目</label>
-            <UiSelect
-              v-model="filters.subjectId"
-              :options="baseData.subjects.map((s) => ({ label: s.name, value: s.id }))"
-              placeholder="全部科目"
-              clearable
-              @change="onSubjectChange"
-            />
-          </div>
-          <div class="f-item">
-            <label class="f-label">二级科目</label>
-            <UiSelect
-              v-model="filters.subSubjectId"
-              :options="subSubjectOptions.map((s) => ({ label: s.name, value: s.id }))"
-              placeholder="全部"
-              clearable
-              :disabled="!subSubjectOptions.length"
-            />
-          </div>
-          <div class="f-item">
-            <label class="f-label">来源分类</label>
-            <UiSelect
-              v-model="filters.sourceType"
-              :options="sourceTypes.map((s) => ({ label: s.label, value: s.value }))"
-              placeholder="全部来源"
-              clearable
-            />
-          </div>
-          <div class="f-item">
-            <label class="f-label">年份</label>
-            <input v-model="filters.sourceYear" class="field-input" placeholder="如 2025" />
-          </div>
-          <div class="f-item">
-            <label class="f-label">题型</label>
-            <UiSelect
-              v-model="filters.questionType"
-              :options="questionTypeFilterOptions"
-              placeholder="全部题型"
-              clearable
-            />
-          </div>
-          <div class="f-item">
-            <label class="f-label">难度</label>
-            <UiSelect
-              v-model="filters.difficulty"
-              :options="[1, 2, 3, 4, 5].map((n) => ({ label: `${n} 星`, value: n }))"
-              placeholder="全部难度"
-              clearable
-            />
-          </div>
-          <div class="f-item">
-            <label class="f-label">知识点</label>
-            <input v-model="filters.tag" class="field-input" placeholder="如：微分方程" />
-          </div>
-          <div class="f-item">
-            <label class="f-label">搜索</label>
-            <input v-model="filters.search" class="field-input" placeholder="搜索题干" />
-          </div>
-        </div>
-      </details>
     </GlassCard>
+
+    <!-- 高级筛选放在玻璃卡之外：gcard-body 的 overflow:hidden（流光裁切用）
+         会把 UiSelect 的下拉菜单整个裁掉（实测科目下拉显示不全）。
+         普通 .card 没有 overflow 裁切，下拉可自由溢出。 -->
+    <details class="adv-filter card card-pad">
+      <summary>
+        <Icon name="filter" :size="13" />
+        高级筛选
+        <Icon name="chevron-down" :size="13" class="adv-arrow" />
+      </summary>
+      <div class="filter-grid">
+        <div class="f-item km-item">
+          <label class="f-label">科目</label>
+          <UiSelect
+            v-model="filters.subjectId"
+            :options="baseData.subjects.map((s) => ({ label: s.name, value: s.id }))"
+            placeholder="全部科目"
+            clearable
+            @change="onSubjectChange"
+          />
+        </div>
+        <div class="f-item">
+          <label class="f-label">二级科目</label>
+          <UiSelect
+            v-model="filters.subSubjectId"
+            :options="subSubjectOptions.map((s) => ({ label: s.name, value: s.id }))"
+            placeholder="全部"
+            clearable
+            :disabled="!subSubjectOptions.length"
+          />
+        </div>
+        <div class="f-item">
+          <label class="f-label">来源分类</label>
+          <UiSelect
+            v-model="filters.sourceType"
+            :options="sourceTypes.map((s) => ({ label: s.label, value: s.value }))"
+            placeholder="全部来源"
+            clearable
+          />
+        </div>
+        <div class="f-item">
+          <label class="f-label">年份</label>
+          <input v-model="filters.sourceYear" class="field-input" placeholder="如 2025" />
+        </div>
+        <div class="f-item">
+          <label class="f-label">题型</label>
+          <UiSelect
+            v-model="filters.questionType"
+            :options="questionTypeFilterOptions"
+            placeholder="全部题型"
+            clearable
+          />
+        </div>
+        <div class="f-item">
+          <label class="f-label">难度</label>
+          <UiSelect
+            v-model="filters.difficulty"
+            :options="[1, 2, 3, 4, 5].map((n) => ({ label: `${n} 星`, value: n }))"
+            placeholder="全部难度"
+            clearable
+          />
+        </div>
+        <div class="f-item">
+          <label class="f-label">知识点</label>
+          <input v-model="filters.tag" class="field-input" placeholder="如：微分方程" />
+        </div>
+        <div class="f-item">
+          <label class="f-label">搜索</label>
+          <input v-model="filters.search" class="field-input" placeholder="搜索题干" />
+        </div>
+      </div>
+    </details>
   </div>
 </template>
 
@@ -395,11 +398,10 @@ onMounted(loadBaseData)
   color: var(--ink);
 }
 
-/* 高级筛选折叠 */
+/* 高级筛选折叠（已迁出玻璃卡，自成一张纸片卡；下拉不再被 overflow 裁切） */
 .adv-filter {
-  margin-top: 24px;
-  border-top: 1px dashed var(--line);
-  padding-top: 14px;
+  margin-top: 16px;
+  cursor: default;
 }
 .adv-filter summary {
   list-style: none;
@@ -411,6 +413,7 @@ onMounted(loadBaseData)
   font-weight: 700;
   color: var(--ink-2);
   padding: 5px 12px;
+  margin-left: -12px;
   border-radius: 9px;
   transition: all 0.15s var(--ease);
   user-select: none;

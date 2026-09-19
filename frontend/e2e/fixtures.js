@@ -222,6 +222,7 @@ const emptyStats = {
   by_sub_subject: [],
   by_question_type: [],
   by_source_type: [],
+  exam_countdown: { days: 91, date: '2026-12-19', passed: false },
 }
 const emptyReviewStats = {
   due_today: 0,
