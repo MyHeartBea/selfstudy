@@ -20,9 +20,10 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    // 字体分片不许内联成 base64：它们靠 unicode-range 按需命中，
-    // 内联等于把 24 个用不上的字形包塞进那一支 CSS 一起下载。
-    assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? 0 : 4096),
+    // 字体一律不许内联成 base64：它们靠 unicode-range / 按需命中，
+    // 内联等于把用不上的字形包塞进那支 CSS 一起下载。
+    // 这里曾只挡了 woff/woff2，KaTeX 的 20 个 .ttf 照样被内联 —— katex CSS 709KB（源文件 23.8KB）。
+    assetsInlineLimit: (file) => (/\.(woff2?|ttf|otf|eot)$/.test(file) ? 0 : 4096),
     rollupOptions: {
       output: {
         // 之前只切了 katex，Vue 全家桶 + axios + 全部外壳组件混在一个

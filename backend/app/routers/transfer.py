@@ -181,9 +181,12 @@ def import_mistakes(body: ImportPayload):
                 )
                 sync_mistake_tags(conn, cur.lastrowid, fields["knowledge_tags"])
                 created += 1
+        message = f"成功导入 {created} 条错题"
+        if not snapshot:
+            message += "（导入前快照失败，回滚点缺失，详见服务日志）"
         return ok(
             {"created": created, "failed": failed, "snapshot": snapshot},
-            f"成功导入 {created} 条错题",
+            message,
         )
     except Exception as exc:
         return server_error(exc)

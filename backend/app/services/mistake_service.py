@@ -26,6 +26,31 @@ from app.services.knowledge_service import (
 
 SOURCE_TYPES = {"real_exam", "mock", "other"}
 
+# PUT 的"附加内容"键：客户端**压根没带这个键**时按库里原值回填，而不是覆盖成空。
+# 语义仍然保持全量覆盖——显式提交 `"passage_text": ""` 就是真的要清空；
+# 只有不带键（老客户端、只含基础字段的表单）才不动。
+# 为什么单独点名这几列：passage/english_* 五列是 AI 整篇精读的唯一副本，
+# 被一次局部 PUT 抹掉后无法重新生成（除非再花一次视觉调用，且原文可能已丢）。
+ATTACHMENT_KEYS = (
+    "images",
+    "passage_text",
+    "passage_translation",
+    "english_sentences",
+    "english_phrases",
+    "english_words",
+    "english_questions",
+)
+# 这些键在库里是 JSON 文本列（列名与 body 键名一致，见 MISTAKE_FIELD_KEYS），回填时要解码
+_ATTACHMENT_JSON_KEYS = frozenset(
+    {
+        "images",
+        "english_sentences",
+        "english_phrases",
+        "english_words",
+        "english_questions",
+    }
+)
+
 # 列表查询排除英语整篇的大 JSON 字段（全文翻译/逐句/短语/生词/多题，单行可达十几 KB）。
 # 列表卡片只用到题干/首图/标签/元信息；详情、编辑、复习路径各自 SELECT * 取全量，不受影响。
 LIST_COLUMNS = (
@@ -518,11 +543,31 @@ def update_mistake(
     conn: sqlite3.Connection,
     mistake_id: int,
     body: Dict[str, Any],
+    provided: Optional[set] = None,
 ) -> Tuple[Optional[dict], List[str]]:
-    """更新指定错题，同时补全缺失的知识点词条。"""
-    row = conn.execute("SELECT images FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
+    """更新指定错题，同时补全缺失的知识点词条。
+
+    provided 是客户端**实际提交过的键集合**（Pydantic 的 model_fields_set）。
+    为 None 时按"全部提交"处理，保持旧的 PUT 语义。
+    """
+    row = conn.execute("SELECT * FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
     if row is None:
         return None, ["NOT_FOUND"]
+
+    body = dict(body)
+    if provided is not None:
+        for key in ATTACHMENT_KEYS:
+            if key in provided:
+                continue
+            raw = row[key] if key in row.keys() else None
+            if key in _ATTACHMENT_JSON_KEYS:
+                try:
+                    body[key] = json.loads(raw) if raw else []
+                except (TypeError, ValueError):
+                    body[key] = []
+            else:
+                body[key] = raw or ""
+
     old_images = []
     if row["images"]:
         try:
@@ -592,6 +637,16 @@ def batch_mistakes(
     placeholders = ", ".join("?" for _ in ids)
 
     if action == "delete":
+        # 先取回配图再删行：删完就再也查不到，文件会永久留在 data/images 里
+        # （/images/<name> 仍可直接访问，等于删掉的截图继续能被读到）。
+        doomed_images = []
+        for (raw,) in conn.execute(
+            f"SELECT images FROM mistakes WHERE id IN ({placeholders})", ids
+        ).fetchall():
+            try:
+                doomed_images.extend(json.loads(raw or "[]"))
+            except (TypeError, ValueError):
+                pass
         conn.execute(
             f"DELETE FROM solution_grades WHERE mistake_id IN ({placeholders})",
             ids,
@@ -609,6 +664,7 @@ def batch_mistakes(
             ids,
         )
         conn.commit()
+        remove_image_files(doomed_images)
         return cur.rowcount
 
     if action in ("pause", "resume"):

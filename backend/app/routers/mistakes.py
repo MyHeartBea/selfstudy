@@ -237,7 +237,11 @@ def batch_mistakes(body: BatchMistakeRequest):
             source_year=body.source_year,
             source_name=body.source_name,
         )
-        return ok({"count": count, "snapshot": snapshot}, "批量操作完成")
+        # 快照失败时不能继续宣称"可回滚"：把降级写进文案（详见 /api/snapshots 是否真有这份）
+        message = "批量操作完成"
+        if body.action == "delete" and body.ids and not snapshot:
+            message = "批量删除完成，但快照失败 —— 本次无法一键回滚，详见服务日志"
+        return ok({"count": count, "snapshot": snapshot}, message)
     except ValueError as exc:
         return error(400, str(exc))
     except Exception as exc:
@@ -251,7 +255,9 @@ def update_mistake(mistake_id: int, body: MistakeUpdate):
     """更新指定错题，同时补全缺失的知识点词条。"""
     conn = get_connection()
     try:
-        updated, errors = mistake_service.update_mistake(conn, mistake_id, body.model_dump())
+        updated, errors = mistake_service.update_mistake(
+            conn, mistake_id, body.model_dump(), provided=body.model_fields_set
+        )
         if errors:
             message = errors[0]
             return error(404 if message == "NOT_FOUND" else 400, "；".join(errors))

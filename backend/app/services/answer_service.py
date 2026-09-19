@@ -83,8 +83,13 @@ def normalize_multi_answer(value: str) -> str:
     return "".join(_multi_letters(value))
 
 
-def judge_multi(user_answer: str, expected: str) -> dict:
-    """返回政治多选题判断结果：少选、错选、多选均不得分，与选项顺序无关。"""
+def judge_letters(user_answer: str, expected: str) -> dict:
+    """单选 / 多选的**唯一判分口径**：取 A-D 字母、去重、排序后整体相等才算对。
+
+    少选、错选、多选都不得分，与书写顺序和重复字母无关（"aab" 与 "ab" 等价）。
+    前端 utils/examScoring.js 的 scoreLetters 必须与本函数同口径 —— 它只负责即时
+    反馈，落库的结果由本函数复核，所以两边不一致时以这里为准。
+    """
     user_letters = _multi_letters(user_answer)
     expected_letters = _multi_letters(expected)
     return {
@@ -93,3 +98,8 @@ def judge_multi(user_answer: str, expected: str) -> dict:
         "expected": "".join(expected_letters),
         "aliases": [],
     }
+
+
+def judge_multi(user_answer: str, expected: str) -> dict:
+    """返回政治多选题判断结果：口径见 judge_letters。"""
+    return judge_letters(user_answer, expected)

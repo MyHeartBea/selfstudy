@@ -14,7 +14,7 @@
 - 前端：`frontend/`（源码 `src/`，构建产物 `frontend/dist`）
 - 数据：`data/kaoyan_mistakes.db`（SQLite；迁移版本门控 v10；启动前自动备份保留 20 份）
 - 文档：`docs/`（api.md / architecture.md / NEW_SESSION.md / **WORKLOG.md 工作日志** / notes/）
-- 视觉脚本：`scripts/vision_request.py`
+- 视觉脚本：`scripts/vision_request.py`；图片巡检：`scripts/clean_orphan_images.py`（默认 dry-run，`--apply` 才删）
 
 ## 2. 启动与构建
 ```bash
@@ -32,8 +32,8 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（168 个）
-cd frontend && npm test                                  # Vitest 74 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（182 个）
+cd frontend && npm test                                  # Vitest 75 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
 cd frontend && npm run test:e2e                          # Playwright 37 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
@@ -89,6 +89,12 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - `origin = https://github.com/MyHeartBea/selfstudy.git`，分支 `main`，Git Credential Manager 已登录。
   - 若 push 报代理（`127.0.0.1:7897`）不可达：`git -c http.proxy= -c https.proxy= push -u origin main`（本机直连 github 是通的）。
 - `.env`、数据库、`node_modules`、`dist`、日志一律**不入库**。
+- **数据路径禁止静默失败**（出错照样 200、页面照样渲染、只有数据悄悄变坏的一律算 bug）：
+  - 快照 / 备份失败不许继续宣称"可回滚"——`snapshot_database()` 返回 None 时写 ERROR 日志，调用方把降级写进响应 `message`（批量删除 / 导入已接）；
+  - 已花掉 AI 调用的结果不许因为一次 INSERT 失败变成 500——`/api/essays/grade` 返回 200 + `persisted:false` + `persist_error`，前端 toast 明说"未存档"；
+  - 删行必须连带删文件：`batch_mistakes(action='delete')` 先取回 `images` 再删，事后 `remove_image_files()`。巡检跑 `python scripts/clean_orphan_images.py`（默认 dry-run；孤儿文件的内容仍能通过 `/images/<name>` 访问，这是隐私问题不是磁盘问题）。
+- **PUT /api/mistakes 的"附加内容"键有特殊语义**：`images` 与 `passage_text / passage_translation / english_*`（见 `mistake_service.ATTACHMENT_KEYS`）**压根不带键**时服务层按库里原值回填，显式提交 `""` / `[]` 才是清空——这几列是 AI 整篇精读的唯一副本，被一个只含基础字段的表单覆盖就再也生成不回来。Pydantic 侧靠 `body.model_fields_set` 区分，新增字段时要一起维护那张名单。
+- **字母题判分以服务端为唯一口径**：`answer_service.judge_letters()`（取 A-D、去重、排序后整体相等），`review_mistake` 在 `user_answer` 非空时用它覆盖前端传来的 `result`。前端 `utils/examScoring.js::scoreLetters` 只为即时反馈存在，两边必须跑同一张用例表（`backend/tests/test_data_safety.py::TestScoringSingleSource` 与 `frontend/tests/examScoring.test.js` 各钉一遍）。
 - **C 盘空间紧张：所有缓存 / 下载 / 临时文件一律放 D 盘**，C 盘只留程序本体。
   - 临时文件放 `D:\temp`（不要用系统 `%TEMP%`，它已在 C 盘积了几个 GB）。
   - 工具缓存放 `D:\caches\`，已配好的：pip（`pip.ini` 的 `global.cache-dir=D:\caches\pip`）、npm（已在 `D:\temp\npm-cache`）、impeccable skill 引擎（用户环境变量 `IMPECCABLE_HOME=D:\caches\impeccable`）、Playwright 浏览器（`PLAYWRIGHT_BROWSERS_PATH=D:\caches\ms-playwright`）。
@@ -130,6 +136,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 ## 5. 核心 AI 约定（修改 / 新增 AI 功能时务必遵守）
 1. **图片一律「先看图提文字 → 再文本分析」**：`_vision_extract_text`（快、稳）→ `analyze_english` / `_analyze_standard_content`（文本）。**禁止单次超大视觉生成**（会 300s 超时 / 空返回）。单图 / 多图 / 带参考图都自动检测语言：英语 → 精读；数学 / 408 → 标准。
+   **提不到文字就必须报错，不许继续分析**：`source_text` 为空时继续走 `_chat_json`，模型会凭空编一道题再编一份看着合理的解析（内容不减约定整条落空，且用户无从察觉）。`ai_english.analyze_english` 是第一道闸，`_analyze_standard_content` 是第二道闸。
 2. **内容不能减少**：
    - 英语整篇 = 原文**左右对照** + 全文翻译 + 逐句拆解（结构 + 句型）+ 重点短语 + 生词 + **多题解析**。
    - 数学 / 408 = 「懂一题会三题」+「先讲透考点（当作读者不会）」+ 1.1 / 1.2 分步详细。
@@ -212,7 +219,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - 交错间隔写在 CSS 里而非 JS 拼数字：`--enter-delay: calc(<序号> * var(--stagger-1))`（`MistakeCard`/`Knowledge`/`Formula`/`Vocab` 已统一为 45ms，`Practice`/`Subject` 为 70ms）。
 
 **开场时间线（三条链已合流，不要再各走各的）**：内联 splash（`main.js` 收，最短 950ms）→ `BootCalibration` 四相放完时给 `body` 加 `.ready` 并 `emit('done')` → `App.onBootDone()` 广播 `km:boot-done` → `AppLayout` 才加 `body.app-ready`（Dock 落下 / 氛围显影的**唯一**开关）。`app-ready` 同时等字体就绪：字体 CSS 是异步 chunk，`main.js` 把它的 promise 挂在 `window.__kmFontsReady`，AppLayout 必须**串在它后面**再读 `document.fonts.ready`，否则 ready 会在字形还没开始下载时就兑现（表现为揭示瞬间是兜底字体）。看门狗一律 4500ms，刻意放在 BootCalibration 自身 4200ms 之后，不抢它的收尾。
-- **字体不在关键 CSS 里**：`main.js` 用 `import('./styles/fonts.js')` 动态引入 4 个字重（404 条 `@font-face` = 486KB）。它们曾被 Vite 合进 render-blocking 的 `index-*.css`，首屏要先解析完才画得出启动屏。实测：阻塞 CSS 528.6KB→54.7KB（gzip 12.1KB），`renderBlockingStatus` 由 `blocking` 变 `non-blocking`。`vite.config.js` 另设 `assetsInlineLimit` 对 woff/woff2 返回 0（禁止内联成 base64，那等于把 24 个用不上的字形包一起下载）。
+- **字体不在关键 CSS 里**：`main.js` 用 `import('./styles/fonts.js')` 动态引入 4 个字重（404 条 `@font-face` = 486KB）。它们曾被 Vite 合进 render-blocking 的 `index-*.css`，首屏要先解析完才画得出启动屏。实测：阻塞 CSS 528.6KB→54.7KB（gzip 12.1KB），`renderBlockingStatus` 由 `blocking` 变 `non-blocking`。`vite.config.js` 另设 `assetsInlineLimit` 对 **所有字体格式**（woff / woff2 / ttf / otf / eot）返回 0（禁止内联成 base64，那等于把用不上的字形包一起下载）。这里曾只挡了 woff/woff2，KaTeX 的 20 个 `.ttf` 照样被内联，`katex-*.css` 涨到 **709KB**（源文件才 23.8KB）；修好后现代浏览器一个 ttf 请求都不会发（woff2 命中）。改构建配置后要用 `ls -la dist/assets/katex-*.css` 复验一次。
 - **分包**：`manualChunks` 按 `katex` / `motion`(gsap+lenis) / `vendor`(vue·router·axios+vue 生态) 切分，入口 chunk 从 219.8KB 降到 62.4KB，并自动产出 `<link rel=modulepreload>`；KaTeX 由 `MathText` 的路由依赖图按需并行加载。
 - **`prefers-reduced-motion`**：`base.css` 除压时长外还必须带 `animation-iteration-count: 1 !important`，否则光斑/骨架屏/加载圈会以 0.01ms 的节奏**无限空转**；`useCountUp` 在 `immediate` 路径上也要先看偏好再决定开滚。
 - **`will-change` 不许常驻在列表项上**：一屏 20 张卡 = 20 个空转的 GPU 合成层。只在真正需要的那一刻开：`.tilt:hover`、`.reveal-pending:not(.reveal-in)`（`v-reveal` 显现完就关层，因为 `reveal-pending` 类不摘）。同理 `.tilt`/`.reveal-*` 的时长与缓动也已收进令牌，不再是手写的 `cubic-bezier(0.22,0.8,0.36,1)`。
@@ -278,6 +285,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。
-- 测试基线：**后端 168、前端 Vitest 74、E2E 37**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
+- 测试基线：**后端 182、前端 Vitest 75、E2E 37**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

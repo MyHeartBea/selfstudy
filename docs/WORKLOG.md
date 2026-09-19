@@ -183,3 +183,24 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 - ⚠️ **一次 E2E 假红**：改完后第一次全量跑 `/vocab`、`/knowledge` 两条 desktop 烟测失败，单跑与重跑都绿（37/37）。冷启动 vite + 2 workers 的争抢，符合"并发争抢假红"的老毛病；**结论前至少跑两遍**，别被单次红牵着改代码。
 
 测试：后端 **168** + ruff 干净；前端 Vitest **74** + eslint/prettier + build；E2E **37** 全绿。
+
+## 2026-09-19 · 全栈体检第 1 批：P0 数据与可用性包
+
+体检清单（前后端 7 张表）见本次对话产出；这批只做表里 P0 的 7 行，全是一类问题：**接口照样 200、页面照样渲染，只有数据/文件在悄悄变坏**。
+
+**后端**：
+- **B1 批量删图泄漏**：`batch_mistakes(action='delete')` 原来只删行、不删配图文件（单题删除路径是对的，批量漏了）→ 实测 `data/images` 里 **102/152 个孤儿**，内容仍能通过 `/images/<name>` 直接访问（是隐私问题，不是磁盘问题：总共才 1.1MB）。改为删行前取回 `images`、提交后 `remove_image_files()`。
+  - 新增 `scripts/clean_orphan_images.py`：**默认 dry-run**，`--apply` 才删，`--keep-days` 保护正在写入流水线里的新文件。引用来源是 `mistakes.images` + `exam_questions.diagram_image` 两处（库里带图片列的表就这两个，只按 mistakes 判定会把真题图示题的原图删掉）——解析不了的 JSON 保守跳过，宁可漏报不误删。真实数据尚未执行清理，等用户点头。
+- **B2 快照静默失败**：`snapshot_database()` 的 `except Exception: return None` 会吞掉一切异常，而调用方正对着用户说"可回滚"。现在失败写 `logger.exception`，批量删除 / 导入两条路径按 `None` 把响应 `message` 降级成"快照失败 —— 本次无法一键回滚"。`/api/system/snapshots` 本来就报 500，没动。
+- **B3 批改结果被 INSERT 失败带走**：`/api/essays/grade` 的存档段现在整块 try 住，失败仍返回 200 + `record_id:null` + `persisted:false` + `persist_error`；`EssayPanel` 见 `persisted === false` 补一条 warning toast（否则用户会去档案页找这条，找不到就以为从没批过）。
+- **B4 PUT 抹掉精读字段**：`MistakeUpdate` 里 `passage_text: str = ''` 这类默认值会让"没带这个键"和"显式清空"长得一模一样。router 传 `body.model_fields_set` 进 `update_mistake(provided=...)`，服务层对 `ATTACHMENT_KEYS`（`images` + 5 个 passage/english 列）按库里原值回填。前端 `MistakeForm` 一直提交完整字段所以行为不变；`images` 那条尤其要紧——原来一个不带 `images` 的 PUT 会把**文件**也删掉。
+- **B9 空文字仍往下分析**：`_analyze_standard_content` 里 `except Exception: pass` + `text or "请分析这道题。"` 看着像活的编造路径，**查了调用方才发现唯一调用点 `ai_english.analyze_english` 已有 `if not source_text.strip(): raise` 前置守卫，且只以 `images=[]` 进来** → 那条分支是死代码，不是在线 bug（教训：体检表里每条都要自己复核过再写进结论）。仍按第 5 节约定补成第二道闸：提字失败改 `logger.warning`（不再静默），文字为空抛 `AiRequestError`，并把 `"请分析这道题。"` 这个占位 content 删掉。
+- **F10 判分双源**：新增 `answer_service.judge_letters()`（取 A-D、去重、排序整体相等），`judge_multi` 变成它的别名；`review_mistake` 在 `question_type in (choice, multi)` 且 `user_answer` 非空时**用服务端结论覆盖前端传来的 result**（fill 早就这么做了）。没传 `user_answer` 的 Q/W 自评路径不受影响（新增用例专门钉住这条）。
+  - 前端 `normalizeLetters` 原来**不去重**（`'AAB'` vs `'AB'` 判错，后端判对）→ 补 `new Set`。两端各钉一张同样的用例表（后端 `test_data_safety.TestScoringSingleSource`、前端 `examScoring.test.js`）。
+  - 顺带抓到自己写的 F821：`review_service` 里 `judge_letters` 忘了 import，而**182 个测试全绿**——说明那条分支原本没有任何覆盖。补了两条覆盖它（服务端覆盖 + 自评不覆盖）。
+
+**前端**：
+- **F1 KaTeX 字体被 base64 内联**：`assetsInlineLimit` 的白名单只写了 `woff2?`，20 个 `.ttf` 照旧内联 → `dist/assets/katex-*.css` **708,986 B**；扩成 `\.(woff2?|ttf|otf|eot)$` 后 **24,475 B**（-96.5%）。真机复验（生产 8000，错题详情弹窗）：12 个 `.katex` 且 `.katex-html` 全部渲染、5 个 KaTeX woff2 命中 200、**0 个 ttf 请求**、0 个 4xx、零 console/page 错误（现代浏览器根本走不到 ttf 那档 fallback）。
+
+**测试**：后端 **182**（新增 `tests/test_data_safety.py` 14 个：图片泄漏 2 + 快照降级 1 + PUT 附加字段 3 + 批改存档 2 + 判分口径 4 + 空文字闸 2）、前端 Vitest **75**、E2E **37** 全绿；ruff check/format、eslint、prettier、`npm run build` 均干净。
+**文档**：AGENTS.md 第 3 节加"数据路径禁止静默失败"三条铁律（快照降级 / AI 结果不许被 INSERT 带走 / 删行必删文件）+ PUT 附加字段语义 + 字母题判分单一口径；第 5 节补"提不到文字必须报错"；`docs/api.md` 补 `/api/essays` 整节（上一批漏了）与三处契约说明。

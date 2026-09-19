@@ -38,4 +38,21 @@ describe('scoreLetters（单选 + 多选统一判分）', () => {
     expect(scoreLetters('ABCD', 'ABD')).toBe(false)
     expect(scoreLetters('A', 'AC')).toBe(false)
   })
+
+  // 与后端 app/services/answer_service.py::judge_letters 共享的用例表：
+  // 落库结果由服务端按同一张表复核，所以这里钉住的正是"两边不许漂移"的那几条。
+  it('与后端同口径：重复字母去重、越界字母剔除', () => {
+    const CASES = [
+      ['aab', 'AB', true],
+      ['A A', 'A', true],
+      ['abx', 'AB', true],
+      ['abd', 'AB', false],
+      ['aabc', 'abc', true],
+      ['', 'A', false],
+      ['ex', 'A', false],
+    ]
+    for (const [user, expected, want] of CASES) {
+      expect(scoreLetters(user, expected), `scoreLetters(${user}, ${expected})`).toBe(want)
+    }
+  })
 })

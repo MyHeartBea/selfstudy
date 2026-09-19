@@ -29,7 +29,9 @@
 - `POST /api/mistakes/{id}/grade`：AI 按过程批改解答题（分数/错因/标准解答/其他解法）
 - `POST /api/mistakes`：新建（question_type 支持 choice/multi/fill/translation/solution）
 - `POST /api/mistakes/batch`：`{"ids", "action": "pause|resume|delete|source_type", ...}`
-- `PUT /api/mistakes/{id}`：全量更新
+  删除会连带删掉配图文件；响应 `{"count", "snapshot"}`，`snapshot` 为 null 表示快照失败（`message` 会明说本次无法一键回滚）
+- `PUT /api/mistakes/{id}`：全量更新。**例外**：`images` 与 `passage_text / passage_translation / english_*`
+  这组"附加内容"键**不带键**时按库里原值保留（显式传 `""` / `[]` 才是清空），见 `mistake_service.ATTACHMENT_KEYS`
 - `POST /api/mistakes/{id}/pause|resume|source-type`
 - `DELETE /api/mistakes/{id}`
 
@@ -44,6 +46,8 @@
 - `GET /api/reviews/stats`：复习统计、正确率、连续天数、掌握度分布、薄弱知识点、7 天趋势
 - `GET /api/reviews/calendar?days=140`：按天聚合 `[{day, total, correct}]`（热力图）
 - `POST /api/mistakes/{id}/review`：`{"result": bool, "note", "user_answer"}`
+  - choice / multi / fill 且 `user_answer` 非空时，**服务端按 `answer_service.judge_letters` / `judge_fill` 重新判分并覆盖 `result`**（前端自己判的那次只用于即时反馈）；
+  - 没传 `user_answer`（翻译 / 解答的 Q/W 自评）时尊重前端给的 `result`。
 
 ## 生词本（英语）
 
@@ -100,6 +104,17 @@
   - `{"images": [b64, b64, ...], "instruction"}` —— 按顺序分批（每批 3 张）提文字后合并，**只生成一条草稿**；
   - 兼容旧调用 `{"image_base64": b64}`；`image_base64` 与 `images` 至少给一个（否则 422）。
   - 逐批失败不整体中断，未识别的批次会在文本里标注「未能识别」。
+
+- `POST /api/ai/english`：英语整篇精读（`{"images":[...], "text", "instruction"}`，先提文字再文本分析）
+
+## 英语作文批改
+
+- `POST /api/essays/grade`：`{"kind": "e1_short|e1_long|e2_short|e2_long", "text" | "images"[, "prompt_text", "instruction", "persist": true]}`
+  手写稿**逐张**转录后再走文本批改。响应 `data` 除评分体外还带：
+  `record_id`（存档成功时）、`persisted`（`persist:true` 时才有）、`persist_error`、`transcript_warning`。
+  **存档失败仍是 200**：已花掉的 AI 结果不该被一次 INSERT 带走，前端据 `persisted:false` 提示"未进档案页"。
+- `GET /api/essays?kind=&page=&per_page=`：档案列表 `{items,total}`；`GET /api/essays/{id}` 含 `essay_text` + 完整 `result`；
+  `DELETE /api/essays/{id}`。
 
 AI 端点需在 `backend/.env` 配置密钥；有每分钟限流（默认 30）。设置 `API_TOKEN` 后所有 `/api`
 请求需携带 `X-API-Token` 或 `Authorization: Bearer`。

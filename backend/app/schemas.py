@@ -37,8 +37,13 @@ class MistakeCreate(BaseModel):
 
 
 class MistakeUpdate(MistakeCreate):
-    """更新错题。注意：PUT 为全量覆盖语义（所有必填字段须同时提交），
-    前端 MistakeForm 提交完整表单；如需局部更新请改用 PATCH。"""
+    """更新错题。PUT 为全量覆盖语义：提交了 `"passage_text": ""` 就是清空。
+
+    例外是 images 与 passage_text / passage_translation / english_* 这组"附加内容"键
+    （见 mistake_service.ATTACHMENT_KEYS）：**压根不带这些键**时服务层会按库里原值回填，
+    因为它们是 AI 整篇精读的唯一副本，被一个只含基础字段的表单覆盖掉就无法恢复。
+    前端 MistakeForm 始终提交完整字段，所以行为不变；如需局部更新请改用 PATCH。
+    """
 
     pass
 

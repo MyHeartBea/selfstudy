@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from app.config import settings
 from app.database import local_day_bounds_utc, mistake_tag_condition, mistake_to_dict
-from app.services.answer_service import judge_fill
+from app.services.answer_service import judge_fill, judge_letters
 
 INTERVALS = [1, 3, 7, 15, 30]  # v5 旧固定阶梯：仅迁移回填/兼容保留
 
@@ -391,6 +391,10 @@ def review_mistake(
         result = judge["correct"]
         note_parts = [note or "", f"你的答案：{user_answer}"]
         note = "；".join(part for part in note_parts if part)
+    elif current.get("question_type") in ("choice", "multi") and user_answer:
+        # 字母题也以服务端为准：前端只为即时反馈自己判一次分，两处口径一旦漂移
+        # （重复字母、越界字母），错的就是写进 SM-2 队列的那条记录。
+        result = judge_letters(user_answer, current.get("correct_answer") or "")["correct"]
     mastery = current.get("mastery_level") or 0
     review_count = current.get("review_count") or 0
     wrong_count = current.get("wrong_count") or 0

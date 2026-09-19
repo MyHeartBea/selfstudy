@@ -104,6 +104,10 @@ async function grade() {
     toast.success(
       `批改完成：${result.value.score} / ${result.value.max_score}（${result.value.band}）`,
     )
+    // 存档失败时结果只在屏幕上，档案页没有这一条 —— 不说清楚会让人以为存过了
+    if (result.value.persisted === false) {
+      toast.warning('本次结果未能存入作文档案（下方「存入错题库」仍可用）')
+    }
   } catch (err) {
     if (requestId !== gradeRequestId) return
     const apiMessage = err?.response?.data?.message

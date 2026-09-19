@@ -1,5 +1,6 @@
 """SQLite 连接与数据库初始化。"""
 
+import logging
 import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,8 @@ from app.models.tables import TABLES_DDL
 from app.seed_data import seed_database, seed_formula_data, seed_subject_profiles
 from app.services.ai_service import _wrap_math
 from app.services.knowledge_service import canonical_tags
+
+logger = logging.getLogger("kaoyan")
 
 
 def get_connection() -> sqlite3.Connection:
@@ -63,6 +66,9 @@ def snapshot_database(label: str = "") -> Optional[str]:
     与启动备份共用 BACKUP_DIR，但文件名带 label 便于识别来源，例如
     `kaoyan_mistakes_20260910_193000_before-import.db`。返回快照文件名，失败返回 None。
     快照不会随 MAX_BACKUPS 之外的清理被误删（清理按名字排序，近期的总是保留）。
+
+    失败必须留 ERROR 日志：调用方拿到 None 只是少了一份回滚点，
+    静默返回会让"批量删除/导入前已备份"这句话变成假的（响应文案要按 None 降级）。
     """
     if not settings.DB_PATH.exists():
         return None
@@ -87,6 +93,7 @@ def snapshot_database(label: str = "") -> Optional[str]:
             old.unlink(missing_ok=True)
         return name
     except Exception:
+        logger.exception("数据快照创建失败（label=%s）", label)
         return None
 
 

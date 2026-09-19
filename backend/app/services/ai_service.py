@@ -619,11 +619,16 @@ def _analyze_standard_content(
         # 提字失败时保留原 text（下面的 `or text` 已兜住，无需再自赋值）
         try:
             text = _vision_extract_text(images, instruction, timeout) or text
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("视觉提字失败，回退已有文本：%s", exc)
+    # 没有文字依据时不能往下走：user content 一旦为空，模型会凭空编一道题、
+    # 再编一份看起来合理的解析（内容不减的第 5 节约定直接落空）。
+    # 目前唯一调用方 ai_english.analyze_english 已先做过同样检查，这里是第二道闸。
+    if not (text or "").strip():
+        raise AiRequestError("未能从图片或文本中获取到内容，请重试或直接粘贴题目文本")
     messages = [
         {"role": "system", "content": prompt},
-        {"role": "user", "content": text or "请分析这道题。"},
+        {"role": "user", "content": text},
     ]
     parsed = _chat_json(messages, max_tokens=8000, timeout=timeout)
     return normalize_parsed(parsed, fallback_text=text)

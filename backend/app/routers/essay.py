@@ -1,6 +1,7 @@
 """考研英语作文批改接口：/api/essays。"""
 
 import json
+import logging
 import time
 from typing import List, Optional
 
@@ -17,6 +18,7 @@ from app.services.ai_service import AiNotConfigured
 
 from app.routers.ai import _ai_error_message, _vision_providers, _vision_timeout_for
 
+logger = logging.getLogger("kaoyan.essay")
 router = APIRouter(prefix="/api/essays", tags=["作文"])
 
 
@@ -100,29 +102,40 @@ def grade_essay(body: AiEssayRequest):
         return error(502, _ai_error_message(exc))
 
     record_id = None
+    persist_error = ""
     if body.persist:
-        conn = get_connection()
+        # 存档失败绝不能把已经花掉的批改结果一起带走：捕获后照样 200 返回，
+        # 用 persisted/record_id 告诉前端"这份结果没进档案页"，由用户决定重试。
         try:
-            cur = conn.execute(
-                "INSERT INTO essay_records (kind, prompt_text, essay_text, score, max_score,"
-                " result_json, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))",
-                (
-                    kind,
-                    body.prompt_text.strip(),
-                    essay_text,
-                    result["score"],
-                    result["max_score"],
-                    ai_essay.essay_result_json(result),
-                ),
-            )
-            record_id = cur.lastrowid
-            conn.commit()
-        finally:
-            conn.close()
+            conn = get_connection()
+            try:
+                cur = conn.execute(
+                    "INSERT INTO essay_records (kind, prompt_text, essay_text, score, max_score,"
+                    " result_json, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))",
+                    (
+                        kind,
+                        body.prompt_text.strip(),
+                        essay_text,
+                        result["score"],
+                        result["max_score"],
+                        ai_essay.essay_result_json(result),
+                    ),
+                )
+                record_id = cur.lastrowid
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as exc:
+            logger.exception("作文批改结果存档失败")
+            persist_error = str(exc) or exc.__class__.__name__
     result["record_id"] = record_id
+    if body.persist:
+        result["persisted"] = record_id is not None
+    if persist_error:
+        result["persist_error"] = persist_error
     if transcript_warning:
         result["transcript_warning"] = transcript_warning
-    return ok(result, "批改完成")
+    return ok(result, "批改完成" if not persist_error else "批改完成（存档失败，结果未进档案页）")
 
 
 def _row_brief(row) -> dict:
