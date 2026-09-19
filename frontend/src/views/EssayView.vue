@@ -1,6 +1,7 @@
 <script setup>
 /** 作文档案：AI 批改过的英语作文历史（分数趋势 + 逐句改错回看）。 */
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 
 import request from '../api/request'
 import { confirmDialog } from '../ui/confirm'
@@ -19,9 +20,13 @@ import Skeleton from '../ui/Skeleton.vue'
 import Icon from '../ui/Icon.vue'
 import { ESSAY_KINDS, essayKindMeta } from '../composables/essayKinds'
 
+const route = useRoute()
+
 const page = ref(1)
 const pageSize = ref(15)
 const kind = ref('')
+// 命令面板跳回来时带 ?search=（后端按题干/正文 LIKE 过滤）
+const search = ref(route.query.search ? String(route.query.search) : '')
 
 const detail = ref(null)
 const detailVisible = ref(false)
@@ -35,7 +40,12 @@ const {
   load: loadList,
 } = useResourceList(async () => {
   const res = await request.get('/essays', {
-    params: { page: page.value, page_size: pageSize.value, kind: kind.value || undefined },
+    params: {
+      page: page.value,
+      page_size: pageSize.value,
+      kind: kind.value || undefined,
+      search: search.value.trim() || undefined,
+    },
     silent: true,
   })
   return res.data.data
@@ -59,6 +69,12 @@ const avgPct = computed(() => {
 function onFilterChange() {
   page.value = 1
   loadList()
+}
+
+let searchTimer = null
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(onFilterChange, 300)
 }
 
 async function openDetail(row) {
@@ -91,6 +107,9 @@ async function removeOne(row) {
 }
 
 onMounted(loadList)
+onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+})
 </script>
 
 <template>
@@ -116,6 +135,17 @@ onMounted(loadList)
     </div>
 
     <div class="list-toolbar">
+      <div class="ea-search">
+        <Icon name="search" :size="15" class="ea-search-icon" />
+        <input
+          v-model="search"
+          class="field-input"
+          type="search"
+          placeholder="搜索题目要求或作文正文"
+          @keyup.enter="onFilterChange"
+          @input="onSearchInput"
+        />
+      </div>
       <UiSelect v-model="kind" :options="kindOptions" compact @change="onFilterChange" />
       <UiButton size="sm" variant="ghost" @click="loadList">
         <Icon name="refresh" :size="14" />
@@ -131,7 +161,11 @@ onMounted(loadList)
 
     <UiLoadError v-else-if="loadError" @retry="loadList" />
 
-    <UiEmpty v-else-if="!items.length" seal="文" text="还没有批改记录" />
+    <UiEmpty
+      v-else-if="!items.length"
+      seal="文"
+      :text="search.trim() ? '没有匹配的作文，换个关键词试试' : '还没有批改记录'"
+    />
 
     <template v-else>
       <div class="ea-grid">
@@ -204,6 +238,21 @@ onMounted(loadList)
 }
 .ea-new:hover {
   border-bottom-style: solid;
+}
+.ea-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.ea-search-icon {
+  position: absolute;
+  left: 11px;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+.ea-search .field-input {
+  width: 240px;
+  padding-left: 33px;
 }
 .ea-summary {
   display: flex;

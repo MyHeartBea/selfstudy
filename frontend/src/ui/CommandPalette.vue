@@ -1,5 +1,5 @@
 <script setup>
-/** 全局命令面板：Ctrl+K 呼出；页面跳转 + 错题/知识点/公式多范围搜索。 */
+/** 全局命令面板：Ctrl+K 呼出；一次搜全站（五类实体）+ 页面跳转 + 快捷操作。 */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
@@ -13,17 +13,21 @@ import {
   onPaletteInput,
   setScope,
   moveActive,
+  visibleItems,
+  visibleSections,
   NAV_COMMANDS,
   QUICK_ACTIONS,
   SCOPES,
 } from './commandPalette'
-import { questionTypeName, subjectName, truncate } from '../composables/useBaseData'
+import { questionTypeName, truncate } from '../composables/useBaseData'
 
 const router = useRouter()
 const route = useRoute()
 
-const results = computed(() => paletteState.results)
-const inputEl = ref(null)
+const results = computed(() => visibleItems(paletteState))
+
+/** 分段渲染，但每行带着自己在一维列表里的下标（见 store 里的 visibleSections）。 */
+const sections = computed(() => visibleSections(paletteState))
 
 watch(
   () => paletteState.open,
@@ -47,6 +51,21 @@ watch(
     if (paletteState.open) closePalette()
   },
 )
+
+const inputEl = ref(null)
+
+// 过滤器上的命中数：取后端每组的 total（比"这一组展示了几条"更准，展示受 limit 约束）
+const groupCounts = computed(() => {
+  const map = {}
+  for (const group of paletteState.groups) {
+    map[group.key] = Number(group.total) || (group.items || []).length
+  }
+  return map
+})
+
+function groupCount(key) {
+  return groupCounts.value[key] || 0
+}
 
 function choose(item) {
   closePalette()
@@ -79,22 +98,11 @@ function onKeydown(event) {
     const item = results.value[paletteState.activeIndex]
     if (item) choose(item)
   } else if (event.key === 'Tab') {
-    // Tab 在三个范围间循环切换
+    // Tab 只是换过滤器：结果已经在本地，不重新打接口
     event.preventDefault()
     const idx = SCOPES.findIndex((s) => s.value === paletteState.scope)
     setScope(SCOPES[(idx + (event.shiftKey ? -1 : 1) + SCOPES.length) % SCOPES.length].value)
-    if (paletteState.query.trim()) onPaletteInput(paletteState.query)
   }
-}
-
-/**
- * 切换搜索范围并刷新结果。
- * 抽成函数而不是模板内联多语句：Prettier 会把多语句内联表达式拆行、丢掉语句
- * 分隔符，导致 Vue 模板编译失败。
- */
-function chooseScope(scope) {
-  setScope(scope)
-  if (paletteState.query.trim()) onPaletteInput(paletteState.query)
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown))
@@ -112,7 +120,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               ref="inputEl"
               :value="paletteState.query"
               class="palette-input"
-              :placeholder="`搜索${SCOPES.find((s) => s.value === paletteState.scope)?.label || ''}，Tab 切换范围…`"
+              placeholder="搜索全站：错题 / 知识点 / 公式 / 生词 / 作文"
               @input="onPaletteInput($event.target.value)"
             />
             <kbd class="palette-kbd">ESC</kbd>
@@ -125,10 +133,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               type="button"
               class="scope-chip"
               :class="{ active: paletteState.scope === scope.value }"
-              @click="chooseScope(scope.value)"
+              @click="setScope(scope.value)"
             >
               <Icon :name="scope.icon" :size="13" />
               {{ scope.label }}
+              <small v-if="scope.value !== 'all' && groupCount(scope.value)" class="scope-count">
+                {{ groupCount(scope.value) }}
+              </small>
             </button>
           </div>
 
@@ -166,35 +177,30 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <div class="palette-group">
                 {{ paletteState.searching ? '搜索中…' : `${results.length} 条结果` }}
               </div>
-              <button
-                v-for="(item, i) in results"
-                :key="`${item.kind}-${item.id}`"
-                type="button"
-                class="palette-item"
-                :class="{ active: i === paletteState.activeIndex }"
-                @click="choose(item)"
-                @mousemove="paletteState.activeIndex = i"
-              >
-                <Icon
-                  :name="
-                    item.kind === 'mistake' ? 'list' : item.kind === 'knowledge' ? 'book' : 'sigma'
-                  "
-                  :size="16"
-                  class="palette-item-icon"
-                />
-                <span class="palette-item-label">
-                  {{ truncate(item.title, 52) }}
-                  <small v-if="item.sub" class="palette-item-sub">{{
-                    truncate(item.sub, 36)
-                  }}</small>
-                </span>
-                <UiTag v-if="item.kind === 'mistake'" size="sm">{{
-                  questionTypeName(item.type)
-                }}</UiTag>
-                <UiTag v-if="item.kind === 'mistake'" size="sm" soft>{{
-                  subjectName(item.subject)
-                }}</UiTag>
-              </button>
+              <template v-for="section in sections" :key="section.label">
+                <div class="palette-group">{{ section.label }}</div>
+                <button
+                  v-for="row in section.rows"
+                  :key="`${row.item.kind}-${row.item.id}`"
+                  type="button"
+                  class="palette-item"
+                  :class="{ active: row.index === paletteState.activeIndex }"
+                  @click="choose(row.item)"
+                  @mousemove="paletteState.activeIndex = row.index"
+                >
+                  <Icon :name="row.item.icon" :size="16" class="palette-item-icon" />
+                  <span class="palette-item-label">
+                    {{ truncate(row.item.title, 52) }}
+                    <small v-if="row.item.sub" class="palette-item-sub">
+                      {{ truncate(row.item.sub, 36) }}
+                    </small>
+                  </span>
+                  <UiTag v-if="row.item.kind === 'mistakes'" size="sm">
+                    {{ questionTypeName(row.item.meta) }}
+                  </UiTag>
+                  <UiTag v-else-if="row.item.meta" size="sm" soft>{{ row.item.meta }}</UiTag>
+                </button>
+              </template>
               <div v-if="!paletteState.searching && !results.length" class="palette-empty">
                 没有匹配结果，换个关键词试试
               </div>
@@ -204,7 +210,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <div class="palette-foot">
             <span><kbd>上</kbd><kbd>下</kbd> 选择</span>
             <span><kbd>Enter</kbd> 打开</span>
-            <span><kbd>Tab</kbd> 换范围</span>
+            <span><kbd>Tab</kbd> 换类型</span>
             <span class="palette-brand">研错本 · 命令面板</span>
           </div>
         </div>
@@ -296,6 +302,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+.scope-count {
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 0.75;
 }
 
 .palette-list {

@@ -1,6 +1,6 @@
 """复习相关接口。"""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -11,6 +11,20 @@ from app.schemas import MockCreate, ReviewCreate
 from app.services import review_service
 
 router = APIRouter(prefix="/api", tags=["复习"])
+
+
+def _forecast_bounds(days: int) -> tuple:
+    """把「按天比较」翻译成定宽字符串的「按范围比较」，让 `idx_mistakes_next_review_at` 用得上。
+
+    原来两句都写成 `date(next_review_at) < date('now','localtime')`：列被套进函数里，
+    SQLite 拿不到索引，只能整表 SCAN。`next_review_at` 是 ISO 文本（'%Y-%m-%d %H:%M:%S'，
+    见 review_service 的写入），日期前缀定宽，所以**日期串本身**就是干净的边界：
+      date(x) >= D  ⟺  x >= 'D'      （x 以 D 开头时 x >= D；date(x) < D 时 x < D）
+      date(x) <= D  ⟺  x < 'D+1天'
+    逐行结果与改前一致（只有日期的 '2026-09-20'、带 T 的写法同样成立；NULL 两边都不命中）。
+    """
+    today = datetime.now().astimezone().date()
+    return (today.isoformat(), (today + timedelta(days=days + 1)).isoformat())
 
 
 @router.get("/reviews/today")
@@ -76,28 +90,23 @@ def get_review_calendar(days: int = Query(140, ge=14, le=366)):
 @router.get("/reviews/forecast")
 def get_review_forecast(days: int = Query(30, ge=7, le=90)):
     """未来 N 天复习负荷分布：{overdue, items:[{day, count}]}（day=YYYY-MM-DD，含今日）。"""
+    lo, hi = _forecast_bounds(days)
     conn = get_connection()
     try:
         overdue = conn.execute(
-            """
-            SELECT COUNT(*) AS c FROM mistakes
-            WHERE review_paused = 0
-              AND next_review_at IS NOT NULL
-              AND date(next_review_at) < date('now', 'localtime')
-            """
+            "SELECT COUNT(*) AS c FROM mistakes WHERE review_paused = 0 AND next_review_at < ?",
+            (lo,),
         ).fetchone()["c"]
+        # GROUP BY day 用别名：day 是 date(next_review_at)，SQLite 允许按输出列分组
         rows = conn.execute(
             """
             SELECT date(next_review_at) AS day, COUNT(*) AS count
             FROM mistakes
-            WHERE review_paused = 0
-              AND next_review_at IS NOT NULL
-              AND date(next_review_at) >= date('now', 'localtime')
-              AND date(next_review_at) <= date('now', ?)
-            GROUP BY date(next_review_at)
+            WHERE review_paused = 0 AND next_review_at >= ? AND next_review_at < ?
+            GROUP BY day
             ORDER BY day
             """,
-            (f"+{days} days",),
+            (lo, hi),
         ).fetchall()
         return ok({"overdue": overdue, "items": [dict(row) for row in rows]})
     except Exception as exc:

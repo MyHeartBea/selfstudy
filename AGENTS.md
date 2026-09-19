@@ -32,9 +32,9 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（208 个）
-cd frontend && npm test                                  # Vitest 98 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
-cd frontend && npm run test:e2e                          # Playwright 41 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（227 个）
+cd frontend && npm test                                  # Vitest 111 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd frontend && npm run test:e2e                          # Playwright 43 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
 cd backend && ruff check app tests && ruff format --check app tests
@@ -100,6 +100,12 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - 已花掉 AI 调用的结果不许因为一次 INSERT 失败变成 500——`/api/essays/grade` 返回 200 + `persisted:false` + `persist_error`，前端 toast 明说"未存档"；
   - 删行必须连带删文件：`batch_mistakes(action='delete')` 先取回 `images` 再删，事后 `remove_image_files()`。巡检跑 `python scripts/clean_orphan_images.py`（默认 dry-run；孤儿文件的内容仍能通过 `/images/<name>` 访问，这是隐私问题不是磁盘问题）。
 - **PUT /api/mistakes 的"附加内容"键有特殊语义**：`images` 与 `passage_text / passage_translation / english_*`（见 `mistake_service.ATTACHMENT_KEYS`）**压根不带键**时服务层按库里原值回填，显式提交 `""` / `[]` 才是清空——这几列是 AI 整篇精读的唯一副本，被一个只含基础字段的表单覆盖就再也生成不回来。Pydantic 侧靠 `body.model_fields_set` 区分，新增字段时要一起维护那张名单。
+- **全站"按关键词 LIKE"只有一个口径：`search_service.like_pattern()` + `ESCAPE ''`**：`%`/`_` 是用户
+  内容而不是查询语法（搜 `50%` 命中一切含 5 的东西就是静默给错数据）。新增可搜字段要复用它，别自己
+  拼 `f"%{q}%"`；跨实体搜索也只改 `search_service.search_all`（响应形状已按"分组 + 每组 total"钉好）。
+- **导入判重宁可漏判不可误判**：`mistake_service.question_fingerprint()` 归一后不足 8 字（纯图片题）
+  **返回空串 = 不判重、照常入库**。误判的代价是"导入时静默丢题"，比"重复导入翻倍"严重；新增去重时
+  保留这条返回空串的语义，并在响应里回 `duplicates:[{index, existing_id}]` + `message` 说明跳过几条。
 - **索引归 `TABLES_DDL` 管，`migrate_database()` 里不许写 `CREATE/DROP INDEX`**：`init_database()` 每次启动都
   `executescript(TABLES_DDL)`，而 `migrate_database()` 在它**之后**跑 —— 同一处留两份 DDL，后跑的会把
   前面刚 `DROP` 的旧索引又建回来（v11 换 `essay_records(kind)`→`(kind,id DESC)` 时真踩了）。索引是幂等 DDL，
@@ -277,6 +283,9 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - 实测效果：可导入候选 **1 份 → 59 份**、年份空 0 份、答案配 55/59、无重复。
 - **知识点 ↔ 错题链接（`GET /api/knowledge/linked-mistakes?tag=`）**：按 `mistake_tag_map` 找该知识点下的错题 + 统计（几题/平均掌握/累计答错/今天到期/从未复习）。知识点名与错题标签只有 83/134 同名，所以支持 **`related_tags` 兜底**：名称没直接命中就用关联标签找，响应里 `matched_by`（tag_name/related_tags/none）标明命中方式、`hit_tags` 是真正挂有错题的标签。前端在知识点详情弹窗底部展示（含逐题「练这题」与「练这些题」）。
   - ⚠️ `knowledge_service` 里**不能顶层** `from app.database import mistake_to_dict`：`database.py` 反过来要 import 本模块的 `canonical_tags`，会循环导入。用局部导入（见 `_mistake_to_dict`）。
+- **全站搜索 / 命令面板**：`GET /api/search?q=&limit=`（`search_service`）一次问错题/知识点/公式/生词/作文，
+  空组不返回；`Ctrl+K` 面板的作用域 chips 是**对已取回结果做本地过滤**（不重新请求），
+  列表一维（键盘）+ 分组渲染（`visibleSections()` 带扁平下标），落地页统一吃 `?search=`、知识点走 `?tag=`。
 - **错题库**：题型按科目感知（数学 / 408：选择·填空·解答；政治：单选·多选·分析；英语：客观题·翻译·作文）；筛选 / 排序 / 分页 / 批量操作 / URL 同步筛选状态 / 导入导出 JSON / **Anki TSV 导出（`/api/export/anki?type=mistakes|vocab`）** / 打印（`window.print()` + 全局 print 样式）。列表首图走**缩略图**：`/images/thumb/{name}`（懒生成 WebP 到 `data/images/_thumbs/`，失败回退原图；删除错题同步清缩略图）。
 - **今日复习**：间隔重复由 SM-2 驱动；选择 / 多选（全对判分，顺序无关，判分统一走 `utils/examScoring.js` 的 scoreLetters）/ 填空（别名 + 数值容差）/ 翻译（对照参考译文自评）/ 解答（AI 按步骤给分 0-100）；全键盘流（1-4 选答、Enter 下一题、Q/W 标记）；`?` 呼出快捷键速查。**单题直练**：practice 接口支持 `mistake_id` 参数（详情「练这道题」用）。
 - **真题模考（mode=mock）**：练习页选年份+时长 → `mode=mock&duration=分钟&source_type=real_exam&source_year=年`；ReviewView mock 分支：倒计时（归零自动交卷）、作答暂存不判分、自由翻题、交卷统一判分（choice/multi 本地、fill 走 /judge）并逐题写入复习记录 + POST /mocks 存档；卷面客户端过滤为客观题。
@@ -304,6 +313,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 208、前端 Vitest 98、E2E 41**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 71%（门槛 55%）。
+- 测试基线：**后端 227、前端 Vitest 111、E2E 43**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 71%（门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

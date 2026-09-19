@@ -1,6 +1,7 @@
 <script setup>
 /** 公式背诵库：分类/搜索 + 卡片网格 + 详情/编辑 + 背诵模式 */
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 
 import request from '../api/request'
 import RichText from '../components/RichText.vue'
@@ -20,6 +21,8 @@ import Icon from '../ui/Icon.vue'
 
 const categories = ['高等数学', '线性代数', '概率统计', '英语背诵', '政治背诵', '408背诵', '其他']
 
+const route = useRoute()
+
 // 公式是全量集合（后端返回裸数组），筛选与搜索在客户端做，所以只要 items + 两个状态位
 const {
   items,
@@ -33,7 +36,8 @@ const {
 
 const filters = reactive({
   category: '',
-  search: '',
+  // 命令面板搜完整站后跳回这里时带 ?search=，否则用户落在"全都列出来"的页面上
+  search: route.query.search ? String(route.query.search) : '',
 })
 const dialogVisible = ref(false)
 const detailVisible = ref(false)

@@ -13,7 +13,7 @@ from app.metrics import mask_secret
 from app.responses import error, ok
 from app.schemas import AiEssayRequest
 from app.security import ai_rate_limit
-from app.services import ai_essay, local_ocr
+from app.services import ai_essay, local_ocr, search_service
 from app.services.ai_essay import ESSAY_KINDS
 from app.services.ai_service import AiNotConfigured
 
@@ -158,6 +158,7 @@ def _row_brief(row) -> dict:
 @router.get("")
 def list_essays(
     kind: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, max_length=80),
     page: int = Query(1, ge=1),
     # 分页参数名全站统一为 page_size（mistakes / knowledge / vocab 都是它）。
     # 这里原先叫 per_page，是全站唯一的例外 —— 前端 EssayView 要同步改。
@@ -171,6 +172,12 @@ def list_essays(
         if kind and kind in ESSAY_KINDS:
             where = "WHERE kind = ?"
             params.append(kind)
+        if search and search.strip():
+            # 转义 LIKE 通配符：搜 "50%" 不该命中所有含 5 的批改记录
+            like = search_service.like_pattern(search.strip())
+            clause = "(prompt_text LIKE ? ESCAPE '\\' OR essay_text LIKE ? ESCAPE '\\')"
+            where = f"{where} AND {clause}" if where else f"WHERE {clause}"
+            params.extend([like, like])
         total = conn.execute(f"SELECT COUNT(*) AS c FROM essay_records {where}", params).fetchone()[
             "c"
         ]

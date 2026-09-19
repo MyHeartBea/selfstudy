@@ -24,6 +24,15 @@
 - `GET /api/exam-countdown`：全局考研倒计时印数据 `{date, days, passed}`，纯日期计算**不查库**
   （`EXAM_DATE` 非法时 `days` 为 null，前端整块不渲染）
 - `GET /api/dashboard`：仪表盘聚合（stats + reviews/stats 一次返回）
+- `GET /api/search?q=&limit=5`：**全站统一搜索**（命令面板 Ctrl+K 的后端）。一次问完
+  错题 / 知识点 / 公式 / 生词 / 作文，返回
+  `{q, limit, total, groups:[{key, label, total, items:[{id, title, subtitle, meta}]}]}`
+  - `key` ∈ `mistakes|knowledge|formulas|vocab|essays`（顺序固定，常搜的在前）；**空组不返回**，
+    所以前端不需要知道有几种实体
+  - `limit` 是**每组**条数（1~20，默认 5），`total` 是各组命中之和（不是返回条数）
+  - `items` 只给跳转与预览需要的字段（`title`/`subtitle` 是**以命中位置为中心**截的一段摘要，
+    换行折叠成一行），不给整条记录 —— 面板不该拉解析全文
+  - `q` 里的 `%` `_` 按**字面量**匹配（`search_service.like_pattern` + `ESCAPE '\'`，全站搜的单一口径）
 - `GET /api/snapshots?limit=20`：数据快照列表（启动备份 + 导入前快照）
 - `POST /api/snapshots?label=manual`：手动打一份快照（批量操作前建议先点）
   - `POST /api/mistakes/batch`（`action=delete`）与 `POST /api/import` 会**自动先打快照**，
@@ -70,7 +79,10 @@
     `POST /api/mistakes/{id}/review` + `POST /api/mocks` 存档
 - `GET /api/reviews/stats`：复习统计、正确率、连续天数、掌握度分布、薄弱知识点、7 天趋势
 - `GET /api/reviews/calendar?days=140`：按天聚合 `[{day, total, correct}]`（热力图）
-- `GET /api/reviews/forecast?days=30`：未来 N 天复习负荷 `{overdue, items:[{day, count}]}`（含今日）
+- `GET /api/reviews/forecast?days=30`：未来 N 天复习负荷 `{overdue, items:[{day, count}]}`（含今日）。
+  边界按**本地日**算，`next_review_at`（UTC ISO 文本）用定宽日期串的范围比较去撞
+  `idx_mistakes_next_review_at`（`date(col)` 会退化成整表 SCAN）—— 改动理由与等价性用例见
+  `tests/test_index_coverage.py`
 - `POST /api/mistakes/{id}/review`：`{"result": bool, "note", "user_answer"}`
   - choice / multi / fill 且 `user_answer` 非空时，**服务端按 `answer_service.judge_letters` / `judge_fill` 重新判分并覆盖 `result`**（前端自己判的那次只用于即时反馈）；
   - 没传 `user_answer`（翻译 / 解答的 Q/W 自评）时尊重前端给的 `result`。
@@ -114,6 +126,10 @@
 
 - `GET /api/stats`：总数/今日新增/题型/来源/科目分布
 - `GET /api/export` / `POST /api/import`（≤5000 条）
+  - 导入响应 `{"created", "duplicates", "failed", "snapshot"}`：**按题干指纹去重**
+    （`mistake_service.question_fingerprint` —— 剥掉 HTML 标签/实体、大小写、全部空白与 Markdown 强调符，
+    图片只取**张数**参与），`duplicates` 逐条给 `{index, existing_id}`，`message` 里带"重复跳过 N 条"。
+    **题干不足 8 字（纯图片题）一律照常入库** —— 判重的假阳性代价是"静默丢题"，比翻倍严重
 - `GET /api/export/anki?type=mistakes|vocab`：Anki 可导入的 TSV（正面 TAB 背面 TAB 标签，字段为 HTML，
   带 UTF-8 BOM）；无数据时返回 400 而不是空文件
 
@@ -157,7 +173,8 @@
   手写稿**逐张**转录后再走文本批改。响应 `data` 除评分体外还带：
   `record_id`（存档成功时）、`persisted`（`persist:true` 时才有）、`persist_error`、`transcript_warning`。
   **存档失败仍是 200**：已花掉的 AI 结果不该被一次 INSERT 带走，前端据 `persisted:false` 提示"未进档案页"。
-- `GET /api/essays?kind=&page=&page_size=`：档案列表 `{items,total}`；`GET /api/essays/{id}` 含 `essay_text` + 完整 `result`；
+- `GET /api/essays?kind=&search=&page=&page_size=`：档案列表 `{items,total}`；
+  `search` 按题干/正文 LIKE 过滤（命令面板跳回来用 `?search=`）；`GET /api/essays/{id}` 含 `essay_text` + 完整 `result`；
   `DELETE /api/essays/{id}`。
 
 AI 端点需在 `backend/.env` 配置密钥；有每分钟限流（默认 30）。设置 `API_TOKEN` 后所有 `/api`

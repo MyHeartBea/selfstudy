@@ -4,6 +4,7 @@
  * 复习节奏：认识则阶梯拉远（1/2/4/7/15/30/60 天），模糊说明天，不认识留在队列。
  */
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 
 import request from '../api/request'
 import { useCountUp } from '../utils/useCountUp'
@@ -22,6 +23,7 @@ import UiModal from '../ui/UiModal.vue'
 import UiPagination from '../ui/UiPagination.vue'
 import Icon from '../ui/Icon.vue'
 
+const route = useRoute()
 const mode = ref('list') // list | flashcard
 const stats = ref({ total: 0, due: 0, mastered: 0, distribution: [] })
 const nTotal = useCountUp(computed(() => stats.value.total))
@@ -31,7 +33,13 @@ const nMastered = useCountUp(computed(() => stats.value.mastered))
 // —— 词表 ——
 const page = ref(1)
 const pageSize = ref(15)
-const filters = reactive({ search: '', mastery: null, kind: '', sort: 'created_desc' })
+const filters = reactive({
+  // 命令面板跳回来时带 ?search=，得真的把它当筛选初始值（否则落在整本词表上）
+  search: route.query.search ? String(route.query.search) : '',
+  mastery: null,
+  kind: '',
+  sort: 'created_desc',
+})
 
 const {
   items,

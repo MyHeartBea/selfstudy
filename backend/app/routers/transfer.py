@@ -2,7 +2,9 @@
 
 import base64
 import html
+import json
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
@@ -143,11 +145,15 @@ def import_mistakes(body: ImportPayload):
     """批量导入错题，自动处理知识点词条。
 
     导入是批量写操作：先打一份数据快照，出问题可以回滚（快照见 /api/snapshots）。
+    **按题干指纹去重**：同一份导出文件重复导入不再把库翻倍（`duplicates` 逐条给出
+    撞车的既有 id）。纯图片题没有可比对的文字，一律照常入库——判重的假阳性代价是
+    "静默丢题"，比翻倍严重。
     """
     snapshot = snapshot_database(f"before-import-{len(body.mistakes)}")
     conn = get_connection()
     try:
         created = 0
+        duplicates = []
         failed = []
         # 预加载科目/二级科目集合，避免逐条 build_mistake_fields 时 N+1 查询
         valid_subjects = {row["id"] for row in conn.execute("SELECT id FROM subjects").fetchall()}
@@ -155,12 +161,24 @@ def import_mistakes(body: ImportPayload):
             (row["subject_id"], row["id"])
             for row in conn.execute("SELECT subject_id, id FROM sub_subjects").fetchall()
         }
+        # 一次把全库题干指纹算出来（107 题量级；比逐条 SELECT 少一轮往返）
+        seen: dict = {}
+        for row in conn.execute("SELECT id, question, images FROM mistakes ORDER BY id"):
+            fp = mistake_service.question_fingerprint(row["question"], _image_count(row["images"]))
+            if fp:
+                seen.setdefault(fp, row["id"])
         with conn:
             for index, item in enumerate(body.mistakes):
                 payload = item.model_dump()
                 errors = _validate_mistake_payload(payload, valid_subjects, valid_sub_subjects)
                 if errors:
                     failed.append({"index": index, "error": "；".join(errors)})
+                    continue
+                fingerprint = mistake_service.question_fingerprint(
+                    payload.get("question"), len(payload.get("images") or [])
+                )
+                if fingerprint and fingerprint in seen:
+                    duplicates.append({"index": index, "existing_id": seen[fingerprint]})
                     continue
                 fields, build_errors = mistake_service.build_mistake_fields(
                     payload, conn, skip_subject_check=True
@@ -180,18 +198,30 @@ def import_mistakes(body: ImportPayload):
                     tuple(mistake_field(fields, column) for column in MISTAKE_COLUMNS),
                 )
                 sync_mistake_tags(conn, cur.lastrowid, fields["knowledge_tags"])
+                if fingerprint:
+                    seen[fingerprint] = cur.lastrowid
                 created += 1
         message = f"成功导入 {created} 条错题"
+        if duplicates:
+            message += f"，重复跳过 {len(duplicates)} 条"
         if not snapshot:
             message += "（导入前快照失败，回滚点缺失，详见服务日志）"
         return ok(
-            {"created": created, "failed": failed, "snapshot": snapshot},
+            {"created": created, "duplicates": duplicates, "failed": failed, "snapshot": snapshot},
             message,
         )
     except Exception as exc:
         return server_error(exc)
     finally:
         conn.close()
+
+
+def _image_count(images_text: Any) -> int:
+    """库里的 `mistakes.images` 是 JSON 串，取张数用于指纹（解析失败按 0 张）。"""
+    try:
+        return len(json.loads(images_text or "[]"))
+    except (ValueError, TypeError):
+        return 0
 
 
 def _validate_mistake_payload(

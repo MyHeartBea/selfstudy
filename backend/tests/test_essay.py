@@ -113,6 +113,26 @@ class TestEssayApi(unittest.TestCase):
         other = self.client.get("/api/essays", params={"kind": "e1_short"}).json()["data"]
         self.assertEqual(other["total"], 0)
 
+    def test_list_search_matches_prompt_and_essay_and_escapes_wildcards(self):
+        """/api/essays?search= 是命令面板全站搜索跳回档案页用的。"""
+        self._grade(
+            {"text": "The algorithm matters.", "kind": "e2_long", "prompt_text": "谈谈算法"}
+        )
+        hit = self.client.get("/api/essays", params={"search": "算法"}).json()["data"]
+        self.assertEqual(hit["total"], 1)
+        self.assertIn("算法", hit["items"][0]["excerpt"] + "谈谈算法")
+        # 命中正文也算
+        self.assertEqual(
+            self.client.get("/api/essays", params={"search": "matters"}).json()["data"]["total"], 1
+        )
+        self.assertEqual(
+            self.client.get("/api/essays", params={"search": "zzz-无"}).json()["data"]["total"], 0
+        )
+        # `%` 必须是字面量：不转义的话任何一条含"5"的记录都会被"50%"命中
+        self.assertEqual(
+            self.client.get("/api/essays", params={"search": "%"}).json()["data"]["total"], 0
+        )
+
     def test_list_pagination_uses_page_size(self):
         """分页参数全站统一为 page_size（essay 曾用 per_page，是唯一的例外名）。"""
         base = self.client.get("/api/essays", params={"kind": "e2_long"}).json()["data"]["total"]

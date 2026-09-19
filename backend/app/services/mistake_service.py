@@ -1,6 +1,8 @@
 """错题相关业务逻辑。"""
 
 import base64
+import hashlib
+import html
 import json
 import re
 import sqlite3
@@ -366,6 +368,28 @@ def build_mistake_fields(
             body.get("english_questions") or [], ensure_ascii=False
         ),
     }, []
+
+
+_WS_RE = re.compile(r"\s+")
+
+
+def question_fingerprint(question: Any, image_count: int = 0) -> str:
+    """导入去重用的题干指纹；**返回空串表示"这条没法按文字判重"**。
+
+    归一化剥掉的是"复制粘贴/多次导出"必然产生的差异：HTML 标签与实体、大小写、
+    所有空白（含换行）、Markdown 强调符号。图片只取**张数**参与指纹（同一段文字配
+    不同张数不该算重复），不比对图片字节 —— 一次批量导入里几十 MB 的 data URL 全
+    部 sha256 一边慢一边也没必要。
+
+    纯图片题（题干为空）故意返回空串：没有可比对的文字，判重只能靠猜，
+    误判的代价是"导入时静默丢题"，比"重复导入翻倍"严重得多。
+    """
+    text = html.unescape(str(question or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = _WS_RE.sub("", text).lower().strip("#*>-+ ")
+    if len(text) < 8:
+        return ""
+    return hashlib.sha1(f"{image_count}|{text}".encode("utf-8")).hexdigest()[:16]
 
 
 def list_approaches(conn: sqlite3.Connection, limit: int = 200) -> List[str]:

@@ -9,7 +9,7 @@ from app import metrics
 from app.config import settings
 from app.database import get_connection, list_snapshots, snapshot_database
 from app.responses import error, ok, server_error
-from app.services import review_service, stats_service
+from app.services import review_service, search_service, stats_service
 
 router = APIRouter(prefix="/api", tags=["系统"])
 
@@ -61,6 +61,25 @@ def dashboard():
                 "reviews": review_service.get_review_stats(conn),
             }
         )
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.get("/search")
+def search(
+    q: str = Query(..., min_length=1, max_length=80),
+    limit: int = Query(5, ge=1, le=20),
+):
+    """全站统一搜索（命令面板用）：错题 / 知识点 / 公式 / 生词 / 作文一次问完。
+
+    响应是 `{q,total,limit,groups:[{key,label,total,items:[{id,title,subtitle,meta}]}]}`，
+    **空组不返回**；`items` 只给跳转与预览需要的字段，不给整条记录（面板不该拉解析全文）。
+    """
+    conn = get_connection()
+    try:
+        return ok(search_service.search_all(conn, q, limit))
     except Exception as exc:
         return server_error(exc)
     finally:

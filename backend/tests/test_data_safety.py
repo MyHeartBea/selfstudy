@@ -261,5 +261,44 @@ class TestEmptyVisionGuard(_DbCase):
                 ai_service._analyze_standard_content(["data:image/png;base64,AAAA"], "")
 
 
+class TestImportFingerprint(unittest.TestCase):
+    """导入去重指纹：归一化必须"只吃掉复制粘贴必然产生的差异"。"""
+
+    def fp(self, question, image_count=0):
+        from app.services.mistake_service import question_fingerprint
+
+        return question_fingerprint(question, image_count)
+
+    def test_noise_variants_share_one_fingerprint(self):
+        base = "设函数 f(x)=x^2，则下列说法正确的是"
+        variants = [
+            base,
+            f"  {base}\n",  # 首尾空白 / 换行
+            base.replace("，", "，\n"),  # 中间换行
+            f"<p>{base}</p>",  # 富文本标签
+            f"{base}&nbsp;",  # HTML 实体
+            f"**{base}**",  # Markdown 强调
+        ]
+        fingerprints = {self.fp(v) for v in variants}
+        self.assertEqual(len(fingerprints), 1, f"归一化后应只剩一个指纹：{fingerprints}")
+        self.assertTrue(next(iter(fingerprints)))
+
+    def test_pure_image_and_short_questions_are_not_fingerprinted(self):
+        """空题干 / 极短题干一律返回空串：判重的假阳性 = 导入时静默丢题。"""
+        self.assertEqual(self.fp(""), "")
+        self.assertEqual(self.fp("   "), "")
+        self.assertEqual(self.fp("<p></p>"), "")
+        self.assertEqual(self.fp("选 A"), "")  # 短到没有区分度
+
+    def test_image_count_participates_in_fingerprint(self):
+        text = "设函数 f(x)=x^2，则下列说法正确的是"
+        one = self.fp(text, 1)
+        two = self.fp(text, 2)
+        none = self.fp(text, 0)
+        self.assertNotEqual(one, two)
+        self.assertNotEqual(one, none)
+        self.assertEqual(one, self.fp(text, 1))  # 不比图片字节，只比张数
+
+
 if __name__ == "__main__":
     unittest.main()

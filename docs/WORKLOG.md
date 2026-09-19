@@ -363,3 +363,76 @@ pre-commit 6 项全 Passed；CI 同口径覆盖率 **71%**（`coverage report --
 跑一次真实 `/api/ai/sense?word=algorithm` 后账本出现
 `deepseek-flash @ api.deepseek.com`：calls 1 / errors 0 / avg_ms 3152.6 / reasoning_avg 374。
 **刻意没做**真机识图（一次 18s 的付费视觉调用只能证明"成功路径没被改坏"，而这已由单测 + E2E 双向钉住）。
+
+## 2026-09-19 · 全栈体检第 5 批：能力拓展包（N3 导入去重 / X5 全站搜索 / X1 按标签直练 / N5 降级为索引可用，`待补哈希`）
+
+**取证先把范围改小了**（三项原判都被实测推翻，记下来免得下次又按清单原样立项）：
+- **X1 已建一半**：错题详情的 `related_knowledge` 早就渲染成可点标签，缺的只是"练这些题"这一步，
+  于是只做那一步，没有重做关联区；
+- **N5「统计预计算」是投机工程**：真库上逐个量了 StatsView 那十几条聚合 SQL，**12–18ms**，
+  物化到 `app_meta` 只会带来缓存失效这个新问题。降级成"把唯一两条整表扫的谓词改成能用上索引的写法"；
+- **N3 只缺错题那一半**：`vocab_service` 本来就按词形去重，真正会翻倍的是 `POST /api/import`
+  （同一份导出文件再导一次 → 全库 ×2），所以只做错题指纹。
+- 未开工遗留：**N2 图片一致性治理**（`/api/system/integrity`）与 102 个孤儿图文件的 `--apply` 清理，
+  都等用户明确批准再动（删文件不可逆）。
+
+**N3 指纹判重的口径**（`mistake_service.question_fingerprint`）：归一化剥的是"复制粘贴 / 多次导出"
+必然产生的差异 —— HTML 标签与实体、大小写、全部空白（含换行）、Markdown 强调符，图片只取**张数**参与
+（`sha1("图片数|归一题干")[:16]`）。两条刻意的边界：
+① **归一后 <8 字（纯图片题）返回空串 = 不判重，照常入库** —— 没有可比对的文字时判重只能靠猜，
+误判的代价是"导入时静默丢题"，比翻倍严重得多（AGENTS 第 3 节那条数据路径红线的镜像）；
+② 比对图片**字节**被否掉：一次批量导入里几十 MB data URL 全 sha256，又慢又没必要。
+`duplicates: [{index, existing_id}]` 逐条给到"撞的是库里哪一条"，`message` 追加"重复跳过 N 条"，
+前端 toast 同源显示（不是只报一个 created 数字）。既有库的 `images` 是 JSON 串，一次全表扫描把指纹
+预先算进 dict（107 题量级），避免逐条 SELECT。
+
+**X5 全站搜索的形状**（`search_service.search_all` + `GET /api/search?q=&limit=`）：五个实体各一条
+`LIKE` + 一条同形状 `COUNT`，返回 `{q, limit, total, groups:[{key,label,total,items}]}`、**空组不返回**
+—— 前端因此不需要知道系统里有几种实体，加第六种只改 service。`limit` 是**每组**条数，`total` 是各组
+命中之和（面板要显示"还能更多"）。摘要 `_snippet` 以命中位置为中心截一段，让"为什么匹配上"一眼可见；
+这里有个偏移量陷阱：**必须先把文本折叠成一行再找下标**，题干里全是换行，直接对原文 `find` 到的偏移
+在折叠文本里对不上，截取位置会漂；折叠后搜不到（命中发生在被吃掉的换行处，如"自\n由"）则退回开头。
+**`%` / `_` 按字面量匹配**（`like_pattern` + `ESCAPE '\'`）：通配符是用户内容的一部分而不是查询语法 ——
+实测 `50%`、`a_b`、`%zzzq` 均 0 命中，`_` 单字符 82 命中（说明转义真在生效，不是碰巧没匹配上）。
+`essay.py` 的 `?search=` 复用同一个 `like_pattern`，全站"按关键词 LIKE"只有这一个口径。
+上 FTS5 的空间留在这个文件里（响应形状已按"分组 + 每组 total"钉好），但**现在这个量级不值得**（N6 仍 P2）。
+
+**命令面板（`Ctrl+K`）从"跳页面搜索框"升级成真搜全站**，两处设计取舍：
+- **作用域 chips 是"对已取回结果做本地过滤"，不再重新请求**：一次输入要打好几个实体，先全量拿回来
+  再按类型筛，比每换一个 chip 发一次请求快且省；测试因此断言"整个用例只发一次 `/api/search`"。
+- **分组渲染但键盘是一维的**：面板是扁平列表 + 分组标题，`visibleSections()` 给每组带上
+  **扁平下标**（`rows:[{item,index}]`），active 判定用 `row.index`。这个转换是纯函数、单独导出并
+  用 `tests/commandPalette.test.js` 钉住（含"跨组 ArrowDown 落在扁平第 2 项"），因为它是那种
+  "DOM 里数对了、切组后就错位"的经典坑。落地页统一吃 `?search=`（错题/公式/生词/作文各自筛选参数
+  名与视图一致），知识点走 `?tag=` 直达详情。
+- 竞态：`runSearch` 带自增 seq，**旧响应不许覆盖新结果**；请求失败要清空 `groups`（留着会把上一次
+  查询的结果当成"本次没搜到"）。
+
+**X1「练这些题」**：详情弹窗底部的 `RelatedList` 加一枚按钮，走的查询参数与它自己那份列表**完全同源**
+（`review?mode=curve&count=10&tag=<knowledge_tags[0]>`，就是 `get_mistake_detail` 算 `related_mistakes`
+用的那个标签）—— 否则"看到的题"和"练到的题"会不是同一批，那是最难被发现的 bug 类型。按钮只在
+既有错题**且**有标签时出现（没题可练就别摆一个点不动的按钮），点击后关弹窗再跳转。
+
+**N5 降级项：`/api/reviews/forecast` 的两条 SCAN 改成 sargable**。原来写成
+`date(next_review_at) < date('now','localtime')` —— 列被套进函数，SQLite 只能整表扫，
+已有的 `idx_mistakes_next_review_at` 白建。换成**定宽日期串的范围比较**（`>= 今天`、`< 今天+days+1`）
+后走索引。等价性是这次改动的全部风险，所以做法是**让 SQLite 自己当 oracle**：
+`test_forecast_range_predicate_is_equivalent_to_date_comparison` 把新旧两条 SQL 跑在同一批
+锚定日期（相对 `forecast_bounds` 生成，不是硬编码"今天"，否则过一天就红）的样本上逐行比对，
+样本覆盖 `'YYYY-MM-DD HH:MM:SS'`（真库实际形状）、只有日期、带 `T` 的写法、NULL。
+顺带修掉一个**既有**的口径不一致：旧 SQL 下界用 `localtime`、上界却是 `date('now')`+days 的 UTC，
+现在两边都是本地日。分桶结果仍按 UTC 前缀分组（那是展示层的事，没动）。
+
+**测试**：后端 **227**（+13 `test_search.py`、+6 导入去重、+2 索引计划/等价性、+essay `?search=` 契约）；
+Vitest **111**（+8 commandPalette、+5 relatedPractice）；E2E **43**（+2 command-palette：
+真键盘 ArrowDown/Enter 走完"分组结果 → 落 `/formulas?search=` 且列表真的被过滤"，
+以及"Tab 换作用域只发一次请求"）。`e2e/fixtures.js` 补 `/api/search` 打桩，形状直接照
+`search_service.search_all` 的响应抄，避免"打桩形状不对但前端自己 catch 掉"那类假绿。
+
+**验证**：ruff check+format / eslint / prettier / `npm run build` 干净（`katex-*.css` 仍 24,475 B）；
+生产 8000 重启后 curl 实测：`/api/search?q=导数` → total 18（错题 7 / 知识点 10 / 公式 1）、
+摘要以命中为中心且 LaTeX 完整；`/api/search?q=chart` 命中作文题干且 `/api/essays?search=chart`
+同条命中；通配符三条否定用例全 0；`/api/reviews/forecast?days=30` → `{"overdue":98,"items":[]}`
+（库里最大 `next_review_at` 是 2026-09-17、今天 09-19，所以未来窗口为空是对的）。
+**UI 不再用真机浏览器逐个走查**（被项目基线否决：E2E 已含"能不能打开"的烟测 + `npm run build` 是
+模板编译的唯一门禁），本批把轮次花在 API 直连实测与静态门禁上。

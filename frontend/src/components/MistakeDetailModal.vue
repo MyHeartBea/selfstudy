@@ -95,6 +95,18 @@ function practiceThis() {
   visible.value = false
 }
 
+/**
+ * 同知识点错题按 detail.knowledge_tags[0] 聚出来（后端 get_mistake_detail 用的就是它），
+ * 所以「练这些题」必须带同一个标签，否则按钮下的列表和练到的题不是一批。
+ */
+const firstTag = computed(() => detail.value?.knowledge_tags?.[0] || '')
+
+function practiceTag(tag) {
+  if (!tag) return
+  router.push({ path: '/review', query: { mode: 'curve', count: 10, tag } })
+  visible.value = false
+}
+
 async function markReview(result) {
   if (!detail.value) return
   reviewing.value = true
@@ -270,8 +282,10 @@ async function deleteCurrent() {
         :knowledge-extra="detail.knowledge_extra"
         :related-knowledge="detail.related_knowledge"
         :related-mistakes="detail.related_mistakes"
+        :current-tag="firstTag"
         @go-knowledge="goKnowledge"
         @switch="switchDetail"
+        @practice-tag="practiceTag"
       />
       <div style="margin-top: 10px">
         <details class="history-details">

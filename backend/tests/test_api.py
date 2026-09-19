@@ -174,7 +174,7 @@ class TestApiSmoke(unittest.TestCase):
         self.assertEqual(body["code"], r.status_code)
 
     def test_export_import_round_trip(self):
-        """导出 → 导入往返：字段与图片 data URL 完整保留，导入计为 created。
+        """导出 → 导入往返：字段与图片 data URL 完整保留，**重复导入不再翻倍**。
 
         同时锁定列表接口瘦身契约：列表项不含英语整篇大 JSON 字段。
         """
@@ -203,7 +203,16 @@ class TestApiSmoke(unittest.TestCase):
 
         r2 = self.client.post("/api/import", json={"mistakes": [match[0]]})
         self.assertEqual(r2.status_code, 200)
-        self.assertEqual(r2.json()["data"]["created"], 1)
+        data = r2.json()["data"]
+        # 幂等契约：同一份导出文件重复导入，created 必须是 0 且明确指出撞了哪条
+        self.assertEqual(data["created"], 0, "导出→导入往返不得把题目翻倍")
+        self.assertEqual([(d["index"], d["existing_id"]) for d in data["duplicates"]], [(0, mid)])
+        self.assertEqual(data["failed"], [])
+
+        # 题干只要真的不同，就必须照常入库（去重不能变成"导入永不生效"）
+        edited = dict(match[0], question=match[0]["question"] + "（变式）")
+        r3 = self.client.post("/api/import", json={"mistakes": [edited]})
+        self.assertEqual(r3.json()["data"]["created"], 1, "改了题干就该算新题")
 
         # 列表可按题干搜回，且列表项不含英语大 JSON 字段（瘦身契约）
         found = self.client.get("/api/mistakes", params={"search": "往返测试", "page": 1}).json()[
@@ -212,7 +221,8 @@ class TestApiSmoke(unittest.TestCase):
         self.assertTrue(found)
         self.assertNotIn("english_questions", found[0])
         self.assertNotIn("english_sentences", found[0])
-        self.client.delete(f"/api/mistakes/{mid}")
+        for row in found:
+            self.client.delete(f"/api/mistakes/{row['id']}")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import { ref, watch } from 'vue'
 
 import RichText from './RichText.vue'
 import { subjectColor, subjectName, truncate } from '../composables/useBaseData'
+import UiButton from '../ui/UiButton.vue'
 import UiTag from '../ui/UiTag.vue'
 import Icon from '../ui/Icon.vue'
 
@@ -11,9 +12,11 @@ const props = defineProps({
   knowledgeExtra: { type: Object, default: null },
   relatedKnowledge: { type: Array, default: () => [] },
   relatedMistakes: { type: Array, default: () => [] },
+  // 这条错题的首个标签：同知识点错题就是按它聚出来的，「练这些题」要带同一个 tag
+  currentTag: { type: String, default: '' },
 })
 
-const emit = defineEmits(['go-knowledge', 'switch'])
+const emit = defineEmits(['go-knowledge', 'switch', 'practice-tag'])
 
 const expandedId = ref(null)
 const openPanel = ref('knowledge')
@@ -118,6 +121,14 @@ function summaryPreview(text) {
           </div>
         </div>
         <p v-else class="muted">暂无同知识点错题。</p>
+        <!-- 直通练习：列表里只展示最近 5 条，按标签练的是这个知识点下的全部题 -->
+        <div v-if="relatedMistakes.length && currentTag" class="related-foot">
+          <UiButton size="sm" variant="outline" @click="emit('practice-tag', currentTag)">
+            <Icon name="play" :size="13" />
+            练这些题
+          </UiButton>
+          <span class="muted">按标签「{{ currentTag }}」抽题</span>
+        </div>
       </div>
     </section>
   </div>
@@ -213,5 +224,13 @@ function summaryPreview(text) {
 .related-question {
   font-size: 13px;
   color: var(--ink);
+}
+.related-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
 }
 </style>

@@ -7,9 +7,11 @@
 
 import sqlite3
 import unittest
+from datetime import date, timedelta
 
 from app.database import migrate_database
 from app.models.tables import TABLES_DDL
+from app.routers.reviews import _forecast_bounds as forecast_bounds
 
 NEW_INDEXES = (
     "idx_solution_grades_mistake",
@@ -154,6 +156,94 @@ class QueryPlanTest(unittest.TestCase):
         )
         self.assertIn("idx_essay_records_kind_id", detail)
         self.assertNotIn("USE TEMP B-TREE", detail)
+
+    def test_forecast_range_predicates(self):
+        """`/api/reviews/forecast` 的两条谓词（routers/reviews.py 原句）。
+
+        写成 `date(next_review_at) < date('now','localtime')` 时列被套进函数，
+        SQLite 只能 SCAN 整表；换成日期串的范围比较后必须走 idx_mistakes_next_review_at。
+        这条断言就是防止下次有人为了"读着方便"把 date() 加回去。
+        """
+        lo, hi = forecast_bounds(30)
+        overdue = plan(
+            self.conn,
+            "SELECT COUNT(*) AS c FROM mistakes WHERE review_paused = 0 AND next_review_at < ?",
+            (lo,),
+        )
+        self.assertIn("idx_mistakes_next_review_at", overdue)
+        self.assertNotIn("SCAN mistakes", overdue)
+
+        buckets = plan(
+            self.conn,
+            "SELECT date(next_review_at) AS day, COUNT(*) AS count FROM mistakes "
+            "WHERE review_paused = 0 AND next_review_at >= ? AND next_review_at < ? "
+            "GROUP BY day ORDER BY day",
+            (lo, hi),
+        )
+        self.assertIn("idx_mistakes_next_review_at", buckets)
+        self.assertNotIn("SCAN mistakes", buckets)
+
+    def test_forecast_range_predicate_is_equivalent_to_date_comparison(self):
+        """范围写法必须与原来的 `date(...)` **逐行等价**，含只有日期、带 T 的写法。
+
+        等价性是整个改动的全部风险所在：真库里存的是 '2026-09-17 06:58:30'，
+        导入路径还可能写 '2026-09-20'（没有时分秒）。所以 oracle 直接用**旧 SQL 那句
+        `date(next_review_at)`** 让 SQLite 自己判，而不是心算期望值 ——
+        下次有人动边界写法就会红在这里。
+        """
+        lo, hi = forecast_bounds(30)
+        anchor = date.fromisoformat(lo)  # 与路由同源：本地今天
+        forms = (
+            (anchor - timedelta(days=200)).isoformat() + " 05:00:00",  # 很久以前
+            (anchor - timedelta(days=1)).isoformat() + " 23:59:59",  # 昨天最后一秒
+            anchor.isoformat() + " 00:00:00",  # 今天 0 点
+            anchor.isoformat() + "T16:00:00",  # 带 T 的写法
+            anchor.isoformat(),  # 只有日期（没有时分秒）
+            (anchor + timedelta(days=1)).isoformat() + " 00:00:00",  # 明天
+            (anchor + timedelta(days=30)).isoformat() + " 23:00:00",  # 窗口最后一天
+            (anchor + timedelta(days=31)).isoformat() + " 00:00:00",  # 越界一天
+            (anchor + timedelta(days=200)).isoformat() + " 00:00:00",  # 远未来
+            None,  # 从没排期（原来靠 IS NOT NULL 显式排除，新写法靠 NULL 不参与比较）
+        )
+        for i, value in enumerate(forms):
+            self.conn.execute(
+                "INSERT INTO mistakes (id, subject_id, question, next_review_at) "
+                "VALUES (?, 1, 'q', ?)",
+                (10_000 + i, value),
+            )
+        self.conn.commit()
+
+        cases = (
+            ("next_review_at < ?", (lo,), "date(next_review_at) < date(?)", (lo,)),
+            (
+                "next_review_at >= ? AND next_review_at < ?",
+                (lo, hi),
+                "date(next_review_at) >= date(?) AND date(next_review_at) < date(?)",
+                (lo, hi),
+            ),
+        )
+        for new_clause, new_params, old_clause, old_params in cases:
+            old_ids = [
+                r["id"]
+                for r in self.conn.execute(
+                    "SELECT id FROM mistakes WHERE COALESCE(review_paused, 0) = 0 "
+                    f"AND next_review_at IS NOT NULL AND {old_clause} ORDER BY id",
+                    old_params,
+                ).fetchall()
+            ]
+            new_ids = [
+                r["id"]
+                for r in self.conn.execute(
+                    "SELECT id FROM mistakes WHERE COALESCE(review_paused, 0) = 0 "
+                    f"AND {new_clause} ORDER BY id",
+                    new_params,
+                ).fetchall()
+            ]
+            self.assertEqual(
+                new_ids,
+                old_ids,
+                f"新谓词 {new_clause} 与旧 date() 写法结果不一致",
+            )
 
 
 class TagMapPrimaryKeyTest(unittest.TestCase):

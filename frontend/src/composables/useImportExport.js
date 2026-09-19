@@ -60,8 +60,11 @@ export function useImportExport({ onImported } = {}) {
     try {
       const res = await request.post('/import', { mistakes: pendingImport.value })
       const result = res.data.data
+      const dup = (result.duplicates || []).length
       toast.success(
-        `导入完成：成功 ${result.created} 条${result.failed.length ? `，失败 ${result.failed.length} 条` : ''}`,
+        `导入完成：成功 ${result.created} 条` +
+          (dup ? `，重复跳过 ${dup} 条` : '') +
+          (result.failed.length ? `，失败 ${result.failed.length} 条` : ''),
       )
       importDialogVisible.value = false
       pendingImport.value = []

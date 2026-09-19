@@ -196,6 +196,35 @@ export const essayRows = [
 ]
 
 /**
+ * 全站搜索（`/api/search`，命令面板 Ctrl+K）的样例命中。
+ * 形状必须对齐 services/search_service.search_all：
+ * `{q, limit, total, groups:[{key,label,total,items:[{id,title,subtitle,meta}]}]}`，
+ * 组顺序即面板分段顺序（错题 → 知识点 → 公式），摊平成键盘导航的一维列表。
+ */
+export const searchGroups = [
+  {
+    key: 'mistakes',
+    label: '错题',
+    total: 3,
+    items: [{ id: 501, title: '…中值定理的条件…', subtitle: '数学二', meta: 'choice' }],
+  },
+  {
+    key: 'knowledge',
+    label: '知识点',
+    total: 1,
+    items: [{ id: 101, title: '中值定理', subtitle: '注意开区间可导', meta: '数学二' }],
+  },
+  {
+    key: 'formulas',
+    label: '公式',
+    total: 1,
+    items: [
+      { id: 202, title: '拉格朗日中值定理', subtitle: "f(b)-f(a)=f'(ξ)(b-a)", meta: '高等数学' },
+    ],
+  },
+]
+
+/**
  * 给页面装上 API 打桩。
  * 返回一个 `calls` 数组，记录每个被拦截请求的 {method, url, body}，供断言"只调用一次"。
  */
@@ -313,6 +342,8 @@ function resolver(path, method, overrides) {
     return knowledgeRows.map((r) => ({ tag: r.tag_name, mistake_count: 1 }))
   }
   if (path === '/api/formulas') return formulaRows
+  // 命令面板的全站搜索：漏打桩会让 Ctrl+K 用例假绿（groups 为空 → 面板只显示"没有匹配结果"）
+  if (path === '/api/search') return { q: '中值', limit: 5, total: 5, groups: searchGroups }
   if (path === '/api/mistakes') return { items: [], total: 0 }
   if (path === '/api/mistakes/approaches') return []
   if (path === '/api/vocab') return { items: [], total: 0 }
