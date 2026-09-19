@@ -75,12 +75,15 @@ def get_stats(conn: sqlite3.Connection) -> dict:
         "by_question_type": by_question_type,
         "by_source_type": by_source_type,
         # 考研倒计时（日期在 backend/.env 用 EXAM_DATE=YYYY-MM-DD 覆盖）
-        "exam_countdown": _exam_countdown(),
+        "exam_countdown": exam_countdown(),
     }
 
 
-def _exam_countdown() -> dict:
-    """距初试的天数（按服务器本地日期）。日期非法/已过时 days 落 0 并给 passed 标记。"""
+def exam_countdown() -> dict:
+    """距初试的天数（按服务器本地日期）。日期非法/已过时 days 落 0 并给 passed 标记。
+
+    纯日期计算、不碰数据库，所以外壳（AppLayout）可以每个页面都取一次。
+    """
     from datetime import date
 
     try:

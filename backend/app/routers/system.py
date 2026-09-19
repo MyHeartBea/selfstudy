@@ -43,6 +43,12 @@ def health():
     )
 
 
+@router.get("/exam-countdown")
+def exam_countdown():
+    """考研倒计时（纯日期计算，不查库）：供外壳在每个页面显示。"""
+    return ok(stats_service.exam_countdown())
+
+
 @router.get("/dashboard")
 def dashboard():
     """仪表盘聚合：一次请求返回错题统计 + 复习统计，减少首屏往返。"""

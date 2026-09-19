@@ -346,6 +346,8 @@ function resolver(path, method, overrides) {
   if (path === '/api/reviews/calendar') return []
   if (path === '/api/reviews/practice') return { items: [] }
   if (path === '/api/health') return { status: 'ok', database: true, version: 'e2e', metrics: {} }
+  // 全局倒计时印（外壳每个页面都取；漏打桩 → 11 条烟测全红，正是想要的兜底）
+  if (path === '/api/exam-countdown') return { days: 91, date: '2026-12-19', passed: false }
   if (path === '/api/knowledge/linked-mistakes') return { items: [] }
   if (path === '/api/ai/weekly-report') return { causes: [], summary: '', week_count: 0 }
   if (path === '/api/export') return { mistakes: [], vocab: [] }

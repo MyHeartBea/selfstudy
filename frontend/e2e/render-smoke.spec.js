@@ -32,6 +32,10 @@ for (const route of ROUTES) {
 
     await expect(page.locator('#app')).toBeVisible()
     await expect(page.locator('#app')).toContainText(route.marker)
+    // 全局考研倒计时印：外壳层元素，每条路由都必须看得到（漏打桩 /exam-countdown 会让它消失）
+    const cd = page.locator('.exam-cd').first()
+    await expect(cd).toBeVisible()
+    await expect(cd).toContainText('91')
 
     expectAllApiStubbed(calls)
     // 页面级 JS 异常（渲染崩溃）必须为零

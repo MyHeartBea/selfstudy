@@ -14,6 +14,7 @@ import Icon from '../ui/Icon.vue'
 import AmbientLayer from '../ui/AmbientLayer.vue'
 import ShaderBackdrop from '../ui/ShaderBackdrop.vue'
 import DockNav from '../ui/DockNav.vue'
+import ExamCountdown from '../ui/ExamCountdown.vue'
 import CommandPalette from '../ui/CommandPalette.vue'
 import UiModal from '../ui/UiModal.vue'
 import { openPalette } from '../ui/commandPalette'
@@ -61,6 +62,23 @@ async function loadRing() {
 
 const backendOk = ref(null)
 const shortcutsOpen = ref(false)
+
+// —— 全局考研倒计时（外壳取一次，10 分钟刷一次；跨天由刷新兜住） ——
+const examDays = ref(null)
+const examDate = ref('')
+const examPassed = ref(false)
+
+async function loadExam() {
+  try {
+    const res = await request.get('/exam-countdown', { silent: true })
+    const data = res.data.data || {}
+    examDays.value = data.days === null || data.days === undefined ? null : Number(data.days)
+    examDate.value = data.date || ''
+    examPassed.value = !!data.passed
+  } catch (err) {
+    examDays.value = null
+  }
+}
 
 const SHORTCUT_ROWS = [
   ['全局搜索 · 命令面板', 'Ctrl + K'],
@@ -176,6 +194,7 @@ watch(
 )
 
 let healthTimer = 0
+let examTimer = 0
 let mediaHandler = null
 let systemThemeHandler = null
 let shortcutsHandler = null
@@ -186,7 +205,9 @@ onMounted(() => {
   loadBaseData()
   loadRing()
   loadHealth()
+  loadExam()
   healthTimer = setInterval(loadHealth, 30000)
+  examTimer = setInterval(loadExam, 600000)
   shortcutsHandler = () => {
     shortcutsOpen.value = true
   }
@@ -229,6 +250,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   clearInterval(healthTimer)
+  clearInterval(examTimer)
   clearTimeout(armTimer)
   clearTimeout(veilTimer)
   cancelAnimationFrame(contentRaf)
@@ -360,6 +382,9 @@ onUnmounted(() => {
       @open-search="openPalette"
     />
 
+    <!-- 全局考研倒计时印（每个页面都在；窄屏改顶栏紧凑 chip） -->
+    <ExamCountdown v-if="!isNarrow" :days="examDays" :date="examDate" :passed="examPassed" />
+
     <!-- 窄屏：紧凑顶栏 + 抽屉 -->
     <header v-if="isNarrow" class="mobile-bar">
       <router-link to="/stats" class="mb-brand">
@@ -369,6 +394,7 @@ onUnmounted(() => {
       <span class="mb-ring num" :title="`今日复习 ${ringDone}/${ringTotal}`"
         >{{ ringDone }}<i>/{{ ringTotal }}</i></span
       >
+      <ExamCountdown compact :days="examDays" :date="examDate" :passed="examPassed" />
       <button type="button" class="mb-btn" aria-label="搜索" @click="openPalette">
         <Icon name="search" :size="17" />
       </button>

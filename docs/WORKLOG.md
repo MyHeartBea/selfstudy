@@ -168,3 +168,18 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 
 **验证**：后端 165 + ruff check/format 干净；前端 eslint(0 warning) + prettier + Vitest **70** + `npm run build`；E2E **37** 全绿（`card-click` 新增作文卡整卡可点与"删除只弹确认框、确认后卡片换成空态"两条真命中用例，`render-smoke` 加 `/essays`）。生产 8000 重启后真机自查：`/essays` 浅色（印章空态/Dock 高亮正确）、`/capture` 深色作文 Tab，零 console/page 错误。
 ⚠️ **未验到的部分**：DeepSeek 与智谱两把 key 目前都是 `402 Insufficient Balance`，**真实批改的 prompt 效果无法端到端确认**（代码路径到 AI 调用前正常，失败会以 502 + 明确 message 返回）。充值后需补一次真机批改。
+
+## 2026-09-19 · 全局考研倒计时印批 + 作文批改真机复核（用户：DeepSeek 已充值；倒计时要全局、更醒目更大）
+**真机复核（上一批欠的一次验证，已补上）**：`POST /api/essays/grade`（e2_long，一段故意写错的 132 词图表作文，`persist:true`）→ 200，`record_id=1`，**9/15 第三档**，四维 3/2/2/2（和=总分，归一化没触发重算），8 条逐句改错**全部成立**（`the number...have`→`has`、`The chart show`→`shows`、描述 2021-2023 数据用现在时→过去时、`There have two reasons`→`There are`、`is convenience`→`are convenient`、`make a good use of`→`make good use of`），并给出「字数不足 150 必须降档」的定档理由 + 967 字同题范文。结论：**评分严格度与改错质量达标，不需要调 prompt/档位**。
+⚠️ 踩坑：curl 的 `-d '{...中文...}'` 在 Windows 上会被 argv 码页弄成非法 UTF-8，FastAPI 直接 400 `There was an error parsing the body`（**不是**接口的问题）。带中文的 JSON 请求一律写成文件再 `--data-binary "@file"`。
+
+**全局倒计时**：
+- 后端：`stats_service._exam_countdown` 提为公开 `exam_countdown()`，新增 `GET /api/exam-countdown`（纯日期计算、**不查库**，所以外壳每页取一次也不心疼）；`/api/stats` 里的 `exam_countdown` 字段保留（老前端兼容）。新增 `tests/test_exam_countdown.py` 3 用例（未来/日期非法/已考完）。
+- 前端：新基件 `ui/ExamCountdown.vue` 挂进 AppLayout 外壳 —— 桌面右上角悬浮印（42px 渐变数字 + 朱砂 kicker + 洒金描边 + 掠光 sheen + 呼吸光晕，`right: max(16px, calc(50vw - var(--content-max)/2 + 6px))` 与正文右边缘对齐），窄屏走 `.mobile-bar` 紧凑 chip；三档语气（`<=7` 冲刺洒金、`<=30` 紧迫加快脉动、常态）；入场串在 `body.app-ready` 后面（与 Dock 同批落下）。取数在 AppLayout：挂载一次 + 10 分钟刷新，`onUnmounted` 里 `clearInterval(examTimer)`。
+- **统计页 hero 的 `cd-strip` 已删**（含三个 computed 与样式）—— 同屏两个倒计时是重复，用户要的是"挪成全局"。
+- 测试：`tests/examCountdown.test.js` 4 用例；E2E `fixtures.js` 补 `/api/exam-countdown` 打桩，并把「`.exam-cd` 可见且含 91」加进 **11 条渲染烟测**（漏打桩或外壳没挂上 → 22 个用例全红，正是想要的兜底）。
+  - VTU 坑：根节点带 `v-if` 时 `wrapper.exists()` 仍为 true（实例在，根是注释节点），而 `find('.x')` **不查根自己**，两个都会让"不渲染"的断言假通过 → 用 `element.nodeType === 8` 断言，并在正常分支加 `nodeType === 1` 作对照。
+- 真机自查（生产 8000）：浅/深两主题下印章几何 `[1157,14,132,74]`、与 Dock 间隙 31px、`elementFromPoint` 命中自身（没被盖住）；窄屏 420px 顶栏 `scrollWidth === clientWidth`（没挤出横向滚动）；零 console/page 错误。
+- ⚠️ **一次 E2E 假红**：改完后第一次全量跑 `/vocab`、`/knowledge` 两条 desktop 烟测失败，单跑与重跑都绿（37/37）。冷启动 vite + 2 workers 的争抢，符合"并发争抢假红"的老毛病；**结论前至少跑两遍**，别被单次红牵着改代码。
+
+测试：后端 **168** + ruff 干净；前端 Vitest **74** + eslint/prettier + build；E2E **37** 全绿。

@@ -32,8 +32,8 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（165 个）
-cd frontend && npm test                                  # Vitest 70 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（168 个）
+cd frontend && npm test                                  # Vitest 74 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
 cd frontend && npm run test:e2e                          # Playwright 37 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
@@ -192,6 +192,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - 顶部悬浮玻璃 Dock：滑动 pill（`.dock-ind`）、悬浮标签（data-label+::after）、复习进度环、后端健康点；窄屏 ≤1100px 切换紧凑顶栏+抽屉；
 - 换肤「墨漫纸面」：rAF+clip-path 圆形扩散（`theme-veil`，防重入锁 themeBusy），**不要改回 View Transitions**（用户浏览器实测有半途跳变 bug）；
 - 开场编排：字体就绪（`document.fonts.ready`，700ms 兜底）后 `body.app-ready` 触发「氛围显影→Dock 落下→页面级联」。
+- **全局考研倒计时印**（`ui/ExamCountdown.vue`，挂在 AppLayout 外壳）：数据取 `GET /api/exam-countdown`（纯日期计算、不查库；外壳只在挂载时取一次 + 10 分钟刷一次）。桌面 = 右上角悬浮印（与正文右边缘对齐，`right: max(16px, calc(50vw - var(--content-max)/2 + 6px))`），窄屏 = `.mobile-bar` 里的紧凑 chip；三档语气 `days<=7` 冲刺（洒金) / `<=30` 紧迫 / 常态；`days` 为 null（日期非法）或 `passed` 时**整块不渲染**。**统计页 hero 里不再有倒计时**（已上移到外壳，别加回去，避免同屏两个）。
 
 **ui/ 基件一览**（全部零依赖，API 与 v1 兼容）：
 - `UiButton`（variant=primary|ghost|outline|danger|success|subtle；primary=印章渐变+涟漪）、`UiModal`（玻璃+渐变描边，zIndex 可叠）、`UiTabs/UiSelect/UiDropdown/UiCheckbox/UiPagination/UiProgress/UiStars/UiTag/UiEmpty/ToastHost/ConfirmHost/CommandPalette/Icon(icons.js 内联 SVG)`；
@@ -277,6 +278,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。
-- 测试基线：**后端 165、前端 Vitest 70、E2E 37**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
+- 测试基线：**后端 168、前端 Vitest 74、E2E 37**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。
