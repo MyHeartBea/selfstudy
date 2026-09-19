@@ -146,9 +146,10 @@ const revealKey = ref(0)
         </div>
       </div>
       <p class="cap">
-        全站三个动效锚点：页首四段级联（本样例，换页时自动播放）· 统计页大数字墨晕显影 ·
-        复习完成页「内容聚拢、落章收束」。全部引用 --dur / --stagger / --ease 令牌，
-        prefers-reduced-motion 下由 base.css 全局规则压停直接落末帧，打印快照强制末帧。
+        全站动效锚点：页首四段级联（本样例，换页时自动播放）· 统计页大数字墨晕显影 ·
+        复习完成页「内容聚拢、落章收束」+ 题干汉字文字雨 · 点击纸面墨滴洇开 · Dock
+        磁吸与光标悬锋。全部引用 --dur / --stagger / --ease 令牌， prefers-reduced-motion 下由
+        base.css 全局规则压停直接落末帧，打印快照强制末帧。
       </p>
     </section>
 

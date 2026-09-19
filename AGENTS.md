@@ -313,3 +313,15 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   **有意保留**（skill 建议砍但属于品牌件，别再"修"）：英文眉标 `view-kicker`（全站报头装置）、自定义光标 AppCursor（用户点名要的效果）。
   ⚠️ **E2E 不要和浏览器截图/自动化会话并行跑**：资源争抢会假红 8 个（capture/card-click/render-smoke 全中，症状全是"element not found"；单独重跑 1 分钟全绿）。
   测试：后端 148 未动、前端 61 + E2E 31 全绿。
+
+- **2026-09-19 「墨韵 3.0 · 数字文房」全面升级批（核心隐喻：记忆即墨，复习即描摹）**：
+  ①**令牌**：`--fs-display` 改流体 `clamp()`、新增 `--fs-mega`（门面页巨型字档）；新增**墨迹褪色阶** `--ink-fade-1..4` + `--ink-wash`（用 color-mix 挂在 `--ink` 上，随主题自动换色，禁止再引新灰）；
+  ②**浏览器表面补完**（base.css）：`li::marker`、number 步进箭头移除、`summary` 折叠标记主题化；
+  ③**掌握度/遗忘语义化**：错题卡新增 `.ink-due`「今日到期/逾期 N 天 · 墨迹将干」状态章（SM-2 的 next_review_at 到期才渲染，字段缺失静默不渲染；与复习队列"今日到期"同口径 = `due <= 今日 23:59`）；统计页平均掌握度 chip 改为**墨滴**（`.ink-lvl`，opacity=掌握度）；
+  ④**统计首屏非对称重构**：巨型竖排「今日」水印（`.hero-mega`，writing-mode vertical-rl + `--fs-mega`）立于页首左，信息块右移（≤900px 整体退场）——Ink Dynasty 竖排书法的转译；
+  ⑤**复习完成页升格**：新增 `ui/InkRain.vue` **内容文字雨**（本轮队列题干的真实汉字在卷宗框内缓落晕开；rAF 自停 + visibilitychange 停 + reduced-motion 不渲染；队列题干在内存里直接取，零新增请求）；印章落地后**两圈墨环晕开**（scoped `ink-ring` keyframes，延迟对齐 stamp 落地拍点）；礼花升级为**洒金**（confetti.js 金箔条 2.6:1 + 金/朱砂色板）；
+  ⑥**氛围层**（AmbientLayer）：新增**落墨画布** —— 点击纸面墨滴洇开（window pointerdown 被动监听，Canvas 2D 径向渐变，rAF 自停）；远山/墨字水印改 **CSS scroll-driven** 视差（`animation-timeline: scroll(root)`，Firefox 静态兜底；`.c1/.c2` 的旋转改用独立 `rotate` 属性避免被动画 transform 覆盖）；
+  ⑦**Dock 磁吸**：图标被指针吸引（只写 `--mag-x/y` 变量、每次 pointermove 一帧 rAF 批处理、先读后写、离场归零、reduced-motion/触屏不绑定）；**光标悬锋**：命中可点元素内芯变毛笔尖（teardrop），按下滴墨涟漪；
+  ⑧**纸牌落桌**：v-reveal 入场带随机倾角 —— `.card-grid` 按 nth-child 三拍预设 `--reveal-tilt`（纯 CSS，指令零改动）。
+  **刻意不做**（都有理由，别"补"）：BootCalibration 不重画（五轮实测打磨出的撕裂开屏是资产不是负债）；pageFlip 不接入换页（km-flip.css 里记录了 Vue Transition 四连败，JS 单路径是结论）；OKLCH 全量换算（零视觉收益、有回归风险）；字重 300（体积不划算）；卷宗纸感/模考试卷纸（下一批）。
+  测试：前端 61 + E2E 31 全绿；双主题真机回看通过（竖排大字/墨滴/将干章逐项 DOM+截图验证）。

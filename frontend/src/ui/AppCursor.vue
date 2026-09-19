@@ -138,21 +138,42 @@ onBeforeUnmount(() => {
   border: 1.5px solid var(--accent);
   box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--accent) 35%, transparent);
 }
-/* 命中时内芯留一个极小的实心点，保持"指针尖"的位置感 */
+/* 命中时内芯变成一滴悬锋：墨滴收尖朝上，像倒提的毛笔尖
+   （teardrop = 三个 50% 圆角 + 一个直角，旋转 -45° 使尖角朝上），
+   保留"指针尖"的位置感，同时把"可点"的回执从几何圆升级成笔的隐喻 */
 .cur.is-hover::after {
   content: '';
   position: absolute;
   inset: 50% auto auto 50%;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50% 50% 50% 0;
   background: var(--accent);
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
-/* 按下：再收一点 */
+/* 按下：墨滴落纸 —— 一圈墨晕从指针向外扩散（一次性） */
 .cur.is-press {
   width: 34px;
   height: 34px;
+}
+.cur.is-press::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  opacity: 0;
+  animation: cur-ripple 0.55s var(--ease-exit) forwards;
+}
+@keyframes cur-ripple {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.1);
+  }
 }
 
 @media (pointer: coarse), (prefers-reduced-motion: reduce) {

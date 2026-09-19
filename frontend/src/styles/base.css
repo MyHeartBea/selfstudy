@@ -100,6 +100,41 @@ img {
   background: transparent;
 }
 
+/* ── 浏览器表面补完（craft-floor：你没有画的部分也要带设计）──────────
+   列表标记、数字输入框的步进箭头、details 折叠标记，默认都是浏览器
+   原生样式，和墨纸世界不搭。逐个主题化。 */
+li::marker {
+  color: var(--ink-3);
+}
+
+input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+summary {
+  cursor: pointer;
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary::before {
+  content: '›';
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--ink-3);
+  transition: transform var(--dur-1) var(--ease);
+}
+details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -322,10 +357,13 @@ textarea.field-input {
   color: var(--ink-3);
 }
 
-/* v-reveal 指令（滚动显现） */
+/* v-reveal 指令（滚动显现）*/
 .reveal-pending {
   opacity: 0;
-  transform: translateY(18px);
+  /* 纸牌落桌：入场前带一点随机倾斜（--reveal-tilt 由 card-grid 按
+     nth-child 预设，配合下方 transform 归零 —— 卡片像散落的纸牌
+     被逐一摆正）。transform 只写这一处，归零后不残留旋转。 */
+  transform: translateY(18px) rotate(var(--reveal-tilt, 0deg));
   transition:
     opacity var(--dur-4) var(--ease-enter),
     transform var(--dur-4) var(--ease-enter);
@@ -337,7 +375,18 @@ textarea.field-input {
 }
 .reveal-pending.reveal-in {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) rotate(0deg);
+}
+/* 卡片墙的散落倾角：nth-child 给出伪随机但确定的三拍节奏，
+   不需要在 JS/指令里为每个元素算随机数 */
+.card-grid > :nth-child(3n + 1) {
+  --reveal-tilt: 1.6deg;
+}
+.card-grid > :nth-child(3n + 2) {
+  --reveal-tilt: -1.1deg;
+}
+.card-grid > :nth-child(3n) {
+  --reveal-tilt: 0.6deg;
 }
 
 /* ---------- 错题卡 3D 倾斜 + 光泽（MistakeCard 配合） ---------- */

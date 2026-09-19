@@ -316,6 +316,9 @@ onBeforeUnmount(() => {
 <template>
   <div class="page stats-page" :class="{ entered }">
     <div class="view-hero">
+      <!-- 巨型竖排「今日」：非对称编辑网格的锚（Ink Dynasty 的竖排书法转译）。
+           装饰层在左、信息在右，窄屏整体退场。 -->
+      <span class="hero-mega serif" aria-hidden="true">今日</span>
       <div class="view-hero-copy">
         <div class="view-kicker">Learning Analytics</div>
         <!-- 标题逐行揭示：外层做遮罩，内层做位移（参考稿的 line / line__i 手法） -->
@@ -372,7 +375,7 @@ onBeforeUnmount(() => {
                 <b class="num km-num">{{ nAccToday }}<i>%</i></b></span
               >
               <span class="h-chip"
-                ><Icon name="sparkles" :size="13" />平均掌握度
+                ><i class="ink-lvl" :style="{ '--lvl': nMastery }" aria-hidden="true"></i>平均掌握度
                 <b class="num km-num">{{ nMastery }}</b></span
               >
             </div>
@@ -871,6 +874,47 @@ onBeforeUnmount(() => {
 }
 .hero-left {
   min-width: 0;
+}
+/* 巨型竖排「今日」：编辑式非对称锚点，完整立于页首左侧 */
+.hero-mega {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  writing-mode: vertical-rl;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: calc(var(--fs-mega) * 0.78);
+  line-height: 0.9;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  opacity: 0.075;
+  pointer-events: none;
+  user-select: none;
+}
+.stats-page .view-hero {
+  /* 给竖排大字让位：信息块整体右移（窄屏由下方媒体查询收回） */
+  padding-left: clamp(0px, 15vw, 236px);
+  min-height: calc(var(--fs-mega) * 1.62);
+}
+@media (max-width: 900px) {
+  .hero-mega {
+    display: none;
+  }
+  .stats-page .view-hero {
+    padding-left: 0;
+    min-height: 0;
+  }
+}
+/* 掌握度墨滴：一滴墨的浓度 = 平均掌握度（「记忆即墨」的数据语义化） */
+.ink-lvl {
+  width: 11px;
+  height: 11px;
+  border-radius: 50% 50% 50% 4px;
+  background: var(--ink);
+  opacity: max(0.14, var(--lvl, 0));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 20%, transparent);
+  flex: none;
 }
 .hero-value {
   font-family: var(--font-display);

@@ -9,16 +9,8 @@ let ctx = null
 let particles = []
 let rafId = null
 
-const DEFAULT_COLORS = [
-  '#c2402a',
-  '#e0604a',
-  '#a16207',
-  '#d0a03f',
-  '#1a7f42',
-  '#2f6db3',
-  '#6d5bd0',
-  '#fffdf8',
-]
+/* 洒金（墨纸印设计语言的第四元素）：金箔为主、朱砂为辅，不再是彩纸 rainbow */
+const DEFAULT_COLORS = ['#d2a83f', '#e8c96a', '#b8860b', '#c14a31', '#a83320', '#f0e6c8']
 
 function ensureCanvas() {
   if (canvas) return
@@ -53,15 +45,16 @@ function spawn(x, y, opts = {}) {
       y,
       vx: Math.cos(a) * v,
       vy: Math.sin(a) * v,
-      size: 3 + Math.random() * 5,
+      /* 金箔条：细长矩形翻起来才有金属亮片手感，圆粒只留 15% 做点缀 */
+      size: 4 + Math.random() * 6,
       color: colors[(Math.random() * colors.length) | 0],
       rot: Math.random() * Math.PI * 2,
       vr: (Math.random() - 0.5) * 0.3,
-      gravity: 0.18 + Math.random() * 0.12,
-      drag: 0.985,
+      gravity: 0.14 + Math.random() * 0.1,
+      drag: 0.988,
       life: 1,
       decay: 0.008 + Math.random() * 0.01,
-      shape: Math.random() > 0.35 ? 'rect' : 'circle',
+      shape: Math.random() > 0.15 ? 'rect' : 'circle',
     })
   }
 }
@@ -83,7 +76,8 @@ function tick() {
     ctx.rotate(p.rot)
     ctx.fillStyle = p.color
     if (p.shape === 'rect') {
-      ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2)
+      /* 金箔条 2.6:1 细长比 */
+      ctx.fillRect(-p.size / 2, -p.size / 5.2, p.size, p.size / 2.6)
     } else {
       ctx.beginPath()
       ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2)

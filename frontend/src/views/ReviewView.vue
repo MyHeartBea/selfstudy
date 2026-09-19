@@ -22,6 +22,7 @@ import GlassCard from '../ui/GlassCard.vue'
 import StageBadge from '../ui/StageBadge.vue'
 import Skeleton from '../ui/Skeleton.vue'
 import RingProgress from '../ui/RingProgress.vue'
+import InkRain from '../ui/InkRain.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -45,6 +46,28 @@ const reviewSaved = ref(false)
 const resultCount = ref({ correct: 0, wrong: 0 })
 
 const current = computed(() => queue.value[index.value] || null)
+
+/* 完成页文字雨的墨滴原料：本轮队列里题干的真实汉字（去重，至多 64 个）。
+   「内容即装饰」—— 落下的不是抽象粒子，是刚复习过的内容本身。 */
+const rainChars = computed(() => {
+  const out = []
+  const seen = new Set()
+  for (const q of queue.value) {
+    const text = String(q?.question || q?.stem || q?.title || '')
+      .replace(/\$\$?[^$]*\$\$?/g, '')
+      .replace(/\\[a-zA-Z]+/g, '')
+      .replace(/[^\u4e00-\u9fa5]/g, '')
+    for (const ch of text) {
+      if (!seen.has(ch)) {
+        seen.add(ch)
+        out.push(ch)
+      }
+      if (out.length >= 64) return out
+    }
+  }
+  return out
+})
+
 const practiceMode = computed(() => String(route.query.mode || ''))
 const isPractice = computed(() =>
   ['curve', 'wrong_time', 'random', 'real_exam', 'mock'].includes(practiceMode.value),
@@ -669,6 +692,7 @@ onUnmounted(() => {
 
     <template v-else-if="done">
       <div class="done-stage">
+        <InkRain :chars="rainChars" />
         <div class="stamp">已<br />完成</div>
         <h3 class="done-title">{{ practiceTitle ? '练习完成' : '今日复习完成' }}</h3>
         <p class="done-sub">
@@ -1116,6 +1140,7 @@ onUnmounted(() => {
 }
 
 .done-stage {
+  position: relative;
   max-width: 520px;
   margin: 48px auto;
   display: flex;
@@ -1126,11 +1151,17 @@ onUnmounted(() => {
   text-align: center;
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-xl);
+  overflow: hidden;
   /* 完成页编舞（Scroll Morph 案例的队形思想，一次性播放）：
      容器只做薄纱显影 -> 标题/小结/积压/操作按 --stagger-2 逐段聚拢 ->
      印章最后落下收束（呼应文案「朱砂印为证」）。reduced-motion 由
      base.css 全局规则压停，各段直接落末帧。 */
   animation: done-veil var(--dur-2) var(--ease-enter) both;
+}
+/* 文字雨垫在底层，内容段抬到其上（InkRain 是 absolute 定位，会盖过
+   静态兄弟的文字，所以除了雨以外的直接子元素都要建立定位上下文） */
+.done-stage > :not(.ink-rain) {
+  position: relative;
 }
 @keyframes done-veil {
   from {
@@ -1168,8 +1199,9 @@ onUnmounted(() => {
     transform: translateY(0) scale(1);
   }
 }
-/* 落章：从空中盖章 + 回弹 */
+/* 落章：从空中盖章 + 回弹；落地后两圈墨环向外晕开（「墨迹年轮」） */
 .stamp {
+  position: relative;
   width: 108px;
   height: 108px;
   display: grid;
@@ -1190,6 +1222,33 @@ onUnmounted(() => {
   /* 印章在内容聚拢完之后才落下（第 5 拍），thud 紧跟 stamp-in 落地 */
   animation-delay: calc(var(--stagger-2) * 5), calc(var(--stagger-2) * 5 + 0.6s);
   margin-bottom: 8px;
+}
+.stamp::before,
+.stamp::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 22px;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  animation: ink-ring 1.1s var(--ease-exit) both;
+}
+.stamp::before {
+  animation-delay: calc(var(--stagger-2) * 5 + 0.62s);
+}
+.stamp::after {
+  animation-delay: calc(var(--stagger-2) * 5 + 0.9s);
+}
+@keyframes ink-ring {
+  from {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.75);
+  }
 }
 @keyframes stamp-in {
   0% {

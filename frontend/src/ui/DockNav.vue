@@ -4,7 +4,7 @@
  * 品牌印章 + 主导航 + 资料库 + 复习环 + 搜索 + 换肤，胶囊悬浮居中。
  * active 高亮 pill 沿横向弹性滑动；悬停浮出玻璃标签。
  */
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import Icon from '../ui/Icon.vue'
@@ -39,6 +39,50 @@ function go(path) {
   if (route.path !== path) router.push(path)
 }
 
+/* ── 磁吸：Dock 内图标被指针轻微吸引 ────────────────────────────────
+   只写 --mag-x/--mag-y 两个 CSS 变量，transform 合成交给 CSS；
+   每次 pointermove 只排一帧 rAF 批处理（先读矩形再写变量，避免布局
+   抖动），指针离开 Dock 一律归零。reduced-motion / 触屏不绑定。 */
+let magRaf = 0
+let pmx = 0
+let pmy = 0
+
+function dockItemEls() {
+  return dockEl.value ? dockEl.value.querySelectorAll('.dock-item, .dock-logo') : []
+}
+
+function onDockMove(e) {
+  pmx = e.clientX
+  pmy = e.clientY
+  if (!magRaf) magRaf = requestAnimationFrame(applyMagnet)
+}
+
+function applyMagnet() {
+  magRaf = 0
+  const els = dockItemEls()
+  const rects = [...els].map((el) => el.getBoundingClientRect()) // 先读
+  els.forEach((el, i) => {
+    // 后写
+    const r = rects[i]
+    const dx = pmx - (r.left + r.width / 2)
+    const dy = pmy - (r.top + r.height / 2)
+    const dist = Math.hypot(dx, dy) || 1
+    const R = 92
+    const pull = dist < R ? (1 - dist / R) * 6.5 : 0
+    el.style.setProperty('--mag-x', ((dx / dist) * pull).toFixed(2) + 'px')
+    el.style.setProperty('--mag-y', ((dy / dist) * pull).toFixed(2) + 'px')
+  })
+}
+
+function onDockLeave() {
+  if (magRaf) cancelAnimationFrame(magRaf)
+  magRaf = 0
+  for (const el of dockItemEls()) {
+    el.style.setProperty('--mag-x', '0px')
+    el.style.setProperty('--mag-y', '0px')
+  }
+}
+
 watch(
   () => props.activePath,
   () => nextTick(moveInd),
@@ -46,6 +90,18 @@ watch(
 onMounted(() => {
   nextTick(moveInd)
   setTimeout(moveInd, 350) // 字体就绪后宽度微调的兜底
+  if (
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches &&
+    window.matchMedia('(hover: hover) and (pointer: fine)').matches
+  ) {
+    dockEl.value?.addEventListener('pointermove', onDockMove, { passive: true })
+    dockEl.value?.addEventListener('pointerleave', onDockLeave, { passive: true })
+  }
+})
+onUnmounted(() => {
+  onDockLeave()
+  dockEl.value?.removeEventListener('pointermove', onDockMove)
+  dockEl.value?.removeEventListener('pointerleave', onDockLeave)
 })
 </script>
 
@@ -184,6 +240,7 @@ onMounted(() => {
   display: grid;
   place-items: center;
   text-decoration: none;
+  transform: translate(var(--mag-x, 0px), var(--mag-y, 0px));
 }
 .seal {
   width: 40px;
@@ -232,6 +289,7 @@ onMounted(() => {
   display: grid;
   place-items: center;
   padding: 0;
+  transform: translate(var(--mag-x, 0px), var(--mag-y, 0px));
   transition:
     color 0.2s var(--ease),
     background 0.2s var(--ease),
@@ -239,10 +297,10 @@ onMounted(() => {
 }
 .dock-item:hover {
   color: var(--ink);
-  transform: scale(1.12) translateY(-1px);
+  transform: translate(var(--mag-x, 0px), var(--mag-y, 0px)) scale(1.12) translateY(-1px);
 }
 .dock-item:active {
-  transform: scale(0.94);
+  transform: translate(var(--mag-x, 0px), var(--mag-y, 0px)) scale(0.94);
 }
 .dock-item.active {
   color: var(--accent);

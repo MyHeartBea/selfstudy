@@ -45,6 +45,7 @@ onMounted(() => {
     // 切到后台标签页就停：氛围层是纯装饰，不该在看不见的时候继续写 style
     document.addEventListener('visibilitychange', onVisibility)
     startAmbient()
+    mountInkCanvas()
   }
 })
 
@@ -89,9 +90,92 @@ function loop() {
 
 onUnmounted(() => {
   stopAmbient()
+  unmountInkCanvas()
   window.removeEventListener('mousemove', onMove)
   document.removeEventListener('visibilitychange', onVisibility)
 })
+
+/* ── 落墨画布：点击纸面，墨滴在纸上洇开 ──────────────────────────────
+   「数字文房」的核心交互隐喻：纸会记得你碰过它。实现纪律：
+   · 单 Canvas 2D 层；rAF 只在有墨滴活着时运转（自停），visibilitychange
+     切后台直接清空队列（墨滴是瞬时的，不需要恢复现场）
+   · 监听的是 window 的 pointerdown（ambient 本身 pointer-events:none），
+     passive + 不做任何 preventDefault，绝不干扰点击
+   · reduced-motion 下整个画布不启用 */
+const inkCanvasEl = ref(null)
+let inkCtx = null
+let inkRaf = 0
+let inkDrops = []
+
+function spawnInkDrop(x, y) {
+  inkDrops.push({
+    x,
+    y,
+    r: 6 + Math.random() * 10,
+    vr: 46 + Math.random() * 60, // px/s 洇开速度
+    alpha: 0.14 + Math.random() * 0.08,
+  })
+  if (!inkRaf) inkRaf = requestAnimationFrame(inkLoop)
+}
+
+let inkLast = 0
+
+function inkLoop(now) {
+  const cv = inkCanvasEl.value
+  if (!cv || !inkCtx) return
+  const dt = Math.min(0.05, (now - inkLast) / 1000 || 0.016)
+  inkLast = now
+  inkCtx.clearRect(0, 0, cv.width, cv.height)
+  inkDrops = inkDrops.filter((d) => d.alpha > 0.006)
+  for (const d of inkDrops) {
+    d.r += d.vr * dt
+    d.vr *= 0.92 // 洇开减速：像真墨在纤维里停住
+    d.alpha *= 0.955
+    const g = inkCtx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r)
+    g.addColorStop(0, `rgba(44, 40, 34, ${(d.alpha * 0.5).toFixed(3)})`)
+    g.addColorStop(0.7, `rgba(44, 40, 34, ${(d.alpha * 0.8).toFixed(3)})`)
+    g.addColorStop(1, 'rgba(44, 40, 34, 0)')
+    inkCtx.fillStyle = g
+    inkCtx.beginPath()
+    inkCtx.arc(d.x, d.y, d.r, 0, Math.PI * 2)
+    inkCtx.fill()
+  }
+  if (inkDrops.length) {
+    inkRaf = requestAnimationFrame(inkLoop)
+  } else {
+    inkRaf = 0
+    inkCtx.clearRect(0, 0, cv.width, cv.height)
+  }
+}
+
+function onInkResize() {
+  const cv = inkCanvasEl.value
+  if (!cv) return
+  const dpr = Math.min(2, window.devicePixelRatio || 1)
+  cv.width = window.innerWidth * dpr
+  cv.height = window.innerHeight * dpr
+  inkCtx = cv.getContext('2d')
+  inkCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+}
+
+function onPaperDown(e) {
+  spawnInkDrop(e.clientX, e.clientY)
+}
+
+function mountInkCanvas() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  onInkResize()
+  window.addEventListener('resize', onInkResize)
+  // 深浅主题换色时重读一次墨色即可（墨色由渐变 alpha 内联，无需逐帧读）
+  window.addEventListener('pointerdown', onPaperDown, { passive: true })
+}
+function unmountInkCanvas() {
+  window.removeEventListener('resize', onInkResize)
+  window.removeEventListener('pointerdown', onPaperDown)
+  if (inkRaf) cancelAnimationFrame(inkRaf)
+  inkRaf = 0
+  inkDrops = []
+}
 </script>
 
 <template>
@@ -103,6 +187,7 @@ onUnmounted(() => {
     <div class="ink-blob ib1"></div>
     <div class="ink-blob ib2"></div>
     <div class="ink-blob ib3"></div>
+    <canvas ref="inkCanvasEl" class="ink-canvas"></canvas>
     <svg class="mountains" viewBox="0 0 1440 220" preserveAspectRatio="none">
       <path d="M0 200 Q 180 90 360 150 T 720 130 T 1080 160 T 1440 120 V220 H0 Z" opacity=".5" />
       <path d="M0 220 Q 240 150 480 185 T 960 175 T 1440 190 V220 H0 Z" opacity=".8" />
@@ -261,7 +346,7 @@ onUnmounted(() => {
   }
 }
 
-/* 远山剪影 */
+/* 远山剪影：滚动时缓慢上移（CSS scroll-driven，无 JS 监听） */
 .mountains {
   position: absolute;
   bottom: 0;
@@ -269,6 +354,17 @@ onUnmounted(() => {
   width: 100%;
   height: 220px;
   opacity: 0.05;
+  animation: mountains-drift linear both;
+  animation-duration: auto;
+  animation-timeline: scroll(root);
+}
+@keyframes mountains-drift {
+  from {
+    transform: translateY(30px);
+  }
+  to {
+    transform: translateY(-60px);
+  }
 }
 [data-theme='dark'] .mountains {
   opacity: 0.08;
@@ -277,7 +373,7 @@ onUnmounted(() => {
   fill: var(--ink);
 }
 
-/* 墨字水印 */
+/* 墨字水印：与远山反向缓移（滚动叙事的第二层） */
 .ink-char {
   position: absolute;
   font-family: var(--font-display);
@@ -286,19 +382,45 @@ onUnmounted(() => {
   opacity: 0.04;
   line-height: 1;
   user-select: none;
+  animation: ink-char-drift linear both;
+  animation-duration: auto;
+  animation-timeline: scroll(root);
 }
+@keyframes ink-char-drift {
+  from {
+    transform: translateY(46px);
+  }
+  to {
+    transform: translateY(-60px);
+  }
+}
+/* 旋转是两个字的姿态差异，交给内层变量保留（滚动位移复用同一条 keyframes） */
 .c1 {
   font-size: 24vw;
   top: -7vw;
   right: 0;
-  transform: rotate(4deg);
+  rotate: 4deg;
 }
 .c2 {
   font-size: 16vw;
   bottom: -4vw;
   left: 26vw;
-  transform: rotate(-3deg);
+  rotate: -3deg;
   opacity: 0.028;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mountains,
+  .ink-char {
+    animation: none;
+  }
+}
+
+/* 落墨画布：点击纸面洇开的墨滴层 */
+.ink-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* 纸纹噪点 */

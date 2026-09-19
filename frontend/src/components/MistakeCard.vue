@@ -62,6 +62,23 @@ const cardText = computed(() => {
 const hasImage = computed(
   () => Array.isArray(props.mistake.images) && props.mistake.images.length > 0,
 )
+
+/* 墨迹将干（「记忆即墨」隐喻）：SM-2 的 next_review_at 到期/逾期时，
+   这道题的墨迹开始变干 —— 卡片上盖一枚淡墨状态章提醒"该重新描摹了"。
+   字段缺失（接口变更/暂停复习）时静默不渲染，不参与布局。 */
+const inkState = computed(() => {
+  const nra = props.mistake?.next_review_at
+  if (!nra || props.mistake?.review_paused) return null
+  const due = new Date(nra).getTime()
+  if (Number.isNaN(due)) return null
+  const endToday = new Date()
+  endToday.setHours(23, 59, 59, 999)
+  const overdueDays = Math.floor((Date.now() - due) / 86400000)
+  if (overdueDays >= 1) return { label: `逾期 ${overdueDays} 天 · 墨迹将干`, cls: 'is-overdue' }
+  /* 与复习队列同口径：next_review_at 落在今天之内（含 23:59 前）即"今日到期" */
+  if (due <= endToday.getTime()) return { label: '今日到期 · 墨迹将干', cls: 'is-due' }
+  return null
+})
 </script>
 
 <template>
@@ -160,6 +177,7 @@ const hasImage = computed(
           <span v-if="mistake.source_name" class="foot-item grow" :title="mistake.source_name">{{
             mistake.source_name
           }}</span>
+          <span v-if="inkState" class="ink-due" :class="inkState.cls">{{ inkState.label }}</span>
           <span class="foot-item">{{ formatTime(mistake.created_at).slice(0, 10) }}</span>
         </div>
       </div>
@@ -474,5 +492,23 @@ const hasImage = computed(
   overflow: hidden;
   text-overflow: ellipsis;
   justify-content: flex-start;
+}
+/* 墨迹将干状态章：淡墨虚线章，逾期换朱砂（「记忆即墨」隐喻的可视化） */
+.ink-due {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--ink) 38%, transparent);
+  color: var(--ink-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.ink-due.is-overdue {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  color: var(--accent-ink);
 }
 </style>
