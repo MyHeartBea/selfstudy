@@ -234,7 +234,7 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 
 **测试与自查**：后端 **182**（未改后端）；前端 Vitest **91**（+8 errorBoundary、+8 UiStars）；E2E **39**（+2）全绿，跑两遍无假红；ruff / eslint / prettier / `npm run build` 干净。生产 8000 真机（深色主题）：`/design` 零 console 消息；Tab 落点 `aria-label="3 星"`、`:focus-visible` 命中、描边 `rgb(224,88,61) 2px`；按 → 后 `aria-checked` 与 tabindex 一起移到第 4 颗、组标签变「难度 4 / 5」；坏图片不触发错误面板，派生 `ErrorEvent` 则面板出现（`role=alert`、z-index 9999、深色卡面 + 朱砂边）。
 
-## 2026-09-19 · 全栈体检第 3 批：工程性收敛（索引 / 接口契约 / 列表加载）
+## 2026-09-19 · 全栈体检第 3 批：工程性收敛（索引 / 接口契约 / 列表加载，`e0bd126`）
 
 **B5 多步写入的事务原子性 —— 复核后判定为"不是缺陷"，本批没改事务。**
 逐条读了所有多语句写路径：`create_mistake`（补词条 + INSERT 错题 + 同步标签）、`update_mistake`、
