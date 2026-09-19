@@ -11,6 +11,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
+from app import metrics
 from app.config import settings
 
 logger = logging.getLogger("kaoyan.ai")
@@ -45,6 +46,65 @@ def _chat(
     with_meta: bool = False,
 ):
     """调用对话补全。默认返回纯文本；with_meta=True 时返回 (文本, 元信息)。
+
+    本函数是 `_chat_request` 的**记账外壳**：一次调用恰好一条通道统计（成功与失败
+    都记），供 `/api/health` 的 `metrics.ai` 使用。放在这一层而不是 `_post_chat`，
+    是因为统计口径要等于"这个通道交付一份结果花了多久"（含内部的重试与翻倍）。
+    空正文也按失败计 —— 它正是 `deepseek-flash` 推理吃光预算后的可见症状。
+    """
+    model_name = model or settings.AI_MODEL
+    endpoint = base_url or settings.AI_BASE_URL
+    started = time.perf_counter()
+    try:
+        content, meta = _chat_request(
+            messages,
+            timeout=timeout,
+            model=model,
+            base_url=base_url,
+            api_key=api_key,
+            response_format=response_format,
+            max_tokens=max_tokens,
+        )
+    except AiNotConfigured:
+        # 一个请求都没发出去，不算通道故障，记进 by_model 只会掩盖真问题
+        raise
+    except Exception as exc:
+        metrics.record_ai(
+            model_name,
+            endpoint,
+            (time.perf_counter() - started) * 1000,
+            ok=False,
+            error=str(exc),
+        )
+        raise
+    empty = not (content or "").strip()
+    metrics.record_ai(
+        model_name,
+        endpoint,
+        (time.perf_counter() - started) * 1000,
+        ok=not empty,
+        truncated=bool(meta.get("truncated")),
+        reasoning_tokens=int(meta.get("reasoning_tokens") or 0),
+        completion_tokens=int(meta.get("completion_tokens") or 0),
+        error=""
+        if not empty
+        else f"输出为空（finish_reason={meta.get('finish_reason') or '未知'}）",
+    )
+    if with_meta:
+        return content, meta
+    return content
+
+
+def _chat_request(
+    messages: List[dict],
+    timeout: int | None = None,
+    model: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
+    response_format: dict | None = None,
+    max_tokens: int | None = None,
+) -> tuple[str, dict]:
+    """真正的对话补全请求，恒定返回 `(文本, 元信息)`。
 
     **输出预算是"正文 + 推理"的总额**：`deepseek-flash` 是推理模型，会先花掉一段
     reasoning_tokens 再产出正文。若只按"正文长度"给 max_tokens，预算会被推理吃光
@@ -117,13 +177,9 @@ def _chat(
             continue
 
         last_meta["truncated"] = last_meta["finish_reason"] == "length"
-        if with_meta:
-            return content, last_meta
-        return content
+        return content, last_meta
 
-    if with_meta:
-        return "", last_meta
-    return ""
+    return "", last_meta
 
 
 def _post_chat(opener, request, timeout: int | None) -> dict:

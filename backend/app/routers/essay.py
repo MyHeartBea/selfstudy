@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.config import settings
 from app.database import get_connection
+from app.metrics import mask_secret
 from app.responses import error, ok
 from app.schemas import AiEssayRequest
 from app.security import ai_rate_limit
@@ -51,7 +52,10 @@ def _transcribe(images: List[str], started: float) -> tuple:
                 api_key=vision_api_key,
             )
         except Exception as exc:
-            last_error = str(exc)
+            # 与 /api/ai/ocr 同理：通道按序回退，前一个失败会被后一个成功掩盖。
+            # 降级必须留下 WARN 痕迹（并按通道进 metrics.ai），否则只能靠"变慢了"察觉。
+            last_error = mask_secret(str(exc))
+            logger.warning("作文转录通道 %s 失败，改用下一个兜底通道：%s", vision_model, last_error)
             continue
         if text:
             return text, ""
@@ -61,7 +65,7 @@ def _transcribe(images: List[str], started: float) -> tuple:
             try:
                 got = local_ocr.recognize_base64(img)
             except Exception as exc:
-                last_error = last_error or str(exc)
+                last_error = last_error or mask_secret(str(exc))
                 continue
             if got:
                 parts.append(got)

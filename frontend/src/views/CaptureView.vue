@@ -300,10 +300,14 @@ async function analyzeImage() {
       parsed.value.images = [previewImage.value, ...moreImages.value.map((m) => m.preview)]
     }
     ocrRawText.value = parsed.value.method === 'local' ? parsed.value.raw_text || '' : ''
-    // 后端降级消息（如"本地 OCR 识别完成（视觉模型失败：…）"）：
-    // 走到本地 OCR 时展示后端返回的具体原因，方便定位是哪个视觉通道失败。
+    // 后端降级消息：视觉首选通道失败后退到兜底通道、或整个退到本地 OCR，
+    // 都把后端给的具体原因显示出来。识别"照样成功但更慢更抖"是最难自查的一类问题，
+    // 不显示就等于让用户替我们盯通道健康。
     const ocrMessage = String(res.data?.message || '')
-    aiWarning.value = parsed.value.method === 'local' && ocrMessage ? ocrMessage : ''
+    aiWarning.value =
+      (parsed.value.method === 'local' && ocrMessage) || ocrMessage.includes('已降级')
+        ? ocrMessage
+        : ''
     formKey.value += 1
     toast.success(
       parsed.value.is_english

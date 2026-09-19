@@ -134,8 +134,12 @@
 ## AI
 
 - `POST /api/ai/analyze`：`{"text", "instruction"}` 文本解析
-- `POST /api/ai/ocr`：`{"image_base64", "instruction", "reference_image_base64"}` 三视觉通道轮询，
+- `POST /api/ai/ocr`：`{"image_base64", "instruction", "reference_image_base64"}` 三视觉通道**按序**轮询，
   全败退回本地 OCR
+  - **降级会在 `message` 里留痕**：`（首选通道 X 失败，已降级）` 拼在"视觉模型识别完成"后
+    —— 首选通道挂掉时识别**照样成功**，只是更慢更抖，不留痕就只能靠手感察觉。
+    **前端 `CaptureView` 按 `message` 里是否含"已降级"决定要不要出黄色提示条**，后端改措辞要同步改那里；
+    `POST /api/ai/english` 同此约定。`POST /api/ai/analyze` 是纯文本通道，没有降级一说。
 - `POST /api/ai/knowledge-from-image`：图片生成知识点草稿。支持一次提交**多张图**（知识点截图常分多张）：
   - `{"images": [b64, b64, ...], "instruction"}` —— 按顺序分批（每批 3 张）提文字后合并，**只生成一条草稿**；
   - 兼容旧调用 `{"image_base64": b64}`；`image_base64` 与 `images` 至少给一个（否则 422）。

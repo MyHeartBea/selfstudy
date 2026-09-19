@@ -125,6 +125,80 @@ class MetricsTest(unittest.TestCase):
         self.assertTrue(snap["slowest_requests"])
         self.assertGreaterEqual(snap["slowest_requests"][0]["ms"], settings.SLOW_REQUEST_MS)
 
+    def test_429_counted_separately_from_errors(self):
+        """限流不是 5xx（不该污染 recent_errors），但必须能被数出来。"""
+        for _ in range(3):
+            metrics.record("POST", "/api/ai/ocr", 429, 12.0)
+        metrics.record("POST", "/api/ai/ocr", 200, 12.0)
+        snap = metrics.snapshot()
+        self.assertEqual(snap["throttled_total"], 3)
+        self.assertEqual(snap["errors_total"], 0)
+        self.assertEqual(snap["recent_errors"], [])
+
+    def test_record_ai_aggregates_per_channel(self):
+        metrics.record_ai("deepseek-flash", "https://api.deepseek.com/v1", 100.0)
+        metrics.record_ai("deepseek-flash", "https://api.deepseek.com/v1", 300.0)
+        metrics.record_ai(
+            "glm-4.6v-flash",
+            "https://open.bigmodel.cn/api/paas/v4",
+            50.0,
+            ok=False,
+            error="AI 服务返回 401: bad key",
+        )
+        by_model = {row["channel"]: row for row in metrics.snapshot()["ai"]["by_model"]}
+        ds = by_model["deepseek-flash @ api.deepseek.com"]
+        self.assertEqual(
+            (ds["calls"], ds["errors"], ds["avg_ms"], ds["max_ms"]), (2, 0, 200.0, 300.0)
+        )
+        self.assertEqual(ds["last_error"], "", "成功通道不该挂着别人的错误")
+        glm = by_model["glm-4.6v-flash @ open.bigmodel.cn"]
+        self.assertEqual((glm["calls"], glm["errors"]), (1, 1))
+        self.assertIn("401", glm["last_error"])
+        self.assertTrue(glm["last_error_at"])
+        summary = metrics.snapshot()["ai"]
+        self.assertEqual(summary["calls_total"], 3)
+        self.assertEqual(summary["errors_total"], 1)
+
+    def test_record_ai_masks_keys_in_last_error(self):
+        """/api/health 是可读端点：上游报错里的密钥必须在入库前打掉，不是展示时。"""
+        secret = "sk-" + "a" * 24
+        metrics.record_ai(
+            "m",
+            "https://api.deepseek.com/v1",
+            10.0,
+            ok=False,
+            error=f"AI 服务返回 401: {{'error': {{'message': 'Invalid Authentication', 'key': '{secret}'}}}}",
+        )
+        metrics.record_ai(
+            "m2",
+            "https://x.test/v1",
+            10.0,
+            ok=False,
+            error=f"请求头 Authorization: Bearer {secret[3:]} 被网关回显",
+        )
+        rows = {row["channel"]: row for row in metrics.snapshot()["ai"]["by_model"]}
+        for channel in ("m @ api.deepseek.com", "m2 @ x.test"):
+            self.assertNotIn(secret, rows[channel]["last_error"], "密钥原文不得出现在监控里")
+            self.assertNotIn(secret[3:], rows[channel]["last_error"])
+            self.assertIn("****", rows[channel]["last_error"])
+
+    def test_record_ai_counts_truncation_and_reasoning(self):
+        metrics.record_ai("m", "https://x.test/v1", 10.0, truncated=True, reasoning_tokens=9000)
+        metrics.record_ai("m", "https://x.test/v1", 10.0, reasoning_tokens=1000)
+        row = metrics.snapshot()["ai"]["by_model"][0]
+        self.assertEqual(row["truncated"], 1)
+        self.assertEqual(row["reasoning_avg"], 5000)
+        self.assertEqual(metrics.snapshot()["ai"]["truncated_total"], 1)
+
+    def test_reset_clears_ai_and_throttle(self):
+        metrics.record("POST", "/api/ai/ocr", 429, 1.0)
+        metrics.record_ai("m", "https://x.test/v1", 1.0, ok=False, error="boom")
+        metrics.reset()
+        snap = metrics.snapshot()
+        self.assertEqual(snap["throttled_total"], 0)
+        self.assertEqual(snap["ai"]["by_model"], [])
+        self.assertEqual(snap["ai"]["calls_total"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -27,7 +27,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  // workers 钉死为 2，**不要退回 `undefined`**：undefined 时 Playwright 默认取「CPU 核数的一半」，
+  // 而本机所有 worker 共用同一个 vite dev server —— 十几个并发首访会把冷编译排队放大成
+  // 「Test timeout of 30000ms exceeded」，且每次红的都是随机几个用例（实测 41 个用例里红 3~14 个），
+  // 比真实 bug 更难查。单跑或 --workers=1 全绿，即证这是并发额度问题而非用例问题。
+  workers: 2,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   timeout: 30_000,
   expect: { timeout: 7_000 },

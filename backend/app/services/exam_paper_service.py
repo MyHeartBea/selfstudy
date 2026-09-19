@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import List
 
 from app.config import PROJECT_ROOT, settings
+from app.metrics import mask_secret
 from app.services import ai_service
 from app.services.ai_service import AiRequestError
 
@@ -773,7 +774,8 @@ def _worker_loop() -> None:
         except Exception as exc:  # 兜底：任何异常都落为 error 状态
             conn = get_connection()
             try:
-                _set_status(conn, paper_id, "error", str(exc))
+                # status_note 会显示在 /papers 页面上，AI 通道的报错先脱敏
+                _set_status(conn, paper_id, "error", mask_secret(str(exc)))
             finally:
                 conn.close()
 

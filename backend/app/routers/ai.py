@@ -1,6 +1,7 @@
 """AI 解析接口：题干解析、图片识别、知识点自动总结。"""
 
 import json
+import logging
 import time
 from typing import List
 
@@ -8,11 +9,14 @@ from fastapi import APIRouter, Depends, Query
 
 from app.config import settings
 from app.database import get_connection
+from app.metrics import mask_secret
 from app.responses import error, ok
 from app.schemas import AiAnalyzeRequest, AiEnglishRequest, AiOcrRequest
 from app.security import ai_rate_limit
 from app.services import ai_service, local_ocr
 from app.services.ai_service import AiNotConfigured, AiRequestError
+
+logger = logging.getLogger("kaoyan.ai")
 
 router = APIRouter(prefix="/api/ai", tags=["AI"])
 
@@ -95,9 +99,23 @@ def _apply_auto_subject(result: dict) -> None:
 def _ai_error_message(exc: Exception) -> str:
     if isinstance(exc, AiNotConfigured):
         return AI_NOT_CONFIGURED_MESSAGE
+    # 上游 4xx 的响应体会原样进异常（`AI 服务返回 401: {...}`），个别网关把请求头
+    # 回显在报错里。这些字符串会出现在前端 toast 上，一律先脱敏再返回。
     if isinstance(exc, AiRequestError):
-        return str(exc)
-    return f"AI 服务调用失败：{exc}"
+        return mask_secret(str(exc))
+    return mask_secret(f"AI 服务调用失败：{exc}")
+
+
+def _degrade_note(failed_channels: List[str]) -> str:
+    """降级提示后缀。
+
+    通道按序回退时，前一个通道的异常会被后一个通道的成功掩盖，识别"照样出结果、
+    只是又慢又抖" —— 以前只回一句"识别完成"，等于把通道故障藏起来，只能靠手感察觉。
+    **措辞里的"已降级"是前端 CaptureView 判定要不要提醒的锚点**，改字要同步改那里。
+    """
+    if not failed_channels:
+        return ""
+    return f"（首选通道 {'、'.join(failed_channels)} 失败，已降级）"
 
 
 @router.post("/analyze", dependencies=[Depends(ai_rate_limit)])
@@ -160,6 +178,7 @@ def ocr_image(body: AiOcrRequest):
     # Providers are ordered by reliability/cost preference. In particular,
     # DeepSeek Vision must be given the first opportunity to answer instead
     # of racing every configured provider and losing to a faster fallback.
+    failed_channels: List[str] = []
     for provider in vision_providers:
         if remaining() <= 2:
             break
@@ -169,9 +188,15 @@ def ocr_image(body: AiOcrRequest):
             parsed["raw_text"] = ""
             parsed["vision_model"] = provider[0]
             _apply_auto_subject(parsed)
-            return ok(parsed, "视觉模型识别完成")
+            return ok(parsed, f"视觉模型识别完成{_degrade_note(failed_channels)}")
         except Exception as exc:
             last_vision_error = str(exc)
+            failed_channels.append(provider[0])
+            logger.warning(
+                "视觉通道 %s 失败，改用下一个兜底通道：%s",
+                provider[0],
+                mask_secret(last_vision_error),
+            )
     try:
         if local_ocr.is_available():
             try:
@@ -189,7 +214,9 @@ def ocr_image(body: AiOcrRequest):
                     parsed["method"] = "local"
                     parsed["raw_text"] = text
                     reason = (
-                        f"（视觉模型失败：{last_vision_error[:120]}）" if last_vision_error else ""
+                        f"（视觉模型失败：{mask_secret(last_vision_error, 120)}）"
+                        if last_vision_error
+                        else ""
                     )
                     return ok(parsed, f"本地 OCR 识别完成{reason}")
             except Exception as exc:
@@ -198,7 +225,7 @@ def ocr_image(body: AiOcrRequest):
         budget = remaining()
         if budget <= 2:
             raise RuntimeError(
-                f"图片识别超时，视觉模型失败：{last_vision_error or '未配置可用模型'}"
+                f"图片识别超时，视觉模型失败：{mask_secret(last_vision_error) or '未配置可用模型'}"
             )
         parsed = ai_service.ocr_image(
             body.image_base64,
@@ -215,10 +242,10 @@ def ocr_image(body: AiOcrRequest):
         message = _ai_error_message(exc)
         if "image_url" in message:
             if last_vision_error:
-                message = f"视觉模型识别失败：{last_vision_error}"
+                message = f"视觉模型识别失败：{mask_secret(last_vision_error)}"
             elif last_local_error:
                 message = (
-                    f"本地 OCR 失败：{last_local_error}；"
+                    f"本地 OCR 失败：{mask_secret(last_local_error)}；"
                     "当前 AI 模型也不支持图片，请配置支持图片的模型"
                 )
         return error(502, message)
@@ -244,6 +271,7 @@ def english_analysis(body: AiEnglishRequest):
     providers: List[tuple] = _vision_providers() if body.images else [(None, None, None)]
     parsed = None
     last_error: Exception | None = None
+    failed_channels: List[str] = []
     for vision_model, vision_base_url, vision_api_key in providers:
         budget = remaining()
         if budget <= 2:
@@ -267,6 +295,12 @@ def english_analysis(body: AiEnglishRequest):
             return error(400, AI_NOT_CONFIGURED_MESSAGE)
         except Exception as exc:
             last_error = exc
+            failed_channels.append(str(vision_model or settings.AI_MODEL))
+            logger.warning(
+                "英语整篇通道 %s 失败，改用下一个兜底通道：%s",
+                vision_model,
+                mask_secret(str(exc)),
+            )
     if parsed is None:
         message = (
             _ai_error_message(last_error)
@@ -287,7 +321,7 @@ def english_analysis(body: AiEnglishRequest):
                 parsed["sub_subject_id"] = sub_id
     finally:
         conn.close()
-    return ok(parsed, "英语整篇解析完成")
+    return ok(parsed, f"英语整篇解析完成{_degrade_note(failed_channels)}")
 
 
 @router.post("/weekly-report", dependencies=[Depends(ai_rate_limit)])
@@ -339,10 +373,8 @@ def weekly_report(force: int = Query(0, ge=0, le=1)):
         report = ai_service.analyze_weekly_report(items)
     except AiNotConfigured:
         return error(400, AI_NOT_CONFIGURED_MESSAGE)
-    except AiRequestError as exc:
-        return error(502, str(exc))
     except Exception as exc:
-        return error(502, f"AI 服务调用失败：{exc}")
+        return error(502, _ai_error_message(exc))
     report["week_count"] = len(items)
     report["cached"] = False
     # 按天缓存进 app_meta，并清理历史日期的缓存
@@ -371,10 +403,8 @@ def word_sense(word: str = Query(..., min_length=1, max_length=60)):
         return ok(ai_service.lookup_word(word))
     except AiNotConfigured:
         return error(400, AI_NOT_CONFIGURED_MESSAGE)
-    except AiRequestError as exc:
-        return error(502, str(exc))
     except Exception as exc:
-        return error(502, f"AI 服务调用失败：{exc}")
+        return error(502, _ai_error_message(exc))
 
 
 def _vision_extract_with_fallback(images: List[str], instruction: str) -> tuple:
@@ -412,7 +442,8 @@ def _vision_extract_with_fallback(images: List[str], instruction: str) -> tuple:
                 api_key=vision_api_key,
             )
         except Exception as exc:
-            last_error = str(exc)
+            last_error = mask_secret(str(exc))
+            logger.warning("视觉提字通道 %s 失败，改用下一个兜底通道：%s", vision_model, last_error)
             continue
         if text and text.strip():
             raw_text = text.strip()

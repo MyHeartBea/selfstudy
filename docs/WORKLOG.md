@@ -294,3 +294,72 @@ E2E **39** 全绿；ruff / eslint / prettier / `npm run build` 干净，`katex-*
 生产 8000 真机逐页验数据加载（重构的是取数层，E2E 打桩返回空数组、测不出真回归）：
 `/vocab` 30 张卡、`/knowledge` 9 张（=page_size）+ 分页器、`/formulas` 7 张（"共 7 条"与库一致）、
 `/essays` 平均得分率 60%（=库里那条 9/15，说明 items 真的穿过 composable 到了 computed）；四页零 console 消息。
+
+## 2026-09-19 · 全栈体检第 4 批：AI 通道遥测 + 静默降级显形 + 密钥脱敏（N1 / C5 / C6）
+
+**N1「建 AI 网关」按实况降级成"在唯一漏斗处记账"**：grep 过一遍 `backend/`，`chat/completions` 的出口
+只有 `ai_service._chat` 一条（没有第二处 urllib/httpx 直连端点）。既然只有一个出口，再包一层
+"gateway 类"就是为假想需求加抽象；改成在 `_chat` 上记账，**代价 60 行、覆盖全部 AI 调用**。
+
+**`_chat` 拆成「记账外壳 + `_chat_request` 实体」**：原来那个重试循环（`finish_reason=length` 翻倍预算、
+最多 4 次尝试、`with_meta` 双返回）整段搬进 `_chat_request`，固定返回 `(content, meta)`、`with_meta`
+参数在外壳保留。外壳只负责：起计时、catch 异常记一笔、成功后按"内容是否为空"记一笔。
+- **通道键是 `"{model} @ {host}"` 而不是 model**：`AI_VISION_MODEL`(glm-4.6v-flash) 与
+  `AI_VISION_MODEL_FALLBACK`(glm-4.6v-flashx) **同名不同端点的情况真存在**（智谱两把额度），
+  只按 model 归并会把两个通道的账混成一本。
+- **HTTP 200 但 content 为空也算失败**（`输出为空（finish_reason=…）`）：这正是第 5 节第 4 条踩过的那类
+  ——推理把预算吃光、`content=""`，链路"成功返回"却什么都没有。
+- **`AiNotConfigured` 不计数**：一个请求都没发出去，记进通道账会把"没配 key"污染成"通道在报错"。
+- 耗时口径**覆盖 `_chat` 内部的重试与预算翻倍**，即"这个通道交付一次结果要多久"，不是单次 HTTP 延迟。
+
+**429 单独计数**：`metrics.record()` 里 `status_code == 429` 累进 `throttled_total`，**不进** `errors_total`
+也不进 `recent_errors`（那是 `>=500` 的口径）—— 被 `ai_rate_limit` 挡掉的请求在 HTTP 层是"正常响应"，
+但用户看到的就是"点了按钮没反应"，必须有一笔账能回答"今天被限流了几次"。
+
+**静默降级现在三处同时可见**（以前只在局部变量里，日志一行异常）：
+1. `GET /api/health` 的 `data.metrics.ai.by_model`：每通道 calls / errors / truncated / avg_ms / max_ms /
+   **reasoning_avg** / `last_error` + `last_error_at`。按 `(-calls, -errors)` 排序，主力通道在前、
+   出错那个的 `last_error` 一眼可读。`reasoning_avg` 是刻意留的：它暴涨说明 `max_tokens` 正在被
+   reasoning 吃（AGENTS 5.4 的那次 11998/12000 事故，从此不用翻日志）。
+2. **WARN 日志**：`ocr_image` / `english_analysis` / `_vision_extract_with_fallback` / 作文 `_transcribe`
+   四条多通道轮询，每次退到下一个通道都 `logger.warning("…通道 %s 失败，改用下一个兜底通道：%s", …)`。
+3. **用户可见的 `message` 后缀**：新 `_degrade_note(failed_channels)` 产出
+   `（首选通道 X 失败，已降级）`，拼在"视觉模型识别完成"/"英语整篇解析完成"后面。
+
+**前端为什么本来"看不见"降级：`CaptureView` 的 gate 写死在 `method === 'local'`** —— 退到本地 OCR 才显示
+后端 message；首选通道挂了、退到**另一个视觉通道**时 `method` 仍是 `vision`，note 就算发了也不渲染。
+改成 `(method==='local' && msg) || msg.includes('已降级')`。**"已降级"这三个字是前后端锚点**，
+`_degrade_note` 的 docstring 里钉了这句话，改字必须同步改前端。
+作文批改的转录降级**只进日志和账本、不进 message**：那要把 `_transcribe` 改成返回三元组，
+只为多一处提示不值得 —— 已记为取舍，不是漏做。
+
+**密钥脱敏落到每一条"上游错误文本会离开进程"的边界**（`metrics.mask_secret`，正则三叉：`sk-…` /
+`api[_-]?key=…` / `Bearer …`）：`/api/health` 的 `last_error`、`_ai_error_message`（两个端点各自手写的
+`error(502, str(exc))` 收敛到它）、本地 OCR 的 reason、超时 RuntimeError、`knowledge`/`mistakes` 的 502、
+以及 `exam_papers.status_note`（后台拆题的异常文本会直接显示在 /papers 页面上）。
+DeepSeek/智谱的 4xx 会把响应体原样带进异常，网关偶发回显请求头 —— 只靠"我们不打印 key"的自觉是不够的。
+
+**测试**：`test_ops.py` +5（429 单计 / 通道归并 / `last_error` 里 key 被打码 / truncated+reasoning_avg /
+reset 清 AI 与限流）；新增 `tests/test_ai_telemetry.py` 10 条（外壳记账 6 条 + `/api/health` 契约 1 条 +
+`RouterDegradeTest` 三条：`/api/ai/english`、`/api/ai/ocr` 首选失败后退到兜底时**必须 200 + message 含
+"已降级" + 含失败通道名**，首选直接成功时**不许出现"降级"**）。
+**CI 陷阱**：断言里硬编码 `api.deepseek.com` 会在 CI 必红 —— CI 没有 `backend/.env`，
+`settings.AI_BASE_URL` 回落默认端点。测试改为 patch `AI_MODEL`/`AI_BASE_URL`/`AI_API_KEY`，
+期望通道串由模块常量拼出来。
+
+**E2E 修了一次"假 bug"**：新增 2 条用例后整批红了 3~14 个 `Test timeout of 30000ms exceeded`，
+**每次红的都是随机用例、且含本批根本没碰的 `card-click`/`keyboard-guard`/`render-smoke`**；
+`--workers=1` 或单跑全绿 → 真凶是 `playwright.config.js` 的 `workers: process.env.CI ? 2 : undefined`：
+本地 undefined 取「核数一半」，十几个 worker 共用同一个 vite dev server，冷编译排队被放大成超时。
+钉成 `workers: 2`（串行全跑 2.0m、并发 2.1m，**并发本来就没省下时间**）。
+`e2e/fixtures.js` 加 `withMessage(data, message)`：`mockApi` 默认只回 `message:'success'`，
+要验"只在 message 里留痕"的行为必须有这个逃生口。
+
+**验证**：后端 **208**（193→+15）、Vitest **98**、E2E **41**（`--workers=2` 复跑 41 passed 1.4m）；
+ruff check+format / eslint / prettier / `npm run build` 干净，`katex-*.css` 仍 24,475 B；
+pre-commit 6 项全 Passed；CI 同口径覆盖率 **71%**（`coverage report --fail-under=55`；
+注意加 `--source=app` 会因不含 tests 而显示 59%，AGENTS 里那句"约 62%"是旧口径）。
+**生产 8000 重启真机复核**：`/api/health` 新增段全部到位（`throttled_total`、`ai.by_model`），
+跑一次真实 `/api/ai/sense?word=algorithm` 后账本出现
+`deepseek-flash @ api.deepseek.com`：calls 1 / errors 0 / avg_ms 3152.6 / reasoning_avg 374。
+**刻意没做**真机识图（一次 18s 的付费视觉调用只能证明"成功路径没被改坏"，而这已由单测 + E2E 双向钉住）。

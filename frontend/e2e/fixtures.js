@@ -15,6 +15,16 @@ export function ok(data, message = 'success') {
 }
 
 /**
+ * 让某个打桩返回自定义 `message`。
+ *
+ * 后端把**通道降级原因**放在响应的 `message` 里（如"英语整篇解析完成（首选通道 X 失败，
+ * 已降级）"），而不是 data 里 —— 只用 `ok(data)` 的默认 'success' 就永远测不到这条链路。
+ */
+export function withMessage(data, message) {
+  return { __withMessage: true, data, message }
+}
+
+/**
  * CRC32（PNG 分块校验用）。
  *
  * 不用 `zlib.crc32`：那是 Node ≥20.15 才有的 API（22.2.0 才回移到 22.x），
@@ -222,6 +232,9 @@ export async function mockApi(page, overrides = {}) {
         status: 404,
         json: { code: 404, data: null, message: '未打桩：' + path },
       })
+    }
+    if (data && data.__withMessage) {
+      return route.fulfill({ status: 200, json: ok(data.data, data.message) })
     }
     return route.fulfill({ status: 200, json: ok(data) })
   })

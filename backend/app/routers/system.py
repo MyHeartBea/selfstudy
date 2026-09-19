@@ -18,7 +18,8 @@ router = APIRouter(prefix="/api", tags=["系统"])
 def health():
     """轻量健康检查：供前端状态灯与脚本探活使用。
 
-    附带进程内监控摘要（请求数/错误数/慢端点），便于一眼看出哪里慢、有没有 5xx。
+    附带进程内监控摘要（请求数/错误数/慢端点/**按通道的 AI 调用账**），便于一眼看出
+    哪里慢、有没有 5xx、以及识图是不是正在偷偷降级到兜底通道（`metrics.ai.by_model`）。
     """
     conn = get_connection()
     try:

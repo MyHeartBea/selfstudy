@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.database import get_connection
+from app.metrics import mask_secret
 from app.responses import error, ok, server_error
 from app.schemas import KnowledgeCreate, KnowledgeUpdate
 from app.security import ai_rate_limit
@@ -189,7 +190,7 @@ def auto_summarize(knowledge_id: int):
             400, "未配置 AI 服务：请在 backend/.env 中填写 AI_API_KEY、AI_BASE_URL、AI_MODEL"
         )
     except AiRequestError as exc:
-        return error(502, str(exc))
+        return error(502, mask_secret(str(exc)))
     except Exception as exc:
         return server_error(exc)
     finally:

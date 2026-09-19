@@ -32,9 +32,9 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（193 个）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（208 个）
 cd frontend && npm test                                  # Vitest 98 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
-cd frontend && npm run test:e2e                          # Playwright 39 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；并发用 --workers=2
+cd frontend && npm run test:e2e                          # Playwright 41 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
 cd backend && ruff check app tests && ruff format --check app tests
@@ -52,6 +52,11 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > `E2E_CHROME=0` 可切回自带浏览器；CI 单独 job 装官方 chromium。
 > 默认端口 **5274**（刻意与开发端口 5174 错开，避免 `reuseExistingServer` 静默复用旧 checkout 的 dev server）。
 > 所有 `/api/**` 都在浏览器层打桩（`e2e/fixtures.js` 的 `mockApi`），**不依赖后端、不碰真实数据库**。
+> 后端把**视觉通道降级原因**放在响应的 `message` 里，`mockApi` 默认只回 `message:'success'` ——
+> 要验这类"只在 message 里留痕"的行为，用 `withMessage(data, message)` 打桩（`e2e/capture.spec.js` 有例）。
+> **`workers` 已钉成 2，别改回 `undefined`**：undefined 时 Playwright 取「核数一半」，全部 worker
+> 共用一个 vite dev server，冷编译排队会把随机几个用例撑到 `Test timeout of 30000ms exceeded`
+> （实测 41 个用例红 3~14 个，单跑或 `--workers=1` 全绿 —— 是并发额度问题，不是用例问题）。
 >
 > **写 E2E 时踩过的坑（都已写进代码注释，别再犯）**：
 > - 路由正则**必须锚定 `^https?://host/api`**，否则会拦掉 `/src/api/request.js` 这个真实前端模块 → 白屏；
@@ -82,7 +87,8 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > Prettier（`.prettierrc.json`）；钩子脚本在 `scripts/`（`check_secrets.py` / `preflight_check.py` /
 > `frontend_lint.mjs`，用 Node 包装避免 Windows 上找不到 `bash`）。
 > **改完前端必须跑 `npm run build`**：Vue 模板编译错误只有 build 抓得到（lint 和单测都会放过，
-> 曾因此把两处多语句内联 `@click` 改坏）。CI 覆盖率门槛 55%，当前约 62%。
+> 曾因此把两处多语句内联 `@click` 改坏）。CI 覆盖率门槛 55%，**按 CI 口径**（`coverage run -m unittest
+> discover -s tests`，含 tests 目录）当前约 71%；加 `--source=app` 会是约 59%，两个口径别混着报。
 
 ## 3. 提交与数据规范（务必遵守）
 - 每次完成代码 / 数据 / 文档修改并**验证通过**后：`git add -A && git commit -m "简短说明" && git push`
@@ -123,6 +129,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 > **2026-09-10 模型变更（重要）**：DeepSeek 现在只提供 `deepseek-flash` 与 `deepseek-v4-pro`（`GET /v1/models` 实测）。旧的 `deepseek-chat` 与 `deepseek-v4-flash-vision-exp` **都已下线**——后者曾是识图首选，模型名失效后 DS 通道会**静默失败并偷偷退到智谱**（症状：识图还能用，但更慢/不稳，且日志里只有一行异常）。
 > 现在文本与识图统一用 `deepseek-flash`（同一把 `AI_API_KEY`）。实测：单图识图 18s、准确输出 LaTeX（`\sin x\sim x`、`1-\cos x\sim\frac{x^2}{2}`）；文本解析 26s、点词查义 6s；`/api/ai/ocr` 返回结构体里的 `vision_model` 字段会写明实际用的通道，排查识图问题先看它。
+> **静默降级现在看得见账了**（2026-09-19 体检第 4 批）：`_chat` 按**通道**（模型 + 端点）把成功/失败/截断/耗时记进 `app/metrics.py`，`GET /api/health` 的 `metrics.ai.by_model` 直接写明每个通道调了几次、错了几次、最后一次错什么；失败通道另外打 WARN，成功响应的 `message` 还会带「（首选通道 X 失败，已降级）」，前端把它渲染成提醒条（见第 5 节第 12 条）。
 
 ### 4.1 运行参数（同样在 backend/.env）
 
@@ -163,6 +170,8 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
    卡片 hover **不要做 `translateY` 位移**：鼠标停在卡片边缘时上浮会让指针落到卡外，触发 mouseleave→落回→再进入的抖动循环。
    卡片预览要用 `markdownToPlain()` 剥掉 `##`/`**`/表格竖线，详情才走 RichText。
 11. **弹窗状态**：`KnowledgeEditModal` 打开时必须重置（新增清空、编辑载入）；监听器（如 Ctrl+V 粘贴）要用 `watchEffect` 按「是否打开」同步挂载，**不要**只在 `false→true` 的 watch 回调里挂——组件若以 `modelValue=true` 挂载会静默失效。多文件读取用 `Promise.all(accepted.map(...))`，**禁止** `for (const f of files) { await read(f) }`（`for...of` 复用绑定会导致只留下最后一张）。
+12. **AI 调用只有一个出口，降级不许只留在日志里**：所有 `chat/completions` 请求都必须走 `ai_service._chat`（真正的请求在 `_chat_request`，`_chat` 是它的**记账外壳**）。它按**通道**（模型 + 端点）把成功/失败/截断/耗时/推理 token 记进 `app/metrics.py`，`/api/health` 的 `metrics.ai.by_model` 就是查"识图在偷偷走兜底"的地方——**新增 AI 能力不要再自己发 HTTP**，否则这本账就漏了一块。多通道按序回退时：失败的通道要 ① 打 WARN 日志，② 在**成功**响应的 `message` 里带 `（首选通道 X 失败，已降级）`（统一用 `routers/ai.py::_degrade_note`）；前端 `CaptureView` 靠 message 里的**"已降级"三个字**决定挂不挂提醒条，改措辞必须同步改前端与 `e2e/capture.spec.js`（那两条用例钉的就是"结果照常渲染 + 提醒同时出现"）。
+    **一切会离开进程的错误文本先脱敏**：`metrics.mask_secret()`（`/api/health`、前端 toast、`exam_papers.status_note` 都是可读出口；上游 4xx 的响应体会原样进异常，个别网关把 `Authorization` 头回显在报错里）。`AiNotConfigured` 不计通道账（一个请求都没发出去，记进去只会掩盖真问题）；HTTP 200 但**正文为空**按失败计（`deepseek-flash` 推理吃光预算的可见症状）。
 
 ## 6. 关键文件
 后端（`backend/app/`）：
@@ -295,6 +304,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 193、前端 Vitest 98、E2E 39**（`--workers=2`），覆盖率约 62%（CI 门槛 55%）。
+- 测试基线：**后端 208、前端 Vitest 98、E2E 41**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 71%（门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

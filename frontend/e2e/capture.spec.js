@@ -18,6 +18,7 @@ import {
   callsTo,
   guardPageErrors,
   expectAllApiStubbed,
+  withMessage,
 } from './fixtures.js'
 
 /**
@@ -135,6 +136,51 @@ test.describe('智能录入 · 图片暂存与一次分析', () => {
     // 未暂存图片时该按钮不渲染（v-if="previewImage"），因此不可能误触发请求
     await expect(page.getByRole('button', { name: '开始识别并解析' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: '手动整理' }).first()).toBeVisible()
+
+    expectAllApiStubbed(calls)
+    expect(errors, `页面报错：${errors.join(' | ')}`).toHaveLength(0)
+  })
+})
+
+test.describe('智能录入 · 视觉通道降级提醒', () => {
+  // 视觉通道按序回退：首选通道报错会被兜底通道的成功掩盖，识别"照样出结果、只是又慢又抖"。
+  // 后端把原因写在响应的 message 里，前端 CaptureView 只在含"已降级"时挂提醒条。
+  // 这条链路单测摸不到（要 mount 整个 CaptureView 并打桩七八个接口），
+  // 而且真实事故形态恰恰是"什么都没坏、只是悄悄变慢"，所以在这里钉住渲染结果。
+  const degradedMessage = '英语整篇解析完成（首选通道 stale-vision-model 失败，已降级）'
+
+  test('首选通道失败退到兜底：结果照常渲染，同时把降级原因显示成提醒', async ({ page }) => {
+    const errors = guardPageErrors(page)
+    const calls = await mockApi(page, {
+      '/api/ai/english': withMessage({ ...fakeEnglishResult, method: 'vision' }, degradedMessage),
+    })
+    await page.goto('/capture')
+    await page.getByRole('tab', { name: '上传图片' }).click()
+    await pickImageByTestId(page, 'pick-main-image', { name: 'degraded.png' })
+    await page.getByRole('button', { name: '开始识别并解析' }).click()
+
+    // 同步点放在"结果已渲染"：降级不许把识别结果一起弄丢
+    await expect(page.locator('.english-learn')).toBeVisible()
+    const warn = page.locator('.notice.warn')
+    await expect(warn).toBeVisible()
+    await expect(warn).toContainText('已降级')
+    await expect(warn).toContainText('stale-vision-model', '提醒要写明是哪个通道挂了')
+
+    expectAllApiStubbed(calls)
+    expect(errors, `页面报错：${errors.join(' | ')}`).toHaveLength(0)
+  })
+
+  test('首选通道正常返回时不显示降级提醒', async ({ page }) => {
+    const errors = guardPageErrors(page)
+    const calls = await mockApi(page, { '/api/ai/english': fakeEnglishResult })
+    await page.goto('/capture')
+    await page.getByRole('tab', { name: '上传图片' }).click()
+    await pickImageByTestId(page, 'pick-main-image', { name: 'normal.png' })
+    await page.getByRole('button', { name: '开始识别并解析' }).click()
+
+    await expect(page.locator('.english-learn')).toBeVisible()
+    // 反向也要钉：默认 message('success') 里不含"已降级"，提醒条不该出现
+    await expect(page.locator('.notice.warn')).toHaveCount(0)
 
     expectAllApiStubbed(calls)
     expect(errors, `页面报错：${errors.join(' | ')}`).toHaveLength(0)
