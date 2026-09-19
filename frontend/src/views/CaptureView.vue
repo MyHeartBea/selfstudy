@@ -1,5 +1,5 @@
 <script setup>
-/** 智能录入：粘贴题干 / 上传截图 → AI 解析 → 核对表单 → 提交 */
+/** 智能录入：粘贴题干 / 上传截图，经 AI 解析后核对表单再提交 */
 import { onMounted, onUnmounted, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 
@@ -235,7 +235,7 @@ function onPaste(event) {
   if (!file) return
   event.preventDefault()
   activeTab.value = 'image'
-  // 主图未就绪 → 作为主图；已就绪时按当前「粘贴目标」分流：主图(继续追加)或参考图
+  // 主图未就绪时作为主图；已就绪时按当前「粘贴目标」分流：主图(继续追加)或参考图
   if (!previewImage.value) {
     handleImageFile(file)
   } else if (pasteTarget.value === 'reference' && !referenceBase64.value) {
@@ -275,7 +275,7 @@ async function analyzeImage() {
         { silent: true },
       )
     } else {
-      // 单图/多图都走自动检测：英语整篇→精读，数学等→回落标准
+      // 单图/多图都走自动检测：英语整篇走精读，数学等回落标准
       const images = [imageBase64.value, ...moreImages.value.map((m) => m.base64)]
       res = await request.post(
         '/ai/english',
@@ -356,7 +356,7 @@ onMounted(() => {
   window.addEventListener('paste', onPaste, true)
 })
 
-// —— 研墨三步：壹 投料 → 贰 研磨 → 叁 装订 ——
+// —— 研墨三步：壹 投料、贰 研磨、叁 装订 ——
 const flowStep = computed(() => {
   if (analyzing.value) return 2
   if (parsed.value) return 3
@@ -646,10 +646,29 @@ onUnmounted(() => {
   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-hover) 45%, transparent);
   transform: rotate(-4deg) scale(1.05);
 }
+/* 当前步印章落下：active 切换的一瞬盖下去（G1） */
+@media (prefers-reduced-motion: no-preference) {
+  .ink-step.active i {
+    animation: step-stamp 0.4s var(--spring);
+  }
+}
+@keyframes step-stamp {
+  from {
+    transform: rotate(-9deg) scale(1.5);
+  }
+  65% {
+    transform: rotate(-3deg) scale(0.97);
+  }
+  to {
+    transform: rotate(-4deg) scale(1.05);
+  }
+}
+/* 完成步：盖过的灰印（回正、降饱和） */
 .ink-step.done i {
   background: var(--green-soft);
   border-color: transparent;
   color: var(--green);
+  transform: rotate(0deg) scale(0.96);
 }
 .ink-step.active {
   color: var(--accent-ink);

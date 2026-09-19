@@ -283,11 +283,21 @@ onMounted(loadProfiles)
   display: flex;
   flex-wrap: wrap;
 }
+/* 指南正文：编辑式文章排版 —— 首字下沉 + 行距放宽（I2） */
 .tips {
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--ink-2);
   white-space: pre-wrap;
-  line-height: 1.7;
+  line-height: 2;
+}
+.tips::first-letter {
+  font-family: var(--font-display);
+  font-size: 2.5em;
+  font-weight: 900;
+  line-height: 0.85;
+  float: left;
+  padding: 4px 8px 0 0;
+  color: var(--accent-ink);
 }
 
 .edit-form {

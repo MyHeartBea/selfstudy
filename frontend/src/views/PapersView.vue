@@ -53,6 +53,15 @@ const statusLabel = {
   error: '失败',
 }
 
+// 导入流水线三段：提取、拆题、配对（paperStep 返回当前进行到的段下标）
+const PAPER_STEPS = ['提取', '拆题', '配对']
+function paperStep(p) {
+  if (p.status === 'done') return 3
+  if (p.status === 'structuring') return 1
+  if (p.status === 'extracting') return 0
+  return -1
+}
+
 async function scan() {
   scanning.value = true
   try {
@@ -198,6 +207,7 @@ onUnmounted(stopPolling)
       />
       <UiEmpty
         v-else-if="!papers.length"
+        seal="卷"
         text="卷库还是空的——从下方扫描结果里挑一份真题导入"
         icon="notebook"
       />
@@ -217,18 +227,26 @@ onUnmounted(stopPolling)
               <b class="p-title">{{ p.title }}</b>
               <span class="p-sub">{{ p.subject }} · {{ p.year }} · {{ p.question_count }} 题</span>
             </div>
-            <UiTag
-              size="sm"
-              :color="
-                p.status === 'done'
-                  ? 'var(--green)'
-                  : p.status === 'error'
-                    ? 'var(--red)'
-                    : 'var(--gold)'
-              "
-            >
+            <UiTag v-if="p.status === 'error'" size="sm" color="var(--red)">
               {{ statusLabel[p.status] || p.status }}
             </UiTag>
+          </div>
+          <!-- 导入流水线：提取、拆题、配对，进展被看见（H1） -->
+          <div
+            class="p-steps"
+            :class="{ err: p.status === 'error' }"
+            role="status"
+            :aria-label="statusLabel[p.status] || p.status"
+          >
+            <span
+              v-for="(s, si) in PAPER_STEPS"
+              :key="s"
+              class="pstep"
+              :class="{ done: paperStep(p) > si, active: paperStep(p) === si }"
+            >
+              <i class="ps-dot" aria-hidden="true"></i><b>{{ s }}</b>
+            </span>
+            <span v-if="p.status === 'pending'" class="ps-note">排队中</span>
           </div>
           <p v-if="p.status === 'structuring' && p.status_note" class="p-note">
             {{ p.status_note }}
@@ -378,6 +396,72 @@ onUnmounted(stopPolling)
   align-items: center;
   gap: 11px;
   cursor: pointer;
+}
+/* 导入流水线 stepper：done=实心绿、active=墨点缓脉、排队=灰 */
+.p-steps {
+  display: flex;
+  align-items: center;
+  margin: 3px 0 10px;
+}
+.pstep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+.pstep:not(:last-child)::after {
+  content: '';
+  width: 24px;
+  height: 1px;
+  background: var(--line-strong);
+  margin: 0 8px;
+}
+.ps-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  flex: none;
+}
+.pstep.done {
+  color: var(--ink-2);
+}
+.pstep.done .ps-dot {
+  background: var(--green);
+}
+.pstep.active {
+  color: var(--ink);
+  font-weight: 700;
+}
+.pstep.active .ps-dot {
+  background: var(--gold);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pstep.active .ps-dot {
+    animation: ps-pulse 1.6s ease-in-out infinite;
+  }
+}
+@keyframes ps-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px var(--gold-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--gold) 12%, transparent);
+  }
+}
+.p-steps.err .ps-dot {
+  background: var(--red);
+}
+.p-steps.err .pstep {
+  color: var(--red);
+}
+.ps-note {
+  margin-left: 10px;
+  font-size: 11px;
+  color: var(--ink-3);
 }
 .p-seal {
   width: 44px;

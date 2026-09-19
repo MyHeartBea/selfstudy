@@ -1,6 +1,6 @@
 <script setup>
 /** 公式背诵库：分类/搜索 + 卡片网格 + 详情/编辑 + 背诵模式 */
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 import request from '../api/request'
 import RichText from '../components/RichText.vue'
@@ -8,6 +8,7 @@ import { markdownToPlain } from '../utils/markdown'
 import { formatTime } from '../composables/useBaseData'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
+import FlipCard from '../ui/FlipCard.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
@@ -130,6 +131,45 @@ function markRecite(known) {
   reciteRevealed.value = false
 }
 
+// —— 翻牌背诵舞台（墨韵 3.4）：记住=右飞归档（墨光一闪），没记住=左飞回队尾 ——
+const reciteFly = ref(null) // 'keep' | 'miss' | null
+
+function flyRecite(known) {
+  if (reciteFly.value || !reciteQueue.value.length) return
+  reciteFly.value = known ? 'keep' : 'miss'
+  setTimeout(() => {
+    reciteFly.value = null
+    markRecite(known)
+  }, 260)
+}
+
+const reciteCardStyle = computed(() => {
+  if (reciteFly.value === 'keep')
+    return { transform: 'translateX(560px) rotate(10deg)', opacity: 0 }
+  if (reciteFly.value === 'miss')
+    return { transform: 'translateX(-560px) rotate(-10deg)', opacity: 0 }
+  return { transform: 'translateX(0) rotate(0deg)', opacity: 1 }
+})
+
+// 背诵键盘流：空格翻面，右方向键=记住，左方向键=没记住（输入框聚焦时不拦）
+function onReciteKey(event) {
+  if (!memorizeVisible.value || !reciteQueue.value.length) return
+  const tag = event.target?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  if (event.key === ' ') {
+    event.preventDefault()
+    reciteRevealed.value = !reciteRevealed.value
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    if (reciteRevealed.value) flyRecite(true)
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    flyRecite(false)
+  }
+}
+onMounted(() => window.addEventListener('keydown', onReciteKey))
+onUnmounted(() => window.removeEventListener('keydown', onReciteKey))
+
 function openEdit(item) {
   editingId.value = item.id
   Object.assign(form, {
@@ -227,6 +267,7 @@ onMounted(loadFormulas)
     <UiLoadError v-if="loadError" text="公式加载失败" @retry="loadFormulas" />
     <UiEmpty
       v-else-if="!filteredItems.length && !loading"
+      seal="式"
       text="暂无公式，点击右上角新增"
       icon="sigma"
     />
@@ -264,7 +305,7 @@ onMounted(loadFormulas)
       </article>
     </div>
 
-    <!-- 背诵模式（过卡循环） -->
+    <!-- 背诵模式（翻牌过卡循环） -->
     <UiModal v-model="memorizeVisible" title="背诵模式 · 过卡循环" size="lg">
       <div v-if="reciteQueue.length">
         <div class="memorize-head">
@@ -279,19 +320,29 @@ onMounted(loadFormulas)
             :style="{ width: (reciteKnown / Math.max(1, reciteTotal)) * 100 + '%' }"
           ></div>
         </div>
-        <h3 class="memorize-title serif">{{ reciteQueue[0].title }}</h3>
-        <div v-if="reciteRevealed" class="knowledge-preview flip-reveal">
-          <RichText :text="reciteQueue[0].content" />
+        <div class="recite-stage" :style="reciteCardStyle">
+          <FlipCard
+            v-if="reciteQueue[0]"
+            :key="reciteQueue[0].id"
+            :flipped="reciteRevealed"
+            class="recite-flip"
+          >
+            <template #front>
+              <span
+                class="recite-cat serif"
+                :style="{ color: catColor(reciteQueue[0].category) }"
+                >{{ reciteQueue[0].category }}</span
+              >
+              <h3 class="memorize-title serif">{{ reciteQueue[0].title }}</h3>
+              <span class="recite-hint">空格翻面 · 右方向键 记住 / 左方向键 待会再来</span>
+            </template>
+            <template #back>
+              <div class="knowledge-preview">
+                <RichText :text="reciteQueue[0].content" />
+              </div>
+            </template>
+          </FlipCard>
         </div>
-        <UiButton
-          v-if="!reciteRevealed"
-          variant="primary"
-          size="lg"
-          style="margin-top: 12px"
-          @click="reciteRevealed = true"
-        >
-          显示内容
-        </UiButton>
       </div>
       <div v-else class="recite-complete">
         <Icon name="check" :size="34" />
@@ -301,8 +352,8 @@ onMounted(loadFormulas)
       <template #footer>
         <UiButton variant="ghost" @click="memorizeVisible = false">退出</UiButton>
         <template v-if="reciteQueue.length">
-          <UiButton variant="outline" @click="markRecite(false)">没记住，待会再来</UiButton>
-          <UiButton v-if="reciteRevealed" variant="primary" @click="markRecite(true)"
+          <UiButton variant="outline" @click="flyRecite(false)">没记住，待会再来</UiButton>
+          <UiButton v-if="reciteRevealed" variant="primary" @click="flyRecite(true)"
             >记住了</UiButton
           >
         </template>
@@ -446,7 +497,7 @@ onMounted(loadFormulas)
   align-items: center;
   gap: 9px;
 }
-/* 分类印章 */
+/* 分类印章：悬停轻叩一记（thud），像盖章时的手感 */
 .cat-seal {
   flex: none;
   display: inline-flex;
@@ -462,6 +513,22 @@ onMounted(loadFormulas)
   letter-spacing: 0.04em;
   transform: rotate(-2deg);
   white-space: nowrap;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .formula-card:hover .cat-seal {
+    animation: seal-thud 0.32s var(--ease);
+  }
+}
+@keyframes seal-thud {
+  0% {
+    transform: rotate(-2deg) scale(1);
+  }
+  45% {
+    transform: rotate(-3deg) scale(1.08);
+  }
+  100% {
+    transform: rotate(-2deg) scale(1);
+  }
 }
 .formula-title {
   font-family: var(--font-display);
@@ -539,6 +606,28 @@ onMounted(loadFormulas)
   background: var(--green);
   transition: width 0.4s var(--ease-enter);
 }
+/* 翻牌舞台：飞出（记住=右 / 没记住=左）由 reciteCardStyle 驱动 */
+.recite-stage {
+  transition:
+    transform 0.28s var(--ease-move),
+    opacity 0.28s var(--ease-move);
+}
+.recite-flip {
+  --flip-h: 300px;
+}
+.recite-flip :deep(.flip-front) {
+  gap: 6px;
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+}
+.recite-cat {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+}
+.recite-hint {
+  font-size: 12px;
+  color: var(--ink-3);
+}
 .recite-complete {
   display: flex;
   flex-direction: column;
@@ -563,21 +652,10 @@ onMounted(loadFormulas)
   border-radius: var(--r-md);
   padding: 14px 16px;
   background: var(--surface-2);
-}
-/* 翻卡感：内容像卡片背面一样翻入 */
-.flip-reveal {
-  perspective: 1200px;
-  animation: flip-in 0.5s var(--spring) both;
-}
-@keyframes flip-in {
-  from {
-    opacity: 0;
-    transform: rotateX(-55deg) translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: rotateX(0) translateY(0);
-  }
+  width: 100%;
+  max-height: 230px;
+  overflow-y: auto;
+  text-align: left;
 }
 
 .f-form {

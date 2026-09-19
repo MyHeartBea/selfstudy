@@ -529,7 +529,8 @@ textarea.field-input {
   .done-sub,
   .done-backlog,
   .done-actions,
-  .stamp {
+  .stamp,
+  .modal-body > * {
     animation: none !important;
   }
   .deck {
@@ -670,22 +671,78 @@ textarea.field-input {
 .option-row.correct {
   border-color: var(--green);
   background: var(--green-soft);
+  /* 给右下角的"对"章留位 */
+  padding-right: 52px;
 }
 .option-row.correct::after {
-  content: '';
+  /* 朱批小章：判对即盖章落定（scale 从大压下 + 微转），替换旧的脉冲圈 */
+  content: '对';
   position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  border: 2px solid var(--green);
-  opacity: 0;
-  animation: ring-pulse 0.7s var(--ease) forwards;
+  right: 14px;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  margin-top: -13px;
+  border-radius: 8px;
+  background: var(--green);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 13px;
+  line-height: 1;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--green) 40%, transparent);
   pointer-events: none;
+  animation: judge-stamp 0.38s var(--spring) both;
+}
+@keyframes judge-stamp {
+  from {
+    opacity: 0;
+    transform: scale(1.9) rotate(-10deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(0.94) rotate(1deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
 }
 
 .option-row.wrong {
   border-color: var(--red);
   background: var(--red-soft);
+  padding-right: 52px;
   animation: opt-shake 0.4s var(--ease);
+}
+.option-row.wrong::after {
+  /* 淡墨晕开：答错像一滴墨在纸上洇开又散去 */
+  content: '';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin-top: -17px;
+  border-radius: 50%;
+  border: 2px solid var(--red);
+  opacity: 0;
+  pointer-events: none;
+  animation: wrong-ink 0.6s var(--ease-exit) 0.15s both;
+}
+@keyframes wrong-ink {
+  from {
+    opacity: 0.5;
+    transform: scale(0.8);
+    filter: blur(1px);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.9);
+    filter: blur(2px);
+  }
 }
 
 .option-key {
@@ -717,16 +774,6 @@ textarea.field-input {
   box-shadow: none;
 }
 
-@keyframes ring-pulse {
-  from {
-    opacity: 0.8;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.09);
-  }
-}
 @keyframes opt-shake {
   0%,
   100% {

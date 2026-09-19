@@ -97,3 +97,28 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 ## 其他
 - 2026-09-19（`6807104`）：AGENTS.md 新增「缓存/下载一律放 D 盘」规矩（`D:\caches\` + 环境变量清单：pip / npm / IMPECCABLE_HOME / PLAYWRIGHT_BROWSERS_PATH 已配好）；impeccable + design-taste-frontend 两个 skill 装于 `C:\Users\Administrator\.agents\skills\`。
 - 2026-09-19（本批）：工作日志从 AGENTS.md 迁出至 `docs/WORKLOG.md`，AGENTS.md 从此只放约束与规定。
+
+## 2026-09-19 · 墨韵 3.4 内页全面升级批（三期一次完成，用户点名"错题列表/复习/公式/知识点/英语等内页全面升级"）
+### 第 1 期 · 核心交互
+- **`ui/FlipCard.vue` 共享 3D 翻牌**（D2）：生词闪卡与公式背诵统一语言；组件只管视觉与点击翻面（interactive 可关），键盘归使用方，避免双重切换。
+- **生词闪卡三向滑动判分**（F1）：右=认识（朱砂提示章）/ 左=不认识（淡墨）/ 下=模糊（洒金）；指针事件覆盖鼠标+触屏（`touch-action: pan-y` 保竖向滚动），阈值 80px 松手飞出后判分，未过阈值回弹；`justDragged` 区分拖拽与点击翻面；键盘 ←/→/↓ 等价（加入原 onKeydown 流）。
+- **公式背诵翻牌舞台**（D1）：背诵弹窗从"按钮 reveal"升格为 FlipCard 翻牌（正面分类+公式名，背面解析 max-height 滚动）；**记住=右飞归档 / 没记住=左飞回队尾**（flyRecite 240ms 飞出后真正过卡）；键盘 空格/→/←。分类印章悬停 thud（D3）。
+- **复习题卡抽换**（C1）：stage-card 内容包 `<Transition name="qswap" mode="out-in">` + `:key="current.id ?? index"`，换题旧内容墨淡出、新内容自下聚现（只动 transform/opacity/filter）。
+- **判分印章化**（C2，base.css 全局 option-row）：答对 = 右下"对"字朱批小章落定（judge-stamp，替换旧 ring-pulse，行尾留 52px 空位）；答错 = 淡墨晕开（wrong-ink，替换 shake 之外的空缺）+ 保留 opt-shake。
+- 巨字换字补 blur 聚焦（C3，numeral-in from 态加 filter:blur(7px)）。
+### 第 2 期 · 认知减负
+- **激活筛选 chips**（B1，MistakeListView）：computed `activeFilterChips` 把 9 类筛选态（搜索/题型/科目/二级/来源/年份/难度×5/标签/思路）外显为可单独移除的墨点 chips + 清空全部；工具栏下方 `.filter-chips`。
+- **批量条**（B2）：已选数字 `:key` + pop-num 跳动；删除按钮 `bulk-danger` 朱砂缓脉（2.2s 循环，reduced-motion 停）。
+- **知识笺挂 km-live**（E1）：幽灵序号=笺序、四角取景框、扫描线、顶边标尺，内容包 `.km-live__inner`（kmLive.js 事件委托按 .km-live 类挂载，加类即生效）。
+- **卷库导入流水线 stepper**（H1）：状态药丸 → 三段工序条（提取→拆题→配对），done=绿实心、active=金点缓脉（ps-pulse）、排队=灰+「排队中」注记、error=红；轮询重闪已由 `:key="p.id"` 天然规避（H2 ✓）。
+- **会话完成墨环**（F3）：生词快刷完成页挂 YearRing（total=本轮判分总数，wrong=不认识）。
+- **印章空态**（A1）：UiEmpty 新增 `seal` prop（64px 淡墨方印，rotate -4°），错/式/知/词/卷/习 六页接入（仅在真正空态渲染）。
+### 第 3 期 · 打磨
+- **弹窗内容级联**（A3）：UiModal `.modal-body > *` 逐档 `--stagger-1` 淡入上浮（全局，打印已在 base.css 强制末帧）。
+- **科目指南编辑式排版**（I2）：`.tips` 行距 2 + `::first-letter` 首字下沉（朱砂宋体）。
+- **长表单分区**（I3，MistakeForm）：六个编辑式分区头（壹题型与科目/贰题面/叁作答区/肆判分与思路/伍解析与标签/陆来源），`.form-sec` 汉字序号+发丝线。
+- **关联错题行**（E3）：RelatedList related-card 挂 km-item 整行刷底悬停。
+- 骨架核对（A2）：Mistake/Knowledge/Subject/Practice 加载骨架均为网格卡片形 ✓；MistakeForm 共 6 处 label 上置 ✓（原本就符合规范）。
+### 有意不做（记录在案）
+- B3 首图视差（图片对象定位动画易抖，收益低）；C5 进度线滴墨（进度线已有流光，再加是堆）；E2 标签 pills（现状是文本输入框，非标签堆叠，不适用）；F4 分布条墨阶渐变（现有墨点语义已够）；PracticeView 预览（"今日出征"已存在）。
+测试：前端 Vitest 61 + E2E 31 全绿、build/lint 干净；真机抽验 chips/stepper/空态印章 DOM 命中。

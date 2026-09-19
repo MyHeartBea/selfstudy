@@ -9,6 +9,8 @@ import request from '../api/request'
 import { useCountUp } from '../utils/useCountUp'
 import { toast } from '../ui/toast'
 import { confirmDialog } from '../ui/confirm'
+import FlipCard from '../ui/FlipCard.vue'
+import YearRing from '../ui/YearRing.vue'
 import UiButton from '../ui/UiButton.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
@@ -199,7 +201,95 @@ const cardIndex = ref(0)
 const flipped = ref(false)
 const sessionDone = ref(false)
 const sessionCount = ref({ known: 0, fuzzy: 0, unknown: 0 })
-const cardEl = ref(null)
+
+// —— 三向滑动判分（F1）：右=认识 / 左=不认识 / 下=模糊 ——
+// 指针事件覆盖鼠标与触屏；拖拽跟手（transform 直写），松手过阈值飞出判分、
+// 否则回弹。键盘 左/右/下 方向键等价（onKeydown 内）。click 与拖拽用 justDragged 区分。
+const drag = reactive({ dx: 0, dy: 0, active: false, moved: false })
+let dragStart = null
+let justDragged = false
+const flyDir = ref(null) // 'known' | 'unknown' | 'fuzzy' 飞出中
+
+const THRESHOLD = 80
+
+function onCardPointerDown(e) {
+  if (sessionDone.value || flyDir.value || !currentCard.value) return
+  dragStart = { x: e.clientX, y: e.clientY }
+  drag.active = true
+  drag.moved = false
+  drag.dx = 0
+  drag.dy = 0
+}
+
+function onCardPointerMove(e) {
+  if (!dragStart) return
+  drag.dx = e.clientX - dragStart.x
+  drag.dy = e.clientY - dragStart.y
+  if (Math.hypot(drag.dx, drag.dy) > 8) drag.moved = true
+}
+
+function onCardPointerUp() {
+  if (!dragStart) return
+  dragStart = null
+  drag.active = false
+  const { dx, dy } = drag
+  if (Math.abs(dx) >= THRESHOLD || dy >= THRESHOLD) {
+    justDragged = true
+    const result = dx >= THRESHOLD ? 'known' : dx <= -THRESHOLD ? 'unknown' : 'fuzzy'
+    flyDir.value = result
+    setTimeout(() => {
+      flyDir.value = null
+      drag.dx = 0
+      drag.dy = 0
+      drag.moved = false
+      grade(result)
+    }, 240)
+  } else {
+    drag.dx = 0
+    drag.dy = 0
+    drag.moved = false
+  }
+}
+
+function onFlip() {
+  // 拖拽结束后的 click 不当作翻面
+  if (justDragged) {
+    justDragged = false
+    return
+  }
+  flipped.value = !flipped.value
+}
+
+// 拖拽跟手 + 飞出：样式直算（transform/opacity，不触发布局）
+const cardDragStyle = computed(() => {
+  if (flyDir.value === 'known')
+    return { transform: 'translate(560px, -40px) rotate(12deg)', opacity: 0 }
+  if (flyDir.value === 'unknown')
+    return { transform: 'translate(-560px, -40px) rotate(-12deg)', opacity: 0 }
+  if (flyDir.value === 'fuzzy') return { transform: 'translateY(420px)', opacity: 0 }
+  return {
+    transform: `translate(${drag.dx}px, ${drag.dy}px) rotate(${(drag.dx * 0.05).toFixed(2)}deg)`,
+    transition: drag.active
+      ? 'none'
+      : 'transform 0.3s var(--ease-move), opacity 0.3s var(--ease-move)',
+  }
+})
+
+const swipeVerdict = computed(() => {
+  if (flyDir.value === 'known' || drag.dx >= THRESHOLD)
+    return { label: '认识', cls: 'is-known', show: true }
+  if (flyDir.value === 'unknown' || drag.dx <= -THRESHOLD)
+    return { label: '不认识', cls: 'is-unknown', show: true }
+  if (flyDir.value === 'fuzzy' || drag.dy >= THRESHOLD)
+    return { label: '模糊', cls: 'is-fuzzy', show: true }
+  return { label: '', cls: '', show: false }
+})
+
+const swipeHintStyle = computed(() => ({
+  opacity: swipeVerdict.value.show
+    ? Math.min(1, (Math.max(Math.abs(drag.dx), Math.max(drag.dy, 0)) - 30) / 50)
+    : 0,
+}))
 
 async function startFlashcards() {
   try {
@@ -261,6 +351,15 @@ function onKeydown(event) {
   if (event.key === ' ') {
     event.preventDefault()
     flipped.value = !flipped.value
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    flyGrade('known')
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    flyGrade('unknown')
+  } else if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    flyGrade('fuzzy')
   } else if (flipped.value && event.key === '1') {
     grade('unknown')
   } else if (flipped.value && event.key === '2') {
@@ -268,6 +367,19 @@ function onKeydown(event) {
   } else if (flipped.value && event.key === '3') {
     grade('known')
   }
+}
+
+// 方向键 / 滑动共用的飞出判分（flyDir 驱动卡片飞出动画，落地后真正 grade）
+function flyGrade(result) {
+  if (flyDir.value || sessionDone.value || !currentCard.value) return
+  flyDir.value = result
+  setTimeout(() => {
+    flyDir.value = null
+    drag.dx = 0
+    drag.dy = 0
+    drag.moved = false
+    grade(result)
+  }, 240)
 }
 
 // —— Anki 卡组导出（TSV：单词/释义+例句/标签） ——
@@ -375,7 +487,11 @@ async function exportAnki() {
     <div v-if="mode === 'flashcard'" class="flash-zone card card-pad">
       <template v-if="sessionDone">
         <div class="flash-done">
-          <span class="done-icon"><Icon name="check" :size="26" /></span>
+          <YearRing
+            :total="sessionCount.known + sessionCount.fuzzy + sessionCount.unknown"
+            :wrong="sessionCount.unknown"
+            :size="170"
+          />
           <h3>本轮快刷完成</h3>
           <p class="done-sub">
             认识 <b class="ok">{{ sessionCount.known }}</b> · 模糊
@@ -396,20 +512,34 @@ async function exportAnki() {
           </UiTag>
           <UiButton size="sm" variant="ghost" @click="mode = 'list'">退出</UiButton>
         </div>
-        <div ref="cardEl" class="flash-stage" @click="flipped = !flipped">
-          <div class="flash-card" :class="{ flipped }">
-            <div class="flash-face flash-front">
-              <div class="flash-word serif">{{ currentCard.word }}</div>
-              <div v-if="currentCard.phonetic" class="flash-phonetic">
-                {{ currentCard.phonetic }}
-              </div>
-              <span class="flash-tip">点击卡片或按空格查看释义</span>
-            </div>
-            <div class="flash-face flash-back">
-              <p class="flash-meaning">{{ currentCard.meaning || '（未填写释义）' }}</p>
-              <p v-if="currentCard.example" class="flash-example">{{ currentCard.example }}</p>
-              <p v-if="currentCard.note" class="flash-note">{{ currentCard.note }}</p>
-            </div>
+        <div class="flash-dragzone">
+          <!-- 拖拽判分提示：右=认识（朱砂）/ 左=不认识（淡墨）/ 下=模糊 -->
+          <span class="swipe-hint" :class="swipeVerdict.cls" :style="swipeHintStyle">{{
+            swipeVerdict.label
+          }}</span>
+          <div :key="cardIndex" class="flash-swap" :style="cardDragStyle">
+            <FlipCard
+              :flipped="flipped"
+              class="flash-stage"
+              @flip="onFlip"
+              @pointerdown="onCardPointerDown"
+              @pointermove="onCardPointerMove"
+              @pointerup="onCardPointerUp"
+              @pointercancel="onCardPointerUp"
+            >
+              <template #front>
+                <div class="flash-word serif">{{ currentCard.word }}</div>
+                <div v-if="currentCard.phonetic" class="flash-phonetic">
+                  {{ currentCard.phonetic }}
+                </div>
+                <span class="flash-tip">点击或空格翻面 · 右滑认识 / 左滑不认识 / 下滑模糊</span>
+              </template>
+              <template #back>
+                <p class="flash-meaning">{{ currentCard.meaning || '（未填写释义）' }}</p>
+                <p v-if="currentCard.example" class="flash-example">{{ currentCard.example }}</p>
+                <p v-if="currentCard.note" class="flash-note">{{ currentCard.note }}</p>
+              </template>
+            </FlipCard>
           </div>
         </div>
         <div class="grade-row" :class="{ disabled: !flipped }">
@@ -502,6 +632,7 @@ async function exportAnki() {
       <UiLoadError v-if="loadError" text="生词本加载失败" @retry="loadList" />
       <UiEmpty
         v-else-if="!items.length && !loading"
+        seal="词"
         text="生词本还是空的，粘贴词表批量导入或逐个添加"
         icon="book"
       />
@@ -716,52 +847,83 @@ async function exportAnki() {
 .flash-head .ui-button {
   margin-left: 0;
 }
-/* 真 3D 翻面：perspective 舞台 + 双面卡（backface 隐藏） */
-.flash-stage {
-  perspective: 1400px;
-}
-.flash-card {
+/* 翻面视觉移交给了 ui/FlipCard.vue（与公式背诵共用）；这里只管拖拽区、
+   判分提示章与换卡入场。 */
+.flash-dragzone {
   position: relative;
-  min-height: 260px;
-  transform-style: preserve-3d;
-  transition: transform 0.55s var(--spring);
-  cursor: pointer;
-  user-select: none;
+  --flip-h: 280px;
 }
-.flash-card.flipped {
-  transform: rotateY(180deg);
+.flash-swap {
+  will-change: transform;
 }
-.flash-face {
+/* 换卡入场：新词从墨晕里聚现（key 变更自动重放） */
+@media (prefers-reduced-motion: no-preference) {
+  .flash-swap {
+    animation: flash-card-in var(--dur-3) var(--ease-enter) both;
+  }
+}
+@keyframes flash-card-in {
+  from {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+/* 拖拽判分提示章：右=认识（朱砂）/ 左=不认识（淡墨）/ 下=模糊（洒金） */
+.swipe-hint {
   position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 34px 28px;
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--r-xl);
-  background: linear-gradient(180deg, var(--surface), var(--surface-2));
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
+  top: 14px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s linear;
 }
-.flash-stage:hover .flash-face {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-2);
+.swipe-hint.is-known {
+  color: #fff;
+  background: var(--accent);
 }
-.flash-face.flash-back {
-  transform: rotateY(180deg);
-  border-color: var(--teal);
+.swipe-hint.is-unknown {
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px dashed var(--ink-3);
 }
-.flash-stage:active .flash-card {
-  transform: scale(0.995);
+.swipe-hint.is-fuzzy {
+  color: var(--gold);
+  border: 1.5px solid var(--gold);
 }
-.flash-card.flipped:active {
-  transform: rotateY(180deg) scale(0.995);
+/* 背面释义逐行显影：翻面后 meaning/example/note 依次推出 */
+@media (prefers-reduced-motion: no-preference) {
+  .flash-dragzone :deep(.flip-back) > * {
+    animation: back-line-in 0.4s var(--ease-enter) both;
+  }
+  .flash-dragzone :deep(.flip-back) > *:nth-child(2) {
+    animation-delay: 0.08s;
+  }
+  .flash-dragzone :deep(.flip-back) > *:nth-child(3) {
+    animation-delay: 0.16s;
+  }
+}
+@keyframes back-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .flash-word {
   font-size: 42px;
@@ -855,15 +1017,8 @@ async function exportAnki() {
   padding: 26px 0;
   text-align: center;
 }
-.done-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 50%;
-  background: var(--green-soft);
-  color: var(--green);
+.flash-done .year-ring {
+  margin-bottom: 2px;
 }
 .flash-done h3 {
   font-family: var(--font-display);

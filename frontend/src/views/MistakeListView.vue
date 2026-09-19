@@ -6,7 +6,7 @@
  * - 筛选条件同步到 URL（刷新/分享不丢）
  * - 批量操作 / 导入导出 / 详情弹窗
  */
-import { onMounted, onUnmounted, ref, toRef, watch, nextTick } from 'vue'
+import { computed, onMounted, onUnmounted, ref, toRef, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 import request from '../api/request'
@@ -82,6 +82,69 @@ const {
   onBeforeLoad: () => {
     selectedIds.value = []
   },
+})
+
+// 激活筛选 chips（B1）：当前过滤态外显，每枚可单独移除 —— "系统当前状态可见"
+const activeFilterChips = computed(() => {
+  const f = filters
+  const chips = []
+  const push = (key, label, clear) => chips.push({ key, label, clear })
+  if (f.search)
+    push('search', `搜索“${f.search}”`, () => {
+      f.search = ''
+      searchMistakes()
+    })
+  if (f.questionType) {
+    const o = questionTypeFilterOptions.find((o) => o.value === f.questionType)
+    push('questionType', o?.label || f.questionType, () => {
+      f.questionType = ''
+      searchMistakes()
+    })
+  }
+  if (f.subjectId) {
+    const s = baseData.subjects.find((s) => s.id === f.subjectId)
+    push('subjectId', s?.name || '科目', () => {
+      f.subjectId = ''
+      f.subSubjectId = ''
+      searchMistakes()
+    })
+  }
+  if (f.subSubjectId) {
+    const s = subSubjectOptions.find((s) => s.id === f.subSubjectId)
+    push('subSubjectId', s?.name || '二级科目', () => {
+      f.subSubjectId = ''
+      searchMistakes()
+    })
+  }
+  if (f.sourceType) {
+    const s = sourceTypes.find((s) => s.value === f.sourceType)
+    push('sourceType', s?.label || f.sourceType, () => {
+      f.sourceType = ''
+      searchMistakes()
+    })
+  }
+  if (f.sourceYear)
+    push('sourceYear', `${f.sourceYear} 年`, () => {
+      f.sourceYear = ''
+      searchMistakes()
+    })
+  for (const d of f.difficulties)
+    push('diff' + d, `难度 ${d} 星`, () => {
+      const idx = f.difficulties.indexOf(d)
+      if (idx !== -1) f.difficulties.splice(idx, 1)
+      searchMistakes()
+    })
+  if (f.tag)
+    push('tag', `标签 ${f.tag}`, () => {
+      f.tag = ''
+      searchMistakes()
+    })
+  if (f.approach)
+    push('approach', `思路 ${f.approach}`, () => {
+      f.approach = ''
+      searchMistakes()
+    })
+  return chips
 })
 
 // 用 URL 初始化筛选（必须在首次加载前）
@@ -362,6 +425,29 @@ watch(
         </div>
       </div>
 
+      <!-- 激活筛选 chips：一眼看清当前过滤态，逐枚可移除 -->
+      <div v-if="activeFilterChips.length" class="filter-chips">
+        <span v-for="chip in activeFilterChips" :key="chip.key" class="filter-chip">
+          <i class="fc-dot" aria-hidden="true"></i>{{ chip.label }}
+          <button
+            type="button"
+            class="fc-x"
+            :aria-label="'移除筛选 ' + chip.label"
+            @click="chip.clear"
+          >
+            <Icon name="x" :size="11" />
+          </button>
+        </span>
+        <button
+          v-if="activeFilterChips.length > 1"
+          type="button"
+          class="fc-clear"
+          @click="resetFilters"
+        >
+          清空全部
+        </button>
+      </div>
+
       <Transition name="fold">
         <div v-if="showMore" class="toolbar-more">
           <UiSelect
@@ -420,7 +506,11 @@ watch(
     </div>
 
     <div v-if="selectedIds.length" class="bulk-bar">
-      <span class="bulk-count">已选 {{ selectedIds.length }} 题</span>
+      <span class="bulk-count"
+        >已选
+        <b class="num km-num pop-num" :key="selectedIds.length">{{ selectedIds.length }}</b>
+        题</span
+      >
       <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkPause"
         >暂停</UiButton
       >
@@ -433,7 +523,12 @@ watch(
       <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkSetOther"
         >设为自编</UiButton
       >
-      <UiButton size="sm" variant="danger" :loading="batchRunning" @click="bulkDelete"
+      <UiButton
+        size="sm"
+        variant="danger"
+        class="bulk-del"
+        :loading="batchRunning"
+        @click="bulkDelete"
         >删除</UiButton
       >
       <UiButton size="sm" variant="ghost" @click="selectedIds = []">清空</UiButton>
@@ -453,7 +548,7 @@ watch(
         hint="请检查后端服务是否运行，然后重试。"
         @retry="loadMistakes"
       />
-      <UiEmpty v-else-if="!items.length" text="暂无错题，去录入一道吧" icon="inbox">
+      <UiEmpty v-else-if="!items.length" seal="错" text="暂无错题，去录入一道吧" icon="inbox">
         <UiButton variant="primary" @click="router.push('/capture')">智能录入</UiButton>
       </UiEmpty>
       <div v-else class="card-grid">
@@ -725,6 +820,76 @@ watch(
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+}
+
+/* 激活筛选 chips（B1）：每枚一枚墨点 + 可单独移除 */
+.filter-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px 3px 11px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.fc-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+}
+.fc-x {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.fc-x:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.fc-clear {
+  border: none;
+  background: none;
+  padding: 3px 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline dashed;
+  text-underline-offset: 3px;
+}
+.fc-clear:hover {
+  color: var(--accent-ink);
+}
+/* 批量删除按钮缓脉：危险的分量被看见（B2） */
+@media (prefers-reduced-motion: no-preference) {
+  .bulk-bar .bulk-del:not(:disabled) {
+    animation: bulk-danger 2.2s ease-in-out infinite;
+  }
+}
+@keyframes bulk-danger {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--red) 30%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--red) 12%, transparent);
+  }
 }
 
 .bulk-bar {

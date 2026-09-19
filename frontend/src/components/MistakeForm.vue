@@ -239,6 +239,7 @@ onMounted(loadApproachOptions)
 
 <template>
   <form class="mform" @submit.prevent="submitForm">
+    <div class="form-sec"><span class="fs-num serif">壹</span>题型与科目</div>
     <div class="field-row">
       <div class="field">
         <label class="field-label">题型</label>
@@ -279,6 +280,7 @@ onMounted(loadApproachOptions)
       </div>
     </div>
 
+    <div class="form-sec"><span class="fs-num serif">贰</span>题面</div>
     <div class="field">
       <label class="field-label required">题干</label>
       <textarea
@@ -313,6 +315,7 @@ onMounted(loadApproachOptions)
     </div>
 
     <template v-if="form.question_type === 'choice' || isMulti">
+      <div class="form-sec"><span class="fs-num serif">叁</span>作答区</div>
       <div class="field-grid four">
         <div class="field">
           <label class="field-label">选项 A</label>
@@ -372,6 +375,7 @@ onMounted(loadApproachOptions)
       </div>
     </template>
 
+    <div class="form-sec"><span class="fs-num serif">肆</span>判分与思路</div>
     <div class="field-grid">
       <div class="field">
         <label class="field-label required">难度</label>
@@ -439,6 +443,7 @@ onMounted(loadApproachOptions)
       />
     </div>
 
+    <div class="form-sec"><span class="fs-num serif">伍</span>解析与标签</div>
     <div class="field">
       <label class="field-label">解析</label>
       <textarea
@@ -458,6 +463,7 @@ onMounted(loadApproachOptions)
       />
     </div>
 
+    <div class="form-sec"><span class="fs-num serif">陆</span>来源</div>
     <div class="field-grid">
       <div class="field">
         <label class="field-label">题目分类</label>
@@ -530,6 +536,35 @@ onMounted(loadApproachOptions)
 
 .field-row {
   display: flex;
+}
+
+/* 编辑式分区头：汉字序号 + 发丝线（壹题面 / 贰作答…），长表单不再一抹平 */
+.form-sec {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 20px 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+.form-sec:first-of-type {
+  margin-top: 2px;
+}
+.fs-num {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 900;
+  flex: none;
 }
 
 .field-label {

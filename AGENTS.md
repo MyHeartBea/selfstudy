@@ -195,6 +195,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 **ui/ 基件一览**（全部零依赖，API 与 v1 兼容）：
 - `UiButton`（variant=primary|ghost|outline|danger|success|subtle；primary=印章渐变+涟漪）、`UiModal`（玻璃+渐变描边，zIndex 可叠）、`UiTabs/UiSelect/UiDropdown/UiCheckbox/UiPagination/UiProgress/UiStars/UiTag/UiEmpty/ToastHost/ConfirmHost/CommandPalette/Icon(icons.js 内联 SVG)`；
 - v2 新增：`GlassCard`（渐变描边玻璃+流光，#badge 骑缝）、`MetricTile`（tone=accent|teal|gold|green|violet|blue，#spark 插槽）、`RingProgress`（渐变环+生长动画）、`AreaChart`（手写 SVG 面积图，颜色传 `var(--xxx)` 自动跟主题）、`BarRow`、`Heatmap`（data=[{date,count}]，级联入场）、`Skeleton`（variant=text|rect|circle）、`StageBadge`（骑缝徽章，top:-15px）、`UiLoadError`（加载失败态，与 `UiEmpty` 成对，见 6.5 硬规则）。
+- 墨韵 3.x 新增：`InkRain`（完成页内容文字雨，chars prop，rAF 自停）、`YearRing`（数据年轮，total/wrong props）、`FlipCard`（**共享 3D 翻牌**：flipped prop + @flip 事件；生词闪卡与公式背诵共用。组件只管视觉与点击翻面，键盘归使用方的键盘流，避免双重切换）、`UiEmpty` 支持 `seal` 汉字印章空态。
 - ⚠️ scoped CSS 教训：`:global(A) B` 会被错编译成「把 B 的样式套到 A」（Phase 1 曾把 Dock 的 transform 套到 body 导致整页左移）；组合选择器要写 `:global(A B)`。
 - ⚠️ **换页动画只有 JS 一条路径**：`AppLayout.playPageEnter()` 用 rAF 写内联 `transform/opacity`，**没有** Vue `<Transition>`（连续四版实测不可靠，已放弃）。因此**绝不能再给 `.page` 或页面根节点加 CSS `animation`**：CSS 动画在层叠里压过内联样式、且它锁的是整个 `transform` 属性，会把 JS 写的水平位移整段吃掉 —— 「换页没动画/方向反了」连修五次（`4772524`→`c570ed0`）的真因就是这个，`base.css` 里那条 `animation: page-in .36s` 已删。首个路由靠 `watch(route.path, {immediate:true})` 补入场。
 - ⚠️ **UI 动效**逐帧用 `requestAnimationFrame` + `performance.now()`（定时器不吃帧时钟，后台标签页会被推迟到动画早该结束后才补帧），`whenContentReady`/翻页/氛围层都按此收敛并带 `cancelAnimationFrame`。

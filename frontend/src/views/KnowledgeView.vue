@@ -263,13 +263,18 @@ onMounted(() => {
       </div>
     </template>
     <UiLoadError v-else-if="loadError" text="知识点加载失败" @retry="loadKnowledge" />
-    <UiEmpty v-else-if="!items.length" text="暂无知识点，录入错题或手动添加" icon="book" />
+    <UiEmpty
+      v-else-if="!items.length"
+      seal="知"
+      text="暂无知识点，录入错题或手动添加"
+      icon="book"
+    />
     <template v-else>
       <div class="k-grid">
         <article
           v-for="(row, i) in items"
           :key="row.id"
-          class="k-card card"
+          class="k-card card km-live"
           role="button"
           tabindex="0"
           :aria-label="`查看知识点 ${row.tag_name}`"
@@ -281,54 +286,67 @@ onMounted(() => {
           @keydown.enter.prevent="openDetail(row)"
           @keydown.space.prevent="openDetail(row)"
         >
+          <!-- km-live 复合悬停层：幽灵序号 = 知识笺编号，四角/扫描线与错题卡同语言 -->
+          <span class="km-live__ghost" aria-hidden="true">{{
+            String(i + 1).padStart(2, '0')
+          }}</span>
+          <span class="km-live__rule" aria-hidden="true"></span>
+          <span class="km-live__corner tl" aria-hidden="true"></span>
+          <span class="km-live__corner tr" aria-hidden="true"></span>
+          <span class="km-live__corner bl" aria-hidden="true"></span>
+          <span class="km-live__corner br" aria-hidden="true"></span>
+          <span class="km-live__scan" aria-hidden="true"></span>
           <i class="k-spine" aria-hidden="true"></i>
-          <div class="k-head">
-            <h3 class="k-name">{{ row.tag_name }}</h3>
-            <span class="k-time num">{{ formatTime(row.created_at).slice(0, 10) }}</span>
+          <div class="km-live__inner">
+            <div class="k-head">
+              <h3 class="k-name">{{ row.tag_name }}</h3>
+              <span class="k-time num">{{ formatTime(row.created_at).slice(0, 10) }}</span>
+            </div>
+            <div class="k-chips">
+              <UiTag size="sm" color="var(--teal)" soft>{{ subjectName(row.subject_id) }}</UiTag>
+              <UiTag v-if="subSubjectName(row.sub_subject_id)" size="sm" soft>{{
+                subSubjectName(row.sub_subject_id)
+              }}</UiTag>
+            </div>
+            <p v-if="row.summary" class="k-summary">{{ plainSummary(row.summary) }}</p>
+            <div v-if="row.related_tags && row.related_tags.length" class="k-rel">
+              <span class="k-rel-label">关联</span>
+              <!-- 关联标签是独立筛选入口：阻止冒泡，避免顺带打开详情 -->
+              <UiTag
+                v-for="t in row.related_tags"
+                :key="t"
+                color="var(--gold)"
+                size="sm"
+                clickable
+                @click.stop="
+                  () => {
+                    filters.tag = t
+                    searchKnowledge()
+                  }
+                "
+              >
+                {{ t }}
+              </UiTag>
+            </div>
+            <div class="k-ops">
+              <button class="op-link primary" @click.stop="practiceTag(row.tag_name)">
+                <Icon name="play" :size="12" /> 练习
+              </button>
+              <button class="op-link primary" @click.stop="openEdit(row)">编辑</button>
+              <button
+                class="op-link warning"
+                :disabled="summarizingId === row.id"
+                @click.stop="autoSummarize(row)"
+              >
+                {{ summarizingId === row.id ? '总结中…' : 'AI 总结' }}
+              </button>
+              <button class="op-link danger" @click.stop="remove(row)">
+                <Icon name="trash" :size="12" />
+              </button>
+              <span class="k-open-hint" aria-hidden="true">点击查看全文</span>
+            </div>
           </div>
-          <div class="k-chips">
-            <UiTag size="sm" color="var(--teal)" soft>{{ subjectName(row.subject_id) }}</UiTag>
-            <UiTag v-if="subSubjectName(row.sub_subject_id)" size="sm" soft>{{
-              subSubjectName(row.sub_subject_id)
-            }}</UiTag>
-          </div>
-          <p v-if="row.summary" class="k-summary">{{ plainSummary(row.summary) }}</p>
-          <div v-if="row.related_tags && row.related_tags.length" class="k-rel">
-            <span class="k-rel-label">关联</span>
-            <!-- 关联标签是独立筛选入口：阻止冒泡，避免顺带打开详情 -->
-            <UiTag
-              v-for="t in row.related_tags"
-              :key="t"
-              color="var(--gold)"
-              size="sm"
-              clickable
-              @click.stop="
-                () => {
-                  filters.tag = t
-                  searchKnowledge()
-                }
-              "
-            >
-              {{ t }}
-            </UiTag>
-          </div>
-          <div class="k-ops">
-            <button class="op-link primary" @click.stop="practiceTag(row.tag_name)">
-              <Icon name="play" :size="12" /> 练习
-            </button>
-            <button class="op-link primary" @click.stop="openEdit(row)">编辑</button>
-            <button
-              class="op-link warning"
-              :disabled="summarizingId === row.id"
-              @click.stop="autoSummarize(row)"
-            >
-              {{ summarizingId === row.id ? '总结中…' : 'AI 总结' }}
-            </button>
-            <button class="op-link danger" @click.stop="remove(row)">
-              <Icon name="trash" :size="12" />
-            </button>
-            <span class="k-open-hint" aria-hidden="true">点击查看全文</span>
-          </div>
+          <!-- /.km-live__inner -->
         </article>
       </div>
       <div class="pagination-wrap">

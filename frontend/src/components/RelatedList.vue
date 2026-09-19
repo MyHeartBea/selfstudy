@@ -101,11 +101,11 @@ function summaryPreview(text) {
         />
       </button>
       <div v-if="openPanel === 'related'" class="collapse-body">
-        <div v-if="relatedMistakes.length" class="related-grid">
+        <div v-if="relatedMistakes.length" class="related-grid km-list">
           <div
             v-for="rm in relatedMistakes"
             :key="rm.id"
-            class="related-card"
+            class="related-card km-item"
             role="button"
             tabindex="0"
             @click="emit('switch', rm.id)"

@@ -226,6 +226,36 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
+/* 弹窗内容级联：正文直接子元素按序淡入上浮（卷宗展开）。
+   只动 transform/opacity，逐档 --stagger-1；打印快照在 base.css 强制末帧。 */
+@media (prefers-reduced-motion: no-preference) {
+  .modal-body > * {
+    animation: modal-line-in var(--dur-3) var(--ease-enter) both;
+  }
+  .modal-body > *:nth-child(2) {
+    animation-delay: calc(var(--stagger-1) * 2);
+  }
+  .modal-body > *:nth-child(3) {
+    animation-delay: calc(var(--stagger-1) * 3);
+  }
+  .modal-body > *:nth-child(4) {
+    animation-delay: calc(var(--stagger-1) * 4);
+  }
+  .modal-body > *:nth-child(5) {
+    animation-delay: calc(var(--stagger-1) * 5);
+  }
+}
+@keyframes modal-line-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .modal-foot {
   display: flex;
   justify-content: flex-end;
