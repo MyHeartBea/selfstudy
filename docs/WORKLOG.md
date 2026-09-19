@@ -205,7 +205,7 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 **测试**：后端 **182**（新增 `tests/test_data_safety.py` 14 个：图片泄漏 2 + 快照降级 1 + PUT 附加字段 3 + 批改存档 2 + 判分口径 4 + 空文字闸 2）、前端 Vitest **75**、E2E **37** 全绿；ruff check/format、eslint、prettier、`npm run build` 均干净。
 **文档**：AGENTS.md 第 3 节加"数据路径禁止静默失败"三条铁律（快照降级 / AI 结果不许被 INSERT 带走 / 删行必删文件）+ PUT 附加字段语义 + 字母题判分单一口径；第 5 节补"提不到文字必须报错"；`docs/api.md` 补 `/api/essays` 整节（上一批漏了）与三处契约说明。
 
-## 2026-09-19 · 全栈体检第 2 批：P0 键盘与录入保护包（`待补哈希`）
+## 2026-09-19 · 全栈体检第 2 批：P0 键盘与录入保护包（`46d78a1`）
 
 体检表里 P0 的第二批：全是"鼠标用户看不见、键盘用户进不去 / 一次误点就丢一整场"的问题。
 
