@@ -147,7 +147,7 @@ skill 装于 `C:\Users\Administrator\.agents\skills\`，只动了 `frontend/`。
 ⑤**练习页高级筛选下拉被裁**（用户截图实测）：根因是 `details.adv-filter` 放在 `.deploy` 玻璃卡内，`gcard-body` 的 `overflow:hidden`（流光裁切用）把 UiSelect 下拉菜单整个裁掉。修法 = 提前闭合 GlassCard，把筛选挪出为独立 `.card.card-pad` 纸片（普通 .card 无 overflow 裁切）。真机确认 adv-filter 已不在 gcard-body 内。
 测试：后端 153 + ruff 全绿、前端 61 + E2E 31 全绿；真机四页 DOM 验收（倒计时 91 天/点卡出详情/portrait 词、page_size=9、adv-filter 出卡）。
 
-## 2026-09-19 · 英语作文 AI 批改批（新会话接管后的第一个功能批）
+## 2026-09-19 · 英语作文 AI 批改批（`9d389b5`，新会话接管后的第一个功能批）
 交接后先确认两件事：`EXAM_DATE=2026-12-19`（用户给的预计初试日）写进 `backend/.env` 并重启后端（`/api/stats` 实测 `days:91`）；功能选型由用户点定「英语作文批改」。
 
 **后端**（`app/services/ai_essay.py` + `app/routers/essay.py`，迁移 **v10** 新增 `essay_records`）：
