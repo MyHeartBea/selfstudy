@@ -492,3 +492,79 @@ Vitest **111**（+8 commandPalette、+5 relatedPractice）；E2E **43**（+2 com
    另有一次自伤：`ruff format` 的路径写成仓库根，顺手把 14 个无关脚本格式化了 —— 已退回，
    以后格式化只写 `app tests` 两个目录名。
 
+## 2026-09-20 · 全栈体检第 7 批：N11 快照/回滚做真（`待补哈希`）
+
+**为什么要做**：`GET|POST /api/snapshots` 从第一批起就在，批量删除/导入前也确实打了快照，响应文案
+还写着"可回滚"——但**全站没有任何一个入口能把这份快照用回去**。那句话的真实含义是
+"可回滚，请自己打开 sqlite 命令行"。这就是体检口径里最典型的一类：接口在、文案在、能力不在。
+
+**后端**：`database.restore_snapshot()`（+ `snapshot_label()` 把文件名末段翻成来源标记，
+`list_snapshots()` 多返回一个 `label`）+ `POST /api/snapshots/restore`（`schemas.SnapshotRestore`）。
+四根不可移动的桩，每根都有用例：
+1. 只接受 `SNAPSHOT_NAME_RE` 且 `resolve()` 后仍在 `BACKUP_DIR` 内的文件名 —— 一个能整库覆盖当前数据的
+   入口如果接受任意字符串，就等于把备份目录开成"读哪个文件都行"；
+2. 覆盖前必须先给当前现场打 `before-restore`，**打不出来就中止**（没有反悔点不动手）；
+3. 打完反悔点后**复查目标快照还在**：`snapshot_database()` 会按 `MAX_BACKUPS` 清最旧一份，用户挑的
+   正好是最旧那份时它此刻已消失，少了复查下一步 `sqlite3.connect()` 会凭空建一个空库并把当前数据
+   覆盖成空白（一次静默的全库清空）；
+4. 覆盖完重跑 `TABLES_DDL` + `migrate_database()`，否则回到 v8 那份会让 `/papers` 打到 500 且要重启才自愈。
+老快照里缺的表在 `tables_*` 里记 `null` 而不是 0（"没有这张表"和"这张表 0 条"是两件事）。
+
+**两个踩坑**：
+- **句柄要关在打反悔点之前**。第一版照"POSIX 直觉"写着"源句柄一路持有到复制完，反正 Windows 打开的
+  文件删不掉"，结果第 7 条用例真红在这一点上：`unlink` 抛 `WinError 32` → `snapshot_database()` 兜底
+  返回 None → 回滚以"反悔点失败"中止。**数据是安全的，但错误结论是误导的**（真因是保留份数清理）。
+  改成"验完就关 → 打反悔点 → 复查还在 → 再开一次"，两个平台同一条路径。
+- **造边界数据要按实际上限造**。用例里写 `..._090000_l33x4400.db` 想测"40 字符标签之外"，可那个标签
+  只有 8 个字符，是个**合法名** → 返回 404，断言 `(400, 422)` 红。这类"看着在测边界、其实没碰到边界"
+  的用例比没测更糟（它给你一份虚假的覆盖感）。
+
+**前端**：`/snapshots`「数据备份与回滚」页（不进 Dock，Ctrl+K 可达，与 `/integrity` 同性质）：
+四块瓷砖（可用份数 / 最新一份 / **最早一份可回到** / 目录占用）+ 列表（时间·来源翻人话·大小·每行一个
+回滚入口）+「立刻备份一次」。回滚要**手输 `RESTORE`**（服务端另有 `confirm === name` 那道，是给脚本
+兜底的 —— 让人逐字敲文件名不叫确认，叫折磨），成功后把**前后各表条数对照**和反悔点文件名留在页面上
+（只飘一条 toast 的话，用户关掉就再也找不到那份文件名）。"图片文件不在快照里"这句话在副标题、确认框、
+结果 toast 各出现一次。纯函数照 `integrity.js` 的先例放 `src/utils/snapshots.js` 以便直接断言。
+
+**顺带修掉一处真静默失败**：`useBulkActions` 的 toast 写死 `'批量操作完成'`，而后端在快照失败时把降级
+写在响应的 `message` 里 —— 也就是说 AGENTS 第 3 节点名要防的那句话**从来没有到达用户眼前**。
+现在 delete 且 `snapshot` 为空走 warning toast 并原文渲染；批量删除的确认框从"删除后不可恢复"
+（半句假话：数据是能整库回滚的）改成"数据可整库回滚，配图文件会一并删除且回滚找不回来"（后半句才是真的）。
+
+**测试**：后端 **251**（+11 `test_snapshots.py`，整份文件都在钉"该拒绝的时候必须拒绝，且拒绝时一个字
+都不改"）；Vitest **129**（+11 `snapshotsView.test.js`）；E2E **51**（+4 `snapshots.spec.js`，
+render-smoke 多一条 `/snapshots`）。覆盖率按 CI 口径约 **73%**。
+单测里两个结构性坑（都写进注释）：`ConfirmHost` 的弹窗 **teleport 到 body**，`wrapper.find` 摸不到，
+得用 `defineComponent({render: () => [h(View), h(ConfirmHost)]})` 一起挂再查 `document`；
+弹窗按钮文案必须与列表行按钮**不同名**（都叫"回滚到这一份"时按文案找按钮会点错那颗）。
+E2E 只补单测结构上看不见的两段：`@keyup.enter` 提交与 `Esc` 取消（`trigger('click')` 永远抓不到
+"回车把整库覆盖了"），两条都同时断言"该发时恰好一次、不该发时一次都没有"。
+
+**明确没做**：单题删除 `DELETE /api/mistakes/{id}` 仍然**不打快照**（与批量删除不对称）。它的确认框
+现在写的"删除后不可恢复"因此还是准确的；要不要给单题删除也留反悔点，等一次真实误删再定，
+这一批不动它以免把"每次删除都多一份快照"变成默认成本。
+
+## 2026-09-20 · C 盘腾挪 + 每日清理脚本加固（顺带修好 Agent 的 Bash 工具，`待补哈希`）
+
+**清理脚本在偷偷吃有用的东西**，这是本次最值钱的一条：`D:\dsh-home\scripts\daily-cleanup.ps1`
+按"目录 mtime 超期就整棵删"来清 `D:\temp`，而 **npm/pip 这类缓存的 mtime 会被读操作刷新**，
+于是 `D:\temp\npm-cache` 三次被删（09-10 / 09-14 / 09-19），`D:\temp\km-art` 被删过一次，
+`D:\temp\km-redesign`（视觉基准原型，AGENTS 第 6.5 节点名要留的）09-09 就没了、只剩 zip 里那份。
+- 现在：`$protect` 名单（npm-cache / km-v2-backup / km-art / playwright-browsers + 仓库外
+  `D:\temp\.cleanup-protect` 里的每一行）只**按文件新旧修剪内容**、不整目录删；
+  `$noTrim` 名单（km-v2-backup / km-art）完全不动。
+- `km-art` 那批 html/svg 已倒进 `D:\caches\archive-20260920-km-art\`（78 个文件，原件还在原地）。
+- 系统 `%TEMP%`（在 C 盘）改成**递归按文件龄期清 + 事后收空目录**，脚本本体换成纯 ASCII
+  （PowerShell 5.1 按 GBK 读 .ps1，注释里的中文会把下一行吃掉）。
+- 实测一次跑完回收 **851.4 MB**，日志 `D:\temp\daily-cleanup.log`。
+
+**C 盘现状**：还剩约 1.8 GB 空闲。大头是 `~\.cache\codex-runtimes`（约 1.3 GB，Agent CLI 自身运行时）、
+`~\.cargo`（约 600 MB，动它要改 PATH）、系统 `%TEMP%` 里被占用的一部分。这三处按 AGENTS 的约定
+属于"迁移有风险，动前先问"，本批只报告不动手。
+
+**Agent 的 Bash 工具是怎么坏的**：`C:\Users\Administrator\.qoder-cn\bin\git.staging` 残留了一个
+解压到一半的 Git（`ENOTEMPTY`），导致每次 Bash 调用都失败。用 node-repl 把 `git.staging` 改名成 `git`
+补全安装后恢复。另外这个 shell 是 **Cygwin bash**：`/c/...` 不挂载（要用 `/cygdrive/c/...`），
+且每次调用末尾都会因写 cwd 文件失败而**多报一个假的 Exit code 1** —— 所以本仓库的验证命令一律
+以 `MARKER_*_DONE` 标记 + 输出文本为准，不看退出码。
+

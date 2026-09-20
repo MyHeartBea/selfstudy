@@ -1,17 +1,21 @@
 """系统级接口：健康检查与仪表盘聚合数据。"""
 
+import logging
 import platform
+import sqlite3
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query
 
 from app import metrics
 from app.config import settings
-from app.database import get_connection, list_snapshots, snapshot_database
+from app.database import get_connection, list_snapshots, restore_snapshot, snapshot_database
 from app.responses import error, ok, server_error
+from app.schemas import SnapshotRestore
 from app.services import integrity_service, review_service, search_service, stats_service
 from app.services.mistake_service import _images_dir
 
+logger = logging.getLogger("kaoyan")
 router = APIRouter(prefix="/api", tags=["系统"])
 
 
@@ -124,3 +128,34 @@ def create_snapshot(label: str = Query("manual", max_length=40)):
     if not name:
         return error(500, "快照创建失败")
     return ok({"name": name}, "快照已创建")
+
+
+@router.post("/snapshots/restore")
+def restore_snapshot_api(body: SnapshotRestore):
+    """**整库回滚**到指定快照：会覆盖当前全部错题/复习/知识点等数据。
+
+    - 必须 `confirm` 与 `name` 完全一致（服务端也要验，理由见 `SnapshotRestore`）；
+    - 覆盖前会先给当前现场打一份 `before-restore` 快照，打不出来就直接中止 ——
+      没有反悔点的回滚一旦选错，丢失的是"这一份快照之后干的所有活"；
+    - **快照只含数据库，图片文件不在内**：回滚不会删图，也回不回已删的图。
+    """
+    if body.confirm.strip() != body.name:
+        return error(400, "确认文本与快照名不一致，已取消（不会改动任何数据）")
+    try:
+        result = restore_snapshot(body.name)
+    except ValueError as exc:
+        return error(400, str(exc))
+    except FileNotFoundError:
+        return error(404, f"找不到快照：{body.name}")
+    except sqlite3.Error as exc:
+        logger.warning("快照回滚失败（%s）：%s", body.name, exc)
+        return error(409, "快照读取失败，已中止，当前数据未改动")
+    except RuntimeError as exc:
+        return error(409, str(exc))
+    except Exception as exc:
+        return server_error(exc, "快照回滚")
+    return ok(
+        result,
+        f"已回到 {result['name']}；回滚前的现场另存为 {result['safety_snapshot']}。"
+        "图片文件不随快照回滚。",
+    )

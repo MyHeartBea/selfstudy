@@ -207,3 +207,15 @@ class VocabReview(BaseModel):
     """闪卡复习结果：known=认识 fuzzy=模糊 unknown=不认识。"""
 
     result: str
+
+
+class SnapshotRestore(BaseModel):
+    """整库回滚到某份快照。`confirm` 必须与 `name` 一字不差。
+
+    为什么要在服务端也要一份确认：这个请求一旦发出就是覆盖全部数据。
+    只靠前端"输入名字才让点按钮"的话，任何一次前端漏改/绕过都会把
+    一个不可逆操作变成一次普通点击。
+    """
+
+    name: str = Field(min_length=1, max_length=120)
+    confirm: str = Field(default="", max_length=120)

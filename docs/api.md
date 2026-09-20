@@ -41,10 +41,21 @@
     `missing` = 记录指向一张不存在的图（页面上是破图）
   - `refs` 是 `["mistakes#12", ...]` 这样的定位串；`kind` ∈ `image|thumb|exam_page`
   - 判定口径与 `scripts/clean_orphan_images.py` **共用** `integrity_service`（见 AGENTS 第 3 节）
-- `GET /api/snapshots?limit=20`：数据快照列表（启动备份 + 导入前快照）
+- `GET /api/snapshots?limit=20`：数据快照列表（启动备份 + 导入前快照 + 回滚前现场）
+  - 每项 `{name, label, size_kb, created_at}`；`label` 是**来源标记**（文件名最后一段），
+    `""` = 启动自动备份、`manual` = 手动、`before-import-<条数>`、`before-batch-delete-<条数>`、
+    `before-restore` = 某次回滚前的现场。前端按这个翻成人话，别显示成空白
 - `POST /api/snapshots?label=manual`：手动打一份快照（批量操作前建议先点）
   - `POST /api/mistakes/batch`（`action=delete`）与 `POST /api/import` 会**自动先打快照**，
     响应里带 `snapshot` 文件名；为 null 表示快照失败（`message` 会明说本次无法一键回滚）
+- `POST /api/snapshots/restore`：`{"name", "confirm"}` —— **整库回滚**到某一份快照
+  - `confirm` 必须与 `name` 逐字相等，否则 400 且**一个字节都不改**（前端另有一道"手输 RESTORE"）
+  - 顺序：验快照可读(`quick_check` + 必须有 `mistakes` 表) -> 给当前现场打 `before-restore`
+    （**打不出来就中止**，409）-> 复查目标没被保留份数清理掉 -> 就地 `backup` 覆盖 -> 重套 DDL 与迁移
+  - 成功返回 `{name, safety_snapshot, tables_before, tables_after}`，各表行数是"选对没选对"的凭据；
+    老快照里没有的表记 `null`（不是 0）
+  - **快照只含数据库，不含图片文件**：回滚不会删图，也回不回已删的图（响应 message 与页面都要明说）
+  - 失败码：400 文件名不合法 / 404 找不到 / 409 快照不可用、缺反悔点、被保留份数清理
 
 ## 错题
 

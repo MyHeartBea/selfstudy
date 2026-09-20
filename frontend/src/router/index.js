@@ -79,6 +79,12 @@ const routes = [
         component: () => import('../views/IntegrityView.vue'),
       },
       {
+        // 同上：整库回滚是"一步覆盖当前数据"的入口，不放在天天经过的地方
+        path: 'snapshots',
+        name: 'data-snapshots',
+        component: () => import('../views/SnapshotsView.vue'),
+      },
+      {
         path: 'design',
         name: 'design-gallery',
         component: () => import('../views/DesignView.vue'),
@@ -106,6 +112,7 @@ const TITLE_MAP = {
   'subject-guide': '科目指南',
   'essay-bank': '作文档案',
   'data-integrity': '数据体检',
+  'data-snapshots': '数据备份与回滚',
 }
 router.afterEach((to) => {
   const title = TITLE_MAP[to.name]

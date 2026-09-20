@@ -261,6 +261,46 @@ export const integrityReport = {
   images_dir_exists: true,
 }
 
+/**
+ * 数据备份与回滚（`/api/snapshots`、`POST /api/snapshots/restore`）。
+ * 形状照 `database.list_snapshots()` / `restore_snapshot()`：
+ * `label` 为空串就是启动自动备份（前端要显示成"启动自动备份"，不能留空白）；
+ * `tables_*` 里 `null` 表示"那份快照里没有这张表"，与 0 条是两件事。
+ */
+export const snapshotRows = [
+  {
+    name: 'kaoyan_mistakes_20260920_090000.db',
+    label: '',
+    size_kb: 2048,
+    created_at: '2026-09-20 09:00:00',
+  },
+  {
+    name: 'kaoyan_mistakes_20260101_080000_before-import-5.db',
+    label: 'before-import-5',
+    size_kb: 1024,
+    created_at: '2026-01-01 08:00:00',
+  },
+]
+
+export const snapshotRestoreResult = {
+  name: snapshotRows[0].name,
+  safety_snapshot: 'kaoyan_mistakes_20260920_120000_before-restore.db',
+  tables_before: {
+    mistakes: 20,
+    review_records: 9,
+    knowledge_base: 3,
+    vocab_items: 0,
+    exam_papers: null,
+  },
+  tables_after: {
+    mistakes: 5,
+    review_records: 2,
+    knowledge_base: 1,
+    vocab_items: 0,
+    exam_papers: 0,
+  },
+}
+
 export async function mockApi(page, overrides = {}) {
   const calls = []
   // 用正则而不是 glob：glob `**/api/**` 要求 api 后还有 `/`，会漏掉 `/api/subjects`
@@ -369,6 +409,11 @@ function resolver(path, method, overrides) {
   // 命令面板的全站搜索：漏打桩会让 Ctrl+K 用例假绿（groups 为空 → 面板只显示"没有匹配结果"）
   if (path === '/api/search') return { q: '中值', limit: 5, total: 5, groups: searchGroups }
   if (path === '/api/system/integrity') return integrityReport
+  // 快照列表 GET / 手动备份 POST 打在同一个路径上，必须按方法分开打桩
+  if (path === '/api/snapshots') {
+    return method === 'POST' ? { name: snapshotRows[1].name } : snapshotRows
+  }
+  if (path === '/api/snapshots/restore') return snapshotRestoreResult
   if (path === '/api/mistakes') return { items: [], total: 0 }
   if (path === '/api/mistakes/approaches') return []
   if (path === '/api/vocab') return { items: [], total: 0 }

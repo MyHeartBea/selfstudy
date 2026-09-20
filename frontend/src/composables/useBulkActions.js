@@ -17,12 +17,19 @@ export function useBulkActions({ selectedIds, onDone }) {
     if (!selectedIds.value.length) return
     batchRunning.value = true
     try {
-      await request.post('/mistakes/batch', {
+      const res = await request.post('/mistakes/batch', {
         ids: selectedIds.value,
         action,
         ...extra,
       })
-      toast.success('批量操作完成')
+      // 后端在快照失败时把降级写在 message 里；这里必须用它，
+      // 写死"批量操作完成"会让"本次无法一键回滚"这句话永远到不了用户眼前。
+      const snapshot = res.data?.data?.snapshot
+      if (action === 'delete' && !snapshot) {
+        toast.warning(res.data?.message || '批量删除完成，但本次快照失败，无法一键回滚')
+      } else {
+        toast.success(res.data?.message || '批量操作完成')
+      }
       selectedIds.value = []
       if (onDone) onDone()
     } catch (err) {
@@ -65,7 +72,9 @@ export function useBulkActions({ selectedIds, onDone }) {
   async function bulkDelete() {
     const ok = await confirmDialog({
       title: '批量删除确认',
-      message: `确定删除选中的 ${selectedIds.value.length} 道错题吗？删除后不可恢复。`,
+      // 不说"不可恢复"：删之前后端会打一份整库快照，「数据备份」页能回滚；
+      // 但快照不含图片文件，配图删了就是真没了，这句必须留在确认框里。
+      message: `确定删除选中的 ${selectedIds.value.length} 道错题吗？数据可整库回滚（「数据备份」页），配图文件会一并删除且回滚找不回来。`,
       danger: true,
       confirmText: '删除',
     })

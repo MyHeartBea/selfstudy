@@ -3,7 +3,9 @@
 import logging
 import re
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import List, Optional
 
 from app.config import settings
@@ -97,6 +99,17 @@ def snapshot_database(label: str = "") -> Optional[str]:
         return None
 
 
+def snapshot_label(name: str) -> str:
+    """从快照文件名里取出来源标记（`before-import` / `manual` / …）。
+
+    启动自动备份没有标记，返回空串 —— 前端要把它显示成"启动自动备份"，
+    不能显示成一个空白格（空白看起来像数据坏了）。
+    """
+    stem = re.sub(r"^kaoyan_mistakes_|\.db$", "", str(name or ""))
+    parts = stem.split("_", 2)
+    return parts[2] if len(parts) > 2 else ""
+
+
 def list_snapshots(limit: int = 20) -> List[dict]:
     """列出最近的快照（供前端"数据安全"面板展示）。"""
     if not settings.BACKUP_DIR.exists():
@@ -109,11 +122,124 @@ def list_snapshots(limit: int = 20) -> List[dict]:
     return [
         {
             "name": p.name,
+            "label": snapshot_label(p.name),
             "size_kb": round(p.stat().st_size / 1024, 1),
             "created_at": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
         }
         for p in files
     ]
+
+
+# 快照文件名由本模块自己生成，回滚时按这个名字反向校验 —— 一个能整库覆盖当前数据的
+# 入口如果接受任意字符串，就等于把 BACKUP_DIR 变成了"读哪个文件都行"的口子。
+SNAPSHOT_NAME_RE = re.compile(r"^kaoyan_mistakes_\d{8}_\d{6}(?:_[A-Za-z0-9_\-]{1,40})?\.db$")
+
+# 回滚后给页面用来"数一数对不对得上"的表：都是各页面的主数据来源，
+# 数量对不对是判断"这份快照是不是我要的那一次"最直接的证据。
+SNAPSHOT_TABLES = ("mistakes", "review_records", "knowledge_base", "vocab_items", "exam_papers")
+
+# 整库覆盖是全站唯一"一步毁掉当前现场"的操作。连接虽是每个请求现开，但真题后台
+# 拆题在本进程里长期写库，所以要在进程内串行；单用户场景不需要跨进程锁。
+_restore_lock = threading.Lock()
+
+
+def _snapshot_path(name: str) -> Path:
+    """把快照文件名换成一个确定落在 BACKUP_DIR 里的路径。"""
+    if not SNAPSHOT_NAME_RE.match(str(name or "")):
+        raise ValueError("快照文件名不合法")
+    path = (settings.BACKUP_DIR / name).resolve()
+    if path.parent != settings.BACKUP_DIR.resolve():
+        raise ValueError("快照路径越出了备份目录")
+    return path
+
+
+def _table_counts(conn: sqlite3.Connection) -> dict:
+    """各主表的行数；老快照里可能还没有某张表，那种记成 None 而不是 0。"""
+    counts = {}
+    for table in SNAPSHOT_TABLES:
+        try:
+            counts[table] = conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
+        except sqlite3.Error:
+            counts[table] = None
+    return counts
+
+
+def restore_snapshot(name: str) -> dict:
+    """把数据库整库回滚到某一份快照（**就地覆盖当前库**，不替换文件）。
+
+    为什么就地覆盖而不是 `os.replace`：换文件时，本进程里长期持有的连接（后台拆题
+    流水线）会继续写在已被换掉的那个句柄上，表现为"回滚完过了一会儿又变回去"。
+    SQLite 的 backup API 在目标库上是一个事务，别的连接要么看到旧数据要么看到新数据，
+    不会看到半份。
+
+    顺序刻意如此：先验快照可用，再给"当前现场"打反悔快照，反悔快照打不出来就中止。
+    任何一步失败都抛异常给调用方转成明确响应 —— 这条路径不许静默。
+
+    注意：**快照只含数据库，不含图片文件**，回滚不会（也回不了）任何配图。
+    """
+    path = _snapshot_path(name)
+    if not path.exists():
+        raise FileNotFoundError(f"找不到快照：{name}")
+
+    with _restore_lock:
+        # 1. 先验快照读得开、且确实是本系统的库（截断过的 / 手工放进去的不算少见）。
+        #    验完**立刻关句柄**：Windows 上被打开的文件删不掉，而下一步的清理正好可能
+        #    要删它（实测 WinError 32），到时错误信息会指向"反悔点失败"这种误导结论。
+        source = sqlite3.connect(path)
+        source.row_factory = sqlite3.Row
+        try:
+            if source.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                raise RuntimeError("快照文件不完整（quick_check 未通过），已中止")
+            if not source.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='mistakes'"
+            ).fetchone():
+                raise RuntimeError("快照里没有 mistakes 表，不是本系统的数据库备份")
+        finally:
+            source.close()
+
+        # 2. 先给当前现场留一份，才允许覆盖
+        guard = snapshot_database("before-restore")
+        if not guard:
+            raise RuntimeError("回滚前的现场快照失败，已中止（没有反悔点就不能覆盖当前库）")
+
+        # snapshot_database() 会按 MAX_BACKUPS 清掉最旧的一份 —— 若用户挑的正好是
+        # 最旧那一份，它此刻已经不存在了。少了这道复查，下面的 connect 会**凭空建一个
+        # 空库**并把当前数据覆盖成空白（一次静默的全库清空，本项目最不能容忍的那种）。
+        if not path.exists():
+            raise RuntimeError("该快照在留下回滚点时被保留份数限制清理掉了，请选较新的一份快照")
+
+        before_conn = get_connection()
+        try:
+            before = _table_counts(before_conn)
+        finally:
+            before_conn.close()
+
+        # 3. 就地覆盖当前库
+        source = sqlite3.connect(path)
+        source.row_factory = sqlite3.Row
+        try:
+            target = get_connection()
+            try:
+                with target:
+                    source.backup(target)
+                # 4. 快照可能比当前代码旧（少表少列）。补一遍幂等 DDL 与迁移，
+                #    否则回滚到 v8 那份会让 /papers 一类页面打到 500，且要重启才自愈。
+                target.executescript(TABLES_DDL)
+                migrate_database(target)
+                target.commit()
+                after = _table_counts(target)
+            finally:
+                target.close()
+        finally:
+            source.close()
+
+    logger.warning("数据库已回滚到快照 %s（回滚前的现场另存为 %s）", name, guard)
+    return {
+        "name": name,
+        "safety_snapshot": guard,
+        "tables_before": before,
+        "tables_after": after,
+    }
 
 
 def init_database() -> None:

@@ -32,9 +32,9 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（240 个）
-cd frontend && npm test                                  # Vitest 118 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
-cd frontend && npm run test:e2e                          # Playwright 45 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（251 个）
+cd frontend && npm test                                  # Vitest 129 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd frontend && npm run test:e2e                          # Playwright 51 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
 cd backend && ruff check app tests && ruff format --check app tests
@@ -88,7 +88,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > `frontend_lint.mjs`，用 Node 包装避免 Windows 上找不到 `bash`）。
 > **改完前端必须跑 `npm run build`**：Vue 模板编译错误只有 build 抓得到（lint 和单测都会放过，
 > 曾因此把两处多语句内联 `@click` 改坏）。CI 覆盖率门槛 55%，**按 CI 口径**（`coverage run -m unittest
-> discover -s tests`，含 tests 目录）当前约 71%；加 `--source=app` 会是约 59%，两个口径别混着报。
+> discover -s tests`，含 tests 目录）当前约 73%；加 `--source=app` 会是约 59%，两个口径别混着报。
 
 ## 3. 提交与数据规范（务必遵守）
 - 每次完成代码 / 数据 / 文档修改并**验证通过**后：`git add -A && git commit -m "简短说明" && git push`
@@ -96,13 +96,24 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - 若 push 报代理（`127.0.0.1:7897`）不可达：`git -c http.proxy= -c https.proxy= push -u origin main`（本机直连 github 是通的）。
 - `.env`、数据库、`node_modules`、`dist`、日志一律**不入库**。
 - **数据路径禁止静默失败**（出错照样 200、页面照样渲染、只有数据悄悄变坏的一律算 bug）：
-  - 快照 / 备份失败不许继续宣称"可回滚"——`snapshot_database()` 返回 None 时写 ERROR 日志，调用方把降级写进响应 `message`（批量删除 / 导入已接）；
+  - 快照 / 备份失败不许继续宣称"可回滚"——`snapshot_database()` 返回 None 时写 ERROR 日志，调用方把降级写进响应 `message`（批量删除 / 导入已接，前端 `useBulkActions` **必须把这条 message 渲染成 warning toast**，写死"批量操作完成"就等于把降级藏起来）；
+- **整库回滚只有一个入口：`database.restore_snapshot()`**（`POST /api/snapshots/restore` + `/snapshots` 页）。
+  四条不可移动的桩：① 只接受 `SNAPSHOT_NAME_RE` 且解析后仍在 `BACKUP_DIR` 内的文件名；② 覆盖前必须先给当前现场
+  打 `before-restore`，**打不出来就中止**（没有反悔点不动手）；③ 打反悔点会按 `MAX_BACKUPS` 清最旧一份，所以清完
+  必须**复查目标还在** —— 少了这一步，`sqlite3.connect()` 会凭空建一个空库并把当前数据覆盖成空白；
+  ④ 覆盖后重跑 `TABLES_DDL` + `migrate_database()`，否则回到 v8 那份会让 `/papers` 打到 500。
+  验快照用的连接句柄**要在打反悔点之前关掉**（Windows 上打开的文件删不掉，会报成"反悔点失败"这种误导结论）。
+  回滚**不含图片文件**，页面和响应都要明说。
   - 已花掉 AI 调用的结果不许因为一次 INSERT 失败变成 500——`/api/essays/grade` 返回 200 + `persisted:false` + `persist_error`，前端 toast 明说"未存档"；
   - 删行必须连带删文件：`batch_mistakes(action='delete')` 先取回 `images` 再删，事后 `remove_image_files()`。巡检跑 `python scripts/clean_orphan_images.py`（默认 dry-run；孤儿文件的内容仍能通过 `/images/<name>` 访问，这是隐私问题不是磁盘问题）。
 - **PUT /api/mistakes 的"附加内容"键有特殊语义**：`images` 与 `passage_text / passage_translation / english_*`（见 `mistake_service.ATTACHMENT_KEYS`）**压根不带键**时服务层按库里原值回填，显式提交 `""` / `[]` 才是清空——这几列是 AI 整篇精读的唯一副本，被一个只含基础字段的表单覆盖就再也生成不回来。Pydantic 侧靠 `body.model_fields_set` 区分，新增字段时要一起维护那张名单。
-- **全站"按关键词 LIKE"只有一个口径：`search_service.like_pattern()` + `ESCAPE ''`**：`%`/`_` 是用户
+- **全站"按关键词 LIKE"只有一个口径：`search_service.like_pattern()` + `ESCAPE '\'`**：`%`/`_` 是用户
   内容而不是查询语法（搜 `50%` 命中一切含 5 的东西就是静默给错数据）。新增可搜字段要复用它，别自己
   拼 `f"%{q}%"`；跨实体搜索也只改 `search_service.search_all`（响应形状已按"分组 + 每组 total"钉好）。
+  命令面板的作用域 chips 是**对已取回的结果做本地过滤**（`commandPalette.visibleItems/visibleSections`
+  里按 `scope` 挑组，不重新请求），所以"某组一条都没展示"只能是**这一组真的 0 命中**；
+  新增过滤入口要复用这两个函数，别在组件里自己 `groups.filter(...)`（键盘 `activeIndex` 走的是
+  **摊平后的一维下标**，两边各滤一次就会指错行）。
 - **图片引用判定只有一个口径：`integrity_service`**（`GET /api/system/integrity` 与
   `scripts/clean_orphan_images.py` 都 import 它，脚本不再自带一套规则）。**库里新增带图片的列必须登记进
   `IMAGE_REF_SOURCES`**，否则那些图会被判成孤儿、`--apply` 就真删掉（真题图示题当初就是这么差点被误删）。
@@ -290,6 +301,11 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - ⚠️ `knowledge_service` 里**不能顶层** `from app.database import mistake_to_dict`：`database.py` 反过来要 import 本模块的 `canonical_tags`，会循环导入。用局部导入（见 `_mistake_to_dict`）。
 - **数据体检页（只读）**：`/integrity`（不进 Dock，命令面板 Ctrl+K「数据体检」可达）显示"没人引用的文件"与
   "记录指向的图不见了"两张清单，**页面上没有任何删除入口**；判定与巡检脚本同源（见第 3 节）。
+- **数据备份与回滚页**：`/snapshots`（同样不进 Dock，Ctrl+K「数据备份与回滚」可达）列最近快照
+  （时间 / 来源标记翻人话 / 大小），可「立刻备份一次」与**整库回滚到某一份**。回滚要手输 `RESTORE`
+  才发请求（服务端另有 `confirm === name` 那道），覆盖前会先留 `before-restore` 反悔点并把
+  前后各表条数留在页面上；图片文件不在快照内这句话在确认框、结果卡、页面副标题各出现一次。
+  口径与红线见第 3 节"整库回滚只有一个入口"。
 - **全站搜索 / 命令面板**：`GET /api/search?q=&limit=`（`search_service`）一次问错题/知识点/公式/生词/作文，
   空组不返回；`Ctrl+K` 面板的作用域 chips 是**对已取回结果做本地过滤**（不重新请求），
   列表一维（键盘）+ 分组渲染（`visibleSections()` 带扁平下标），落地页统一吃 `?search=`、知识点走 `?tag=`。
@@ -320,6 +336,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 240、前端 Vitest 118、E2E 45**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 71%（门槛 55%）。
+- 测试基线：**后端 251、前端 Vitest 129、E2E 51**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 73%（门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

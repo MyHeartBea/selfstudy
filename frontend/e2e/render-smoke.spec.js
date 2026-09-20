@@ -24,6 +24,8 @@ const ROUTES = [
   { path: '/essays', marker: /作文/ },
   // 只读巡检页（不在 Dock 里，直链/命令面板进入）：漏打桩会让它显示成"没查到"
   { path: '/integrity', marker: /数据体检/ },
+  // 整库回滚页同上，且它一进来就要拉快照列表 —— 漏打桩会渲染成"还没有任何快照"
+  { path: '/snapshots', marker: /数据备份与回滚/ },
 ]
 
 for (const route of ROUTES) {
