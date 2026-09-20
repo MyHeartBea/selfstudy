@@ -492,7 +492,7 @@ Vitest **111**（+8 commandPalette、+5 relatedPractice）；E2E **43**（+2 com
    另有一次自伤：`ruff format` 的路径写成仓库根，顺手把 14 个无关脚本格式化了 —— 已退回，
    以后格式化只写 `app tests` 两个目录名。
 
-## 2026-09-20 · 全栈体检第 7 批：N11 快照/回滚做真（`待补哈希`）
+## 2026-09-20 · 全栈体检第 7 批：N11 快照/回滚做真（`755389d`）
 
 **为什么要做**：`GET|POST /api/snapshots` 从第一批起就在，批量删除/导入前也确实打了快照，响应文案
 还写着"可回滚"——但**全站没有任何一个入口能把这份快照用回去**。那句话的真实含义是
@@ -544,7 +544,18 @@ E2E 只补单测结构上看不见的两段：`@keyup.enter` 提交与 `Esc` 取
 现在写的"删除后不可恢复"因此还是准确的；要不要给单题删除也留反悔点，等一次真实误删再定，
 这一批不动它以免把"每次删除都多一份快照"变成默认成本。
 
-## 2026-09-20 · C 盘腾挪 + 每日清理脚本加固（顺带修好 Agent 的 Bash 工具，`待补哈希`）
+**补交（同一批的漏网）**：`/snapshots` 的路由名漏登记进 `NAV_ORDER`，
+后果不是报错而是**换页方向永远算成"往前翻"**（`navIndexOf()` 对未知名字返回数组长度，两页都是
+最大编号）。而这条链子上一批已经翻过一次同型事故——第一版 `NAV_ORDER` 写的是 `home / mistakes /
+papers` 这类根本不存在的路由名，注释里留着教训，却没有一道断言把"表里的名字必须真的存在"钉住。
+这次补上：登记 `data-snapshots`，并加 `tests/routerOrder.test.js`（4 条，双向：表里没有假名字、
+每个有名字的页面都在表里、名字不重复、维护页排在日常页之后、未知名字仍排最后）。Vitest 129 -> **133**。
+另外 push 连红三轮的根因记进 AGENTS 第 3 节：本机 git 装在 `~\.qoder-cn\bin\git\` 下，找不到自己的
+system config，`~\.gitconfig` 里只剩 `credential.helperselector.selected=manager` 而没有
+`credential.helper=manager`，等于凭据 helper 从没被注册；**不改全局配置**，push 时内联
+`-c credential.helper=manager` 就通（`32aa8c5..755389d`）。
+
+## 2026-09-20 · C 盘腾挪 + 每日清理脚本加固（顺带修好 Agent 的 Bash 工具，`755389d`）
 
 **清理脚本在偷偷吃有用的东西**，这是本次最值钱的一条：`D:\dsh-home\scripts\daily-cleanup.ps1`
 按"目录 mtime 超期就整棵删"来清 `D:\temp`，而 **npm/pip 这类缓存的 mtime 会被读操作刷新**，

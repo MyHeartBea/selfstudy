@@ -143,6 +143,7 @@ export const NAV_ORDER = [
   'practice',
   'subject-guide',
   'data-integrity',
+  'data-snapshots',
   'design-gallery',
   'mistake-edit',
 ]
