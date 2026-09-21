@@ -389,11 +389,16 @@ def analyze_english(
                     {"role": "system", "content": _parse_english_vocab_prompt()},
                     {"role": "user", "content": passage_text},
                 ],
-                max_tokens=8000,
+                # 预算必须给足：`max_tokens` 会让 `_chat` 乘 1.5 倍推理余量，
+                # 而这一步的推理实测要吃掉约 10000-11500 tokens。原来给 8000（预算 12000）
+                # 正文没预算可用 → 截断 → 翻倍重试（实测 96.2s）。给到 20000 后
+                # 不再重试，**96.2s -> 43.1s，内容不减**。
+                # 预算给足比"截断后翻倍重试"更省：重试要先白烧一轮再按双倍预算重跑。
+                max_tokens=20000,
                 timeout=_remaining(),
-                # 词汇/短语抽提是"按 schema 抽取"，推理不产生价值：
-                # 实测关推理后输出质量一致，而输出 token 降到约 1/6（推理本来就占 46-81%）。
-                thinking=False,
+                # **推理保持开启**：曾按"按 schema 抽取属机械任务"关掉推理，实测
+                # 短语 25-35 -> 13-16、生词 42-44 -> 22（**掉一半**），违反第 5 节
+                # "内容不能减少"。这一步要判"哪些词对考研读者值得记"，是判断而非转录。
             )
         except Exception:
             return {}
@@ -466,7 +471,9 @@ def analyze_english(
                         ),
                     },
                 ],
-                max_tokens=3000,
+                # 同样要给足：原来 3000（预算 4500）而日志实测「推理 3801 tokens，
+                # 预算 4500 → 翻倍重试」。给到 6000（预算 9000）即可容纳推理 + 解析。
+                max_tokens=6000,
                 timeout=_remaining(),
             )
         except Exception:
@@ -486,7 +493,7 @@ def analyze_english(
                 {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
                 {"role": "user", "content": user_req},
             ],
-            max_tokens=6000,
+            max_tokens=12000,
             timeout=_remaining(),
         )
         nested = [q for q in (qa.get("questions") or []) if isinstance(q, dict)]
