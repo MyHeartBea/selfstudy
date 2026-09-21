@@ -90,6 +90,8 @@ def _chat(
         truncated=bool(meta.get("truncated")),
         reasoning_tokens=int(meta.get("reasoning_tokens") or 0),
         completion_tokens=int(meta.get("completion_tokens") or 0),
+        prompt_tokens=int(meta.get("prompt_tokens") or 0),
+        cache_hit_tokens=int(meta.get("cache_hit_tokens") or 0),
         error=""
         if not empty
         else f"输出为空（finish_reason={meta.get('finish_reason') or '未知'}）",
@@ -177,6 +179,10 @@ def _chat_request(
                 (usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0
             ),
             "completion_tokens": int(usage.get("completion_tokens") or 0),
+            # 前缀缓存：命中部分约 1/10 价。记下来才能在 /api/health 看到命中率，
+            # 否则"缓存有没有生效"只能靠猜。
+            "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+            "cache_hit_tokens": int(usage.get("prompt_cache_hit_tokens") or 0),
             "has_reasoning": bool(message.get("reasoning_content")),
             "requested_max_tokens": budget,
             "truncated": False,

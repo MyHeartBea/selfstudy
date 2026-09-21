@@ -78,6 +78,8 @@ def record_ai(
     truncated: bool = False,
     reasoning_tokens: int = 0,
     completion_tokens: int = 0,
+    prompt_tokens: int = 0,
+    cache_hit_tokens: int = 0,
     error: str = "",
 ) -> None:
     """记录一次 AI 调用（**失败也要记**，这是本函数的全部意义）。
@@ -86,6 +88,10 @@ def record_ai(
     只有按通道各记一笔，`/api/health` 才能显示"识图首选通道其实在连续报错、
     每次都在偷偷走兜底"。耗时口径覆盖 `_chat` 内部的重试与预算翻倍，
     即"这个通道交付一次结果要多久"。
+
+    `prompt_tokens` / `cache_hit_tokens`：DeepSeek 的**自动前缀缓存**，命中部分约 1/10 价。
+    不记这两个数就只能靠猜"缓存到底有没有生效"（实测过：同一前缀连发，第 2 次才命中，
+    而此前生产遥测里完全没有这个口径）。`cache_hit_pct` 因此是可观测的成本指标。
     """
     key = f"{model or '(默认模型)'} @ {_host_of(base_url)}"
     with _LOCK:
@@ -99,6 +105,8 @@ def record_ai(
                 "max_ms": 0.0,
                 "reasoning_tokens": 0,
                 "completion_tokens": 0,
+                "prompt_tokens": 0,
+                "cache_hit_tokens": 0,
                 "last_error": "",
                 "last_error_at": "",
                 "last_at": "",
@@ -109,6 +117,8 @@ def record_ai(
         item["max_ms"] = max(item["max_ms"], duration_ms)
         item["reasoning_tokens"] += int(reasoning_tokens or 0)
         item["completion_tokens"] += int(completion_tokens or 0)
+        item["prompt_tokens"] += int(prompt_tokens or 0)
+        item["cache_hit_tokens"] += int(cache_hit_tokens or 0)
         item["last_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
         if truncated:
             item["truncated"] += 1
@@ -187,6 +197,15 @@ def snapshot(top: int = 5) -> dict:
                     # 推理 token 均值：deepseek-flash 是推理模型，这个数暴涨说明
                     # max_tokens 预算正被 reasoning 吃掉（见 ai_service 的余量注释）
                     "reasoning_avg": round(v["reasoning_tokens"] / v["calls"]) if v["calls"] else 0,
+                    # 前缀缓存命中率：命中部分约 1/10 价，所以这是**成本指标的可见性**
+                    # （以前完全没有这个口径，只能猜缓存有没有生效）
+                    "prompt_avg": round(v["prompt_tokens"] / v["calls"]) if v["calls"] else 0,
+                    "cache_hit_avg": round(v["cache_hit_tokens"] / v["calls"]) if v["calls"] else 0,
+                    "cache_hit_pct": (
+                        round(100 * v["cache_hit_tokens"] / v["prompt_tokens"])
+                        if v["prompt_tokens"]
+                        else 0
+                    ),
                     "last_error": v["last_error"],
                     "last_error_at": v["last_error_at"],
                     "last_at": v["last_at"],

@@ -242,3 +242,41 @@ class RouterDegradeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CacheHitMetricsTest(unittest.TestCase):
+    """前缀缓存命中的可见性：命中部分约 1/10 价，所以命中率必须能从 /api/health 读出来。
+
+    背景：DeepSeek 的自动前缀缓存实测**确实在工作**（应用真实流程里逐题调用的命中量
+    从 128 递增到 384，整体命中率 50%），但此前 `metrics` 里**完全没有这个口径** ——
+    于是"缓存有没有生效"只能靠猜。这组用例把三个数的口径钉住。
+    """
+
+    def setUp(self):
+        metrics.reset()
+
+    def test_accumulates_prompt_and_cache_tokens(self):
+        metrics.record_ai(
+            "m", "https://api.deepseek.com/v1", 100.0, prompt_tokens=1000, cache_hit_tokens=400
+        )
+        metrics.record_ai(
+            "m", "https://api.deepseek.com/v1", 100.0, prompt_tokens=1000, cache_hit_tokens=600
+        )
+        ch = metrics.snapshot()["ai"]["by_model"][0]
+        self.assertEqual(ch["prompt_avg"], 1000)
+        self.assertEqual(ch["cache_hit_avg"], 500)
+        self.assertEqual(ch["cache_hit_pct"], 50)
+
+    def test_zero_prompt_tokens_does_not_divide_by_zero(self):
+        metrics.record_ai("m", "https://api.deepseek.com/v1", 10.0)
+        ch = metrics.snapshot()["ai"]["by_model"][0]
+        self.assertEqual(ch["cache_hit_pct"], 0)
+        self.assertEqual(ch["prompt_avg"], 0)
+
+    def test_missing_usage_fields_default_to_zero(self):
+        """上游没回 usage 时不能炸，也不能把缺字段算成命中。"""
+        metrics.record_ai(
+            "m", "https://api.deepseek.com/v1", 10.0, prompt_tokens=None, cache_hit_tokens=None
+        )
+        ch = metrics.snapshot()["ai"]["by_model"][0]
+        self.assertEqual(ch["cache_hit_avg"], 0)

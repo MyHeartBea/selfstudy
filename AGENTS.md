@@ -197,6 +197,21 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
      **11514 个推理 token 吃光 12000 预算、正文一个字都没产出**（截断重试），
      所以关推理不只是提速，是修掉一个真实故障。`tests/test_ai_reasoning_budget.py`
      的 `MechanicalThinkingOffTest` 把"必须真的下发 disabled"与"不许再乘余量"钉住。
+   - **逐题解析（`_qa_task`）实测过"关推理"并**否决**，不要再试**：同一题 A/B
+     （`thinking` 开 vs 关，其余完全相同）—— 结构上两者都有【定位/来源/思路/总结】、
+     答案都对，但**关推理那版在【定位】里引用了一句原文里根本不存在的话**
+     （"Today, because of technological change, the economic downturn has highlighted
+     the threat of machines to human jobs."），【思路】的排除理由也建立在这句编造的原文上。
+     解析长度 `730 → 443 字`。**编造原文引用比"变短"严重得多**（学生会以为原文有那句），
+     这正是第 5 节"内容不能减少"要防的东西。**判据不能只看"结构齐不齐、答案对不对"**。
+   - **前缀缓存是可观测成本指标，别靠猜**：DeepSeek 自动前缀缓存（命中部分约 1/10 价）
+     **一直在工作** —— 实测应用真实流程：逐题调用共享的 system prompt 命中量递增
+     `128 → 256 → 384`，整体 **合计输入 2812 token、命中 1408（50%）**。
+     消息结构"静态放 system、可变放 user"本来就是缓存友好的，**不需要改造**。
+     此前的误判来自自己拼的原始 API 测试（不是应用遥测）。
+     `/api/health` 的 `ai.by_model` 现在有 `prompt_avg` / `cache_hit_avg` / `cache_hit_pct`
+     （`CacheHitMetricsTest` 钉住口径）。**真正的成本大头是输出（推理），不是输入**：
+     同一轮实测输入共 2812 token，而两步分析调用就产出 4560 + 3663 = 8223 个推理 token。
 5. **英语整篇 = 一条错题**：存一条错题（含 `english_questions` 全部题目，每题带 `wrong` 标记；错的题自动打「答题失误」标签 + 思路前缀）；详情用 `EnglishAnalysisPanel`（readonly）展示整篇；词汇只在智能录入显示，保存后只在生词本。
 6. **多图全存**：长题多张截图**全部**保存到 `images`；错题列表卡片**只显示第 1 张**，点进详情显示全部。
 7. **表格 / 图**：`RichText` 支持 Markdown 表格 + 十六进制等宽 `hex-dump`；AI 只会识别图不会重绘，正确表格 / 拓扑图看**原图**。
