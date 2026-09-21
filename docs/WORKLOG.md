@@ -579,3 +579,54 @@ system config，`~\.gitconfig` 里只剩 `credential.helperselector.selected=man
 且每次调用末尾都会因写 cwd 文件失败而**多报一个假的 Exit code 1** —— 所以本仓库的验证命令一律
 以 `MARKER_*_DONE` 标记 + 输出文本为准，不看退出码。
 
+## 2026-09-21 · 英语链路降本提速批（机械步骤关推理，`thinking=False`）
+
+**用户诉求**：英语仍会超时（前端 `timeout of 300000ms exceeded`），又慢又贵，问能否**在输出质量不变的前提下**降本提速。
+
+**先测，不猜**。读 `/api/health` 的 AI 遥测拿到事实：**9 次调用 5 次失败（56%）**、
+`avg_ms 45750.7`、`max_ms 187506.3`、`reasoning_avg 2442`、**`truncated 0`**、
+最后错误全是 `The read operation timed out`。→ 不是预算被吃，是**单次调用太慢**。
+
+**受控实验逐个排除候选方案**：
+1. **换模型？否。** `/v1/models` 只有 `deepseek-flash` 与 `deepseek-v4-pro`；实测同一张图
+   用 `v4-pro` 返回"当前图片显示为 Unsupported Image"（输入 token 只有 107 = **图根本没进去**），
+   `v4-pro` **不支持视觉**。识图必须留在 `deepseek-flash`。
+2. **关推理？可以，且该端点支持。** 逐个试参数：`reasoning_effort=none` 与
+   `thinking={"type":"disabled"}` **都真的生效**（推理 token 归零、输出 188→19）；
+   而 `enable_thinking=false` / `chat_template_kwargs` / `temperature` **被静默忽略**
+   （推理 token 不变）。**必须看输出内容**才能判断是不是"静默降质"——两组完整输出打印出来对比，
+   **内容一字不差**（第②组理由措辞略异，结论与解释都正确）。
+3. **上下文缓存**：同一前缀连发三次，第 2、3 次命中 **128 token（32%）** —— 缓存机制可用，
+   但遥测里一直是 0；留作后续（把稳定内容前置到 system、可变内容放 user）。
+
+**改动**（只动机械步骤，分析步骤保持开推理）：
+- `ai_service._chat_request` 新增 `thinking: bool = True`：为假时下发
+  `thinking: {"type": "disabled"}`，并**同时取消 1.5 倍推理余量**
+  （没有推理却放大 `max_tokens` 等于按更大的上限定预算，而且以前推理吃掉一半、
+  正文反而更少）。`_chat` 透传，`_chat_json` 走 `**kwargs` 自动跟随。
+- `ai_english` 三处 `thinking=False`：**识图提字**（原样转录）、**题目清单**（指令本身就是
+  "照抄、禁止改写"）、**词汇短语抽提**（按 schema 抽取）。阅读解析与逐题解析**保持开推理**。
+
+**实测（真实函数 A/B）**：
+- 识图：`14.3s / 推理 3167 / 输出 3297 / 正文 210 字` → `0.9s / 推理 0 / 输出 131 / 正文 229 字`
+  （**快 16 倍、输出 token 省 25 倍，转录字数还更多** —— 以前推理吃掉约 12000 预算）。
+- 完整英语精读（原文 729 字 + 2 题）：`104.8s` → `38.8s`（**快 2.7 倍**），
+  其中词汇那一步 `83.3s` → `6.0s`（**快 14 倍**）。
+  那 83 秒的日志原话是：`AI 输出被截断（finish_reason=length，推理 11514 tokens，预算 12000）→ 翻倍重试`
+  —— **11514 个推理 token 吃光预算、正文零字**，所以关推理不只是提速，是修掉一个真实故障。
+- 产出完整性（用正确键名 `passage_text/english_*`）：729 字原文 / 245 字译文 /
+  **8 句**拆解（含 structure+pattern）/ **12 条**短语 / **18 条**生词 / 2 题解析 —— **内容不减**。
+
+**测试**：`tests/test_ai_multi_image.py` 的假 `_chat` 补 `thinking` 形参（接口合法变更）；
+`tests/test_ai_reasoning_budget.py` 新增 `MechanicalThinkingOffTest` 3 条断言钉住优化
+（必须真的下发 `disabled`、**不许**再乘余量、默认路径行为不变）。后端 **254** 全绿（251+3）、
+ruff check/format 干净。
+
+**踩坑（自查记下）**：第一版端到端测量**读错了键名**（读 `sentences` 而实际是 `english_sentences`），
+差点把"产出为空"当成我改动导致的回归上报。**看产出前先确认键名**（`normalize_english_parsed`
+输出的是 `passage_text / english_sentences / english_phrases / english_words / english_questions`）。
+
+**明确没做**：逐题解析（`_qa_task`）**保持开推理** —— 它要写「定位/来源/思路/总结」，属于分析任务，
+A/B 已验证的收益只覆盖机械步骤；要不要把这步也关掉，等一次能对比解析质量的实测再定。
+
+

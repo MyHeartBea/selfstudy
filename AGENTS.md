@@ -186,6 +186,17 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
    - ⚠️ **`deepseek-flash` 是推理模型**：它先产出 `reasoning_content` 再产出正文。若 `max_tokens` 只按"正文长度"估算，预算会被推理吃光 → `finish_reason=length` 且 `content` 为空（实测拆题调用 12000 预算里有 11998 是 `reasoning_tokens`、正文 0 字，导致整份试卷导入失败并报出误导性的"AI 返回内容为空"）。
    - 处理方式：`_json_chat_budget()` 给首轮加 1.5 倍余量；`_chat_json` 识别 `finish_reason=length` 后**翻倍预算重试**（上限 `MAX_TOKENS_CEILING`）。`_chat(..., with_meta=True)` 返回 `(content, meta)`，`meta` 含 `finish_reason` / `reasoning_tokens`，排查空返回先看它。
    - 新增 AI 调用时**不要**把 `max_tokens` 当成"正文长度"来设。
+   - **机械性任务必须关推理（`thinking=False`）**：`_chat(..., thinking=False)` 会下发
+     `thinking: {"type": "disabled"}`（该端点实测支持）并**同时取消 1.5 倍推理余量**
+     （没有推理就不该按更大的上限定预算）。适用：**照抄转录 / 按固定 schema 抽取**——
+     典型的四步是识图提字、题目清单、词汇短语抽提、（可选）逐题抽取；
+     **分析类任务保持默认（开推理）**：阅读/翻译/逐句拆解、逐题解析（定位/思路/总结）。
+     实测收益（同任务 A/B，项目真实函数）：识图 `14.3s/推理3167/输出3297` →
+     `0.9s/推理0/输出131`（**快 16 倍、输出 token 省 25 倍，转录字数还更多**）；
+     完整英语精读 `104.8s` → `38.8s`，其中词汇那一步 `83.3s` → `6.0s`——那 83 秒里
+     **11514 个推理 token 吃光 12000 预算、正文一个字都没产出**（截断重试），
+     所以关推理不只是提速，是修掉一个真实故障。`tests/test_ai_reasoning_budget.py`
+     的 `MechanicalThinkingOffTest` 把"必须真的下发 disabled"与"不许再乘余量"钉住。
 5. **英语整篇 = 一条错题**：存一条错题（含 `english_questions` 全部题目，每题带 `wrong` 标记；错的题自动打「答题失误」标签 + 思路前缀）；详情用 `EnglishAnalysisPanel`（readonly）展示整篇；词汇只在智能录入显示，保存后只在生词本。
 6. **多图全存**：长题多张截图**全部**保存到 `images`；错题列表卡片**只显示第 1 张**，点进详情显示全部。
 7. **表格 / 图**：`RichText` 支持 Markdown 表格 + 十六进制等宽 `hex-dump`；AI 只会识别图不会重绘，正确表格 / 拓扑图看**原图**。

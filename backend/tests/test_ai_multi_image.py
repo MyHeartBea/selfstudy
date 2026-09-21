@@ -31,6 +31,7 @@ def fake_chat_factory(calls, vision_texts=None):
         max_tokens=None,
         timeout=None,
         with_meta=False,
+        thinking=True,
     ):
         content = messages[0]["content"]
         if isinstance(content, list):

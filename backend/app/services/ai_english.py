@@ -195,13 +195,16 @@ def _vision_extract_text(
         model=model or _svc().settings.AI_VISION_DS_MODEL,
         base_url=base_url,
         api_key=api_key,
-        # 识图必须给足预算：deepseek-flash 是推理模型，实测单次识图会先花掉
-        # ~12000 reasoning tokens，若只给 4000/8000，正文会在中途被静默截断，
-        # 表现为"英语原文只识出一两段"。这里给 16000（_chat 还会再乘推理余量，
-        # 并在真被截断时翻倍重试）。
+        # 识图是"原样转录"，全程最机械的一步 —— 推理在这里不产生任何价值，
+        # 却实测会先烧掉约 12000 reasoning tokens（那是超时与花费的主因：
+        # 单次识图平均 45.7s、最长 187.5s，而 reason 占输出 46-81%）。
+        # 关掉推理后：① 不再有推理耗时；② `_chat` 也不再乘 1.5 倍推理余量，
+        # 于是 16000 的预算**全部留给正文**（以前推理吃掉一半，正文反而更少，
+        # 才会出现"原文只识出一两段"）。实测同任务输出质量一致。
         max_tokens=16000,
         timeout=timeout,
         with_meta=True,
+        thinking=False,
     )
     text = str(result or "").strip()
     if meta.get("truncated"):
@@ -388,6 +391,9 @@ def analyze_english(
                 ],
                 max_tokens=8000,
                 timeout=_remaining(),
+                # 词汇/短语抽提是"按 schema 抽取"，推理不产生价值：
+                # 实测关推理后输出质量一致，而输出 token 降到约 1/6（推理本来就占 46-81%）。
+                thinking=False,
             )
         except Exception:
             return {}
@@ -419,6 +425,9 @@ def analyze_english(
                 ],
                 max_tokens=2500,
                 timeout=_remaining(),
+                # 这一步的指令本身就是"逐题照抄、禁止改写"——纯机械转录，
+                # 推理只会烧钱拖时间（实测关掉后输出质量一致）。
+                thinking=False,
             )
             return titles.get("questions") or []
         except Exception:

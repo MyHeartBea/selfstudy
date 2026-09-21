@@ -44,6 +44,7 @@ def _chat(
     response_format: dict | None = None,
     max_tokens: int | None = None,
     with_meta: bool = False,
+    thinking: bool = True,
 ):
     """调用对话补全。默认返回纯文本；with_meta=True 时返回 (文本, 元信息)。
 
@@ -51,6 +52,8 @@ def _chat(
     都记），供 `/api/health` 的 `metrics.ai` 使用。放在这一层而不是 `_post_chat`，
     是因为统计口径要等于"这个通道交付一份结果花了多久"（含内部的重试与翻倍）。
     空正文也按失败计 —— 它正是 `deepseek-flash` 推理吃光预算后的可见症状。
+
+    `thinking=False` 见 `_chat_request`：只给机械性任务（照抄/抽取）用。
     """
     model_name = model or settings.AI_MODEL
     endpoint = base_url or settings.AI_BASE_URL
@@ -64,6 +67,7 @@ def _chat(
             api_key=api_key,
             response_format=response_format,
             max_tokens=max_tokens,
+            thinking=thinking,
         )
     except AiNotConfigured:
         # 一个请求都没发出去，不算通道故障，记进 by_model 只会掩盖真问题
@@ -103,6 +107,7 @@ def _chat_request(
     api_key: str | None = None,
     response_format: dict | None = None,
     max_tokens: int | None = None,
+    thinking: bool = True,
 ) -> tuple[str, dict]:
     """真正的对话补全请求，恒定返回 `(文本, 元信息)`。
 
@@ -115,13 +120,23 @@ def _chat_request(
     1. 实际下发 `max_tokens` 时乘上 1.5 倍推理余量；
     2. 一旦 finish_reason=length（被截断），**自动翻倍预算重试**，最多重试 3 轮。
     这样所有调用方（含 `_vision_extract_text`）都不必各自记得处理截断。
+
+    `thinking=False` 时显式关闭推理（`thinking: {type: "disabled"}`，实测该端点支持）：
+    **只给"机械性任务"用** —— 照抄转录、按固定 schema 抽取，这类任务推理不产生价值。
+    实测同一任务：推理 0 / 输出 19 token（开着推理是 168 / 188），输出质量一致。
+    关掉推理后**同时取消 1.5 倍推理余量** —— 没有推理就不需要为它留预算，
+    否则会白白把 max_tokens 放大 1.5 倍（进而按更大的 max_tokens 计费）。
     """
     if not is_configured():
         raise AiNotConfigured()
     url = (base_url or settings.AI_BASE_URL).rstrip("/") + "/chat/completions"
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-    budget = int(max_tokens * _REASONING_TOKEN_HEADROOM) if max_tokens else None
+    if thinking:
+        budget = int(max_tokens * _REASONING_TOKEN_HEADROOM) if max_tokens else None
+    else:
+        # 没有推理，就不留推理余量
+        budget = max_tokens
     attempts = 4
     last_meta: dict = {}
 
@@ -131,6 +146,8 @@ def _chat_request(
             "messages": messages,
             "temperature": 0.2,
         }
+        if not thinking:
+            payload["thinking"] = {"type": "disabled"}
         if response_format is not None:
             payload["response_format"] = response_format
         if budget is not None:

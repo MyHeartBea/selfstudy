@@ -55,6 +55,50 @@ class BudgetHeadroomTest(unittest.TestCase):
         self.assertEqual(ai_service._json_chat_budget(None), 8000)
 
 
+class MechanicalThinkingOffTest(unittest.TestCase):
+    """机械性任务关闭推理（think=False）的回归。
+
+    背景：`deepseek-flash` 的推理 token 占输出 46-81%，是耗时与花费的主因。
+    实测（同任务 A/B，项目真实 `_vision_extract_text`）：
+      开推理 14.3s / 推理 3167 / 输出 3297 / 正文 210 字
+      关推理  0.9s / 推理    0 / 输出  131 / 正文 229 字   （快 16 倍，token 省 25 倍，质量不降）
+    所以"照抄/按 schema 抽取"这类任务显式关推理；分析类任务保持默认（开）。
+
+    这两条断言把优化钉住，避免以后被无声改回：
+      ① 关推理时必须真的下发 `thinking: {type: disabled}`；
+      ② 关推理时**不许再乘 1.5 倍推理余量** —— 没有推理却放大 max_tokens
+         等于按更大的上限计费（而且以前推理吃掉一半预算，正文反而更少）。
+    """
+
+    def _capture_payload(self, **chat_kwargs):
+        seen = {}
+
+        def fake_post(opener, request, timeout):
+            seen["payload"] = json.loads(request.data.decode())
+            return _resp("ok")
+
+        with (
+            patch.object(ai_service, "_post_chat", side_effect=fake_post),
+            patch.object(ai_service, "is_configured", return_value=True),
+        ):
+            ai_service._chat([{"role": "user", "content": "x"}], **chat_kwargs)
+        return seen["payload"]
+
+    def test_thinking_off_sends_disabled_flag(self):
+        payload = self._capture_payload(max_tokens=4000, thinking=False)
+        self.assertEqual(payload.get("thinking"), {"type": "disabled"})
+
+    def test_thinking_off_drops_reasoning_headroom(self):
+        payload = self._capture_payload(max_tokens=4000, thinking=False)
+        self.assertEqual(payload["max_tokens"], 4000)
+
+    def test_thinking_on_keeps_headroom_and_no_flag(self):
+        """默认（分析类任务）行为不变：有余量、不下发 thinking。"""
+        payload = self._capture_payload(max_tokens=4000)
+        self.assertNotIn("thinking", payload)
+        self.assertEqual(payload["max_tokens"], int(4000 * ai_service._REASONING_TOKEN_HEADROOM))
+
+
 class TruncationRetryTest(unittest.TestCase):
     """被截断时必须自动加大预算重试，而不是把残缺内容当成功交出去。"""
 
