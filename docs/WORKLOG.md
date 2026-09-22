@@ -804,3 +804,9 @@ frontend-test-build / frontend-e2e 三个作业，与本地三门对齐。
 context 6——共 41 颗，全库 315）、前端 speech.test.js 3 颗（全库 141）、E2E 渲染烟测补
 `/sprint`（53）+ fixtures 补 `/api/sprint/plan` 与 `/api/vocab/{id}/context` 打桩。
 全部门禁：后端 315 全绿 + ruff 双查；Vitest 141 + build；E2E 53；ESLint/Prettier 干净。
+
+**CI 插曲**：首批提交（284ec1b）backend-tests 红在 `test_rejects_absolute_path`——
+Windows 上 `Path("C:/x/y.pdf").is_absolute()` 是 True，Linux 上是 **False**，盘符路径
+在 CI 里被当成相对路径放行（探针探不到文件回 200 账单而非 400）。修复：`_resolve_inside`
+对盘符路径改用正则 `^[A-Za-z]:[\/]` 单独拒绝（盘符路径在任何主机上都不该当相对路径），
+UNC `\\` 开头一并挡；b2683f5 全绿。教训入档：**路径校验别只依赖 is_absolute 的主机语义**。
