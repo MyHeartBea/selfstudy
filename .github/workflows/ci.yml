@@ -68,10 +68,9 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  # v3 沉浸式前端（frontend-v3）：2026-09-17 后停止演进的旧原型，现行系统与
-  # 生产 dist 都在 frontend/，质量门禁不再为它跑（verify_requirements 要的
-  # 稳定 tag 从未打过、E2E 用例与页面早已脱节，两个作业连续失败多批）。
-  # 目录本身保留，需要时可按 git 历史恢复这两个 job。
+  # v3 沉浸式前端（frontend-v3）：已于 2026-09-22 整体删除（旧原型，2026-09-17 后
+  # 停止演进；其质量门禁连续报红没有维护价值）。目录与专用脚本一并清理，
+  # 需要时按 git 历史可整体恢复。
 
   # 真浏览器 E2E：命中测试（整块可点）与真实 paste 事件只有这里能覆盖。
   # 自己起 vite dev（Playwright webServer），所有 /api 在浏览器层打桩，不需要后端。

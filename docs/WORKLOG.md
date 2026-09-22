@@ -742,3 +742,22 @@ cookie 方案没有做成登录页（单用户场景 localStorage 手配，文�
 
 **验证**：后端 274 全绿 + ruff 双查通过；v3 两个作业移除后 CI 剩 backend-tests /
 frontend-test-build / frontend-e2e 三个作业，与本地三门对齐。
+
+## 2026-09-22 · 删除废弃原型 frontend-v3（用户拍板）
+
+**决定**：v3 沉浸式前端自 2026-09-17 起停止演进，现行系统与生产 dist 全在 frontend/，
+按用户要求把 v3 从仓库与磁盘整体删除（git 历史仍在，需要时可整体恢复）。
+
+**删除清单**：
+- `frontend-v3/` 整目录（源码 + node_modules + dist + test-results）
+- v3 专用脚本：`verify_requirements.py` / `check_bundle_budget.py` / `check_page_motion.py` /
+  `audit_a11y.py` / `audit_pages.py` / `strip_chars.py`（默认只扫 v3）/ `serve_frontend.ps1`（v2/v3 切换器）
+- v3 文档：`docs/v3-acceptance.md` / `docs/v3-handoff.md` / `docs/v3-resume-brief.md`
+
+**挂钩清理**：pre-commit 摘掉 frontend-v3-lint 与 page-motion-wiring 两个钩子；
+`frontend_lint.mjs` 去掉 --dir（只剩 frontend）；`preflight_check.py` EMOJI_SCOPES 去掉 v3；
+`.gitignore` 4 行、`backend/.env.example` 注释、`backend/app/config.py` FRONTEND_DIST 注释、
+`ci.yml` 注释同步更新。WORKLOG 历史叙事不动。
+
+**验证**：后端 274 全绿 + ruff 双查；frontend_lint / preflight 钩子跑通；`npm run build` 通过；
+全仓 grep frontend-v3 只剩 WORKLOG（历史）与 ci.yml 注释（删除说明）。

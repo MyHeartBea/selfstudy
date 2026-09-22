@@ -36,7 +36,7 @@ EMOJI_RE = re.compile(
     "\ufe0f]"                 # 变体选择符（emoji 呈现）
 )
 # 只强制约束"我们自己写的前端与文档"，不扫第三方产物
-EMOJI_SCOPES = ("frontend-v3/src/", "frontend/src/", "docs/art-direction")
+EMOJI_SCOPES = ("frontend/src/", "docs/art-direction")
 
 
 def staged_files() -> list:
