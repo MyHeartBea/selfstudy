@@ -719,3 +719,26 @@ mocks 2 / sense 限流 1）；前端 Vitest 133 -> **138**（+5 `uiSelectKeyboar
 
 **明确没做**：真题相关 5 条（等晚上）；图片校验没做体积-分辨率双上限（8MB 尺寸门已有）；
 cookie 方案没有做成登录页（单用户场景 localStorage 手配，文档已写明）。
+
+## 2026-09-22 · CI 连红排查与修复（5a2eaa8 之后）
+
+**现象**：GitHub CI 连续多批全红（最近 6 次无一绿），用户问"CI 老出问题"。
+
+**三个失败点，全是历史遗留，第 8 批只是把它们撞了出来**：
+1. `backend-tests`：`main.py::image_thumbnail` 把 `from PIL import Image` 写在函数最顶部
+   （404 判断之前），CI 没有 Pillow → `ModuleNotFoundError` 未处理异常，本该 404/回退
+   原图的请求全变 500，第 8 批新加的 `test_header_accepted`（断言 404）当场撞上。
+2. `frontend-v3-build`：`scripts/verify_requirements.py` 检查"稳定 tag 在位"，那个 tag
+   从未打过——这个脚本守的是 2026-09-17 之后就没再动过的旧原型 frontend-v3。
+3. `frontend-v3-e2e`：journey.spec 还在找旧导航项"成册"，用例与页面早已脱节。
+
+**修复**：
+- 缩略图端点把 PIL 导入挪进"文件存在且没生成过缩略图"的分支内并 try 包住，
+  Pillow 缺失与解码失败同样走"回退原图"（docstring 本来就是这么承诺的，实现没做到）。
+- 新增 `ThumbWithoutPillowTest`（2 颗）：用 `sys.modules['PIL']=None` 模拟无 Pillow
+  环境，断言不存在→404、存在→200 回退原图字节。后端 272 → **274**。
+- `ci.yml` 删掉 `frontend-v3-build` / `frontend-v3-e2e` 两个 job（目录保留不动）：
+  废弃原型的门禁连续报红没有维护价值，需要时按 git 历史可恢复。
+
+**验证**：后端 274 全绿 + ruff 双查通过；v3 两个作业移除后 CI 剩 backend-tests /
+frontend-test-build / frontend-e2e 三个作业，与本地三门对齐。

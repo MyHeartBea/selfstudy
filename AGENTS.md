@@ -366,6 +366,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 272、前端 Vitest 138、E2E 51**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 73%（门槛 55%）。
+- 测试基线：**后端 274、前端 Vitest 138、E2E 51**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 73%（门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

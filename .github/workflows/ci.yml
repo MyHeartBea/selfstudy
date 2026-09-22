@@ -68,63 +68,10 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  # v3 沉浸式前端（frontend-v3）：与 v2 完全独立的一套依赖与配置。
-  # 并行期间后端仍服务 v2 的 dist，v3 这里只做质量门禁。
-  frontend-v3-build:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend-v3
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm install
-      - name: Lint (eslint + prettier)
-        run: |
-          npx eslint src tests vite.config.js
-          npx prettier --check "src/**/*.{js,vue,css}" "tests/**/*.js" "vite.config.js"
-      - name: Run tests
-        run: npm test
-      # v3 的 Vue 模板编译错误同样只有 build 能发现
-      - name: Build v3
-        run: npm run build
-      # 性能预算：首屏体积与单块上限。chunkSizeWarningLimit 只打印警告，
-      # 这里把它变成会让 CI 失败的硬断言（脚本从 dist/index.html 解析真实首屏资源）
-      - name: Bundle budget
-        working-directory: .
-        run: python scripts/check_bundle_budget.py
-      # 硬性要求逐条核验（18 项：隐喻/排版/OKLCH/动效/WebGL/光标/磁吸/滚动/
-      # 悬停/Lucide/零 emoji/零 CDN/可访问性/reduced-motion/60fps/启动页/体积/v2 未动）
-      - name: Verify requirements
-        working-directory: .
-        run: python scripts/verify_requirements.py
-
-  # v3 真浏览器 E2E（Playwright，独立端口 5176）
-  # 后端不需要：E2E 里所有 /api 请求都用 page.route 打桩，所以 CI 里可独立运行。
-  frontend-v3-e2e:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend-v3
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - run: npm install
-      - name: Install Playwright chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run v3 E2E
-        run: npx playwright test
-      - name: Upload report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: v3-playwright-report
-          path: frontend-v3/playwright-report/
-          retention-days: 7
+  # v3 沉浸式前端（frontend-v3）：2026-09-17 后停止演进的旧原型，现行系统与
+  # 生产 dist 都在 frontend/，质量门禁不再为它跑（verify_requirements 要的
+  # 稳定 tag 从未打过、E2E 用例与页面早已脱节，两个作业连续失败多批）。
+  # 目录本身保留，需要时可按 git 历史恢复这两个 job。
 
   # 真浏览器 E2E：命中测试（整块可点）与真实 paste 事件只有这里能覆盖。
   # 自己起 vite dev（Playwright webServer），所有 /api 在浏览器层打桩，不需要后端。

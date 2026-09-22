@@ -178,10 +178,8 @@ def image_thumbnail(name: str):
 
     生成失败不阻塞——直接返回原文件字节，前端无感。
     """
-    from pathlib import Path as _Path
-
     from fastapi import HTTPException
-    from PIL import Image
+    from pathlib import Path as _Path
 
     # 安全：只接受纯文件名，堵目录穿越
     if "/" in name or "\\" in name or ".." in name or name.startswith("."):
@@ -191,10 +189,13 @@ def image_thumbnail(name: str):
         raise HTTPException(status_code=404)
 
     thumbs_dir = _images_dir() / "_thumbs"
-    thumbs_dir.mkdir(exist_ok=True)
     thumb = thumbs_dir / f"{_Path(name).stem}.webp"
     if not thumb.is_file():
+        # Pillow 缺失也算"生成失败"（CI 环境就没装），照常回退原图
         try:
+            from PIL import Image
+
+            thumbs_dir.mkdir(exist_ok=True)
             with Image.open(src) as im:
                 im = im.convert("RGB")
                 im.thumbnail((480, 480))
