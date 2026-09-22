@@ -74,6 +74,12 @@ const routes = [
       },
       {
         // 维护页：不进 Dock 导航，由命令面板（Ctrl+K）或直链进入
+        path: 'sprint',
+        name: 'sprint-plan',
+        component: () => import('../views/SprintView.vue'),
+      },
+      {
+        // 维护页：不进 Dock 导航，由命令面板（Ctrl+K）或直链进入
         path: 'integrity',
         name: 'data-integrity',
         component: () => import('../views/IntegrityView.vue'),
@@ -111,6 +117,7 @@ const TITLE_MAP = {
   formulas: '公式背诵',
   'subject-guide': '科目指南',
   'essay-bank': '作文档案',
+  'sprint-plan': '冲刺计划',
   'data-integrity': '数据体检',
   'data-snapshots': '数据备份与回滚',
 }
@@ -142,6 +149,7 @@ export const NAV_ORDER = [
   'essay-bank',
   'practice',
   'subject-guide',
+  'sprint-plan',
   'data-integrity',
   'data-snapshots',
   'design-gallery',

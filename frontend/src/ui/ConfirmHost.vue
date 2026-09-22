@@ -49,6 +49,7 @@ watch(
   margin: 0;
   color: var(--ink-2);
   font-size: 13.5px;
+  white-space: pre-line;
 }
 .confirm-error {
   margin: 8px 0 0;

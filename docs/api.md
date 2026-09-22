@@ -23,6 +23,10 @@
   （`metrics`：请求数/错误数/慢请求数/最慢端点/最近错误）+ 当前 `host`/`reviewDailyLimit`
 - `GET /api/exam-countdown`：全局考研倒计时印数据 `{date, days, passed}`，纯日期计算**不查库**
   （`EXAM_DATE` 非法时 `days` 为 null，前端整块不渲染）
+- `GET /api/sprint/plan`：冲刺计划（按考试日倒推）。回 `{days_left, due_now, never_started,
+  reviewed_today, daily_target, quota_note, subjects[], weeks[]}`；口径与今日复习队列一致
+  （新题 = `review_count=0 AND next_review_at IS NULL`）。`EXAM_DATE` 非法/已考时只回
+  `date_invalid`/`passed` 标志，`daily_target` 为 null，前端降级说明不瞎算。零 AI。
 - `GET /api/dashboard`：仪表盘聚合（stats + reviews/stats 一次返回）
 - `GET /api/search?q=&limit=5`：**全站统一搜索**（命令面板 Ctrl+K 的后端）。一次问完
   错题 / 知识点 / 公式 / 生词 / 作文，返回
@@ -111,6 +115,8 @@
 - `GET /api/vocab`：列表（`search` / `mastery` / `kind=word|phrase` / `sort` / `page` + `page_size`）
 - `GET /api/vocab/stats`：总数/今日到期/已掌握/掌握度分布
 - `GET /api/vocab/due?limit=30`：到期闪卡队列（低掌握度优先，随机排序）
+- `GET /api/vocab/{id}/context`：真题语境回链——在错题 `passage_text` 里按词边界找该词出现位置，
+  返回 `[{mistake_id, source_name, source_year, snippet}]`（最多 3 条；零 AI，纯检索）
 - `POST /api/vocab`：新增（单词重复则幂等返回已有）
 - `POST /api/vocab/import`：`{"lines": ["abandon v. 放弃", ...], "source"}` 批量导入
 - `POST /api/vocab/import-english`：`{"items": [{word, meaning, phonetic, example, note}], "source"}`

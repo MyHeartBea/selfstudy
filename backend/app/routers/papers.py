@@ -7,10 +7,46 @@ from fastapi import APIRouter, Query
 
 from app.database import get_connection
 from app.responses import error, ok, server_error
-from app.schemas import PaperCreate
+from app.schemas import PaperAnswerPatch, PaperCreate
 from app.services import exam_paper_service
 
 router = APIRouter(prefix="/api", tags=["真题库"])
+
+
+def _resolve_inside(value: str) -> Path | None:
+    """把「真题根目录内的相对路径」解析成绝对路径；越界/绝对路径/.. 一律拒绝。
+
+    Windows 上 `root / "C:/x/y.pdf"` 会被绝对路径整体替换 → 可读磁盘上任意
+    PDF/DOCX（正文还能经 GET /api/papers/{id} 取回），所以入口必须先过这道门。
+    """
+    if not value:
+        return None
+    if Path(value).is_absolute():
+        return None
+    if ".." in value.replace("\\", "/").split("/"):
+        return None
+    root = exam_paper_service.papers_root().resolve()
+    target = (root / value).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return None
+    return target
+
+
+@router.get("/papers/estimate")
+def estimate_paper(source_path: str = Query(...), answer_path: str = Query("")):
+    """导入前的账单：本地探针估算 AI 调用次数/耗时/风险，一次 AI 都不调。"""
+    source = _resolve_inside(source_path)
+    if source is None:
+        return error(400, "非法路径：source_path 必须是真题目录内的相对路径")
+    answer = _resolve_inside(answer_path) if answer_path else None
+    if answer_path and answer is None:
+        return error(400, "非法路径：answer_path 必须是真题目录内的相对路径")
+    try:
+        return ok(exam_paper_service.estimate_import(source_path, answer_path))
+    except Exception as exc:
+        return server_error(exc)
 
 
 @router.get("/papers/scan")
@@ -45,11 +81,16 @@ def list_papers(status: str = Query("", pattern="^(|pending|extracting|structuri
             params.append(status)
         sql += " ORDER BY year DESC, id DESC"
         rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        # 已配答案数一次分组查询取回（此前逐卷子查询，卷多了就是 N+1）
+        answered = {
+            r["paper_id"]: r["c"]
+            for r in conn.execute(
+                "SELECT paper_id, COUNT(*) AS c FROM exam_questions "
+                "WHERE correct_answer != '' GROUP BY paper_id"
+            ).fetchall()
+        }
         for r in rows:
-            r["answered_count"] = conn.execute(
-                "SELECT COUNT(*) AS c FROM exam_questions WHERE paper_id = ? AND correct_answer != ''",
-                (r["id"],),
-            ).fetchone()["c"]
+            r["answered_count"] = answered.get(r["id"], 0)
         return ok(rows)
     except Exception as exc:
         return server_error(exc)
@@ -60,26 +101,6 @@ def list_papers(status: str = Query("", pattern="^(|pending|extracting|structuri
 @router.post("/papers")
 def create_paper(body: PaperCreate):
     """登记一份真题并启动后台拆题导入（同源文件幂等）。"""
-    root = exam_paper_service.papers_root().resolve()
-
-    # 路径校验：source_path 与 answer_path 都必须是「真题根目录内的相对路径」。
-    # 原实现只查 ".." 段、且在 is_file() 之后、对 answer_path 完全不查；
-    # Windows 上 `root / "C:/x/y.pdf"` 会被绝对路径整体替换 → 可读磁盘上任意 PDF/DOCX，
-    # 正文还能经 GET /api/papers/{id} 取回（HOST=0.0.0.0 + 默认空 API_TOKEN 时是真实暴露面）。
-    def _resolve_inside(value: str) -> Path | None:
-        if not value:
-            return None
-        if Path(value).is_absolute():
-            return None
-        if ".." in value.replace("\\", "/").split("/"):
-            return None
-        target = (root / value).resolve()
-        try:
-            target.relative_to(root)
-        except ValueError:
-            return None
-        return target
-
     source = _resolve_inside(body.source_path)
     if source is None:
         return error(400, "非法路径：source_path 必须是真题目录内的相对路径")
@@ -152,6 +173,63 @@ def paper_detail(paper_id: int):
         conn.close()
 
 
+@router.post("/papers/{paper_id}/retry")
+def retry_paper(paper_id: int):
+    """失败的卷重新入队（配合拆题检查点：已成功拆出的段不会重烧 AI）。"""
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT * FROM exam_papers WHERE id = ?", (paper_id,)).fetchone()
+        if row is None:
+            return error(404, "真题不存在")
+        if dict(row)["status"] != "error":
+            return error(400, "只有导入失败的卷才能重试")
+        conn.execute(
+            "UPDATE exam_papers SET status = 'pending', status_note = '等待重试' WHERE id = ?",
+            (paper_id,),
+        )
+        conn.commit()
+        exam_paper_service.enqueue_import(paper_id)
+        return ok(
+            dict(conn.execute("SELECT * FROM exam_papers WHERE id = ?", (paper_id,)).fetchone())
+        )
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.patch("/papers/{paper_id}/questions/{question_id}")
+def patch_paper_question(paper_id: int, question_id: int, body: PaperAnswerPatch):
+    """人工修正题目答案（正则没配上/配错了，卷面上直接改）。"""
+    conn = get_connection()
+    try:
+        q, err = exam_paper_service.set_question_answer(
+            conn, paper_id, question_id, body.correct_answer
+        )
+        if err:
+            return error(404 if err == "题目不存在" else 400, err)
+        return ok(q)
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.post("/papers/{paper_id}/questions/{question_id}/to-mistake")
+def paper_question_to_mistake(paper_id: int, question_id: int):
+    """把一道真题转入错题本（同卷同题干幂等）。"""
+    conn = get_connection()
+    try:
+        mistake, err = exam_paper_service.question_to_mistake(conn, paper_id, question_id)
+        if err:
+            return error(404 if err in ("真题不存在", "题目不存在") else 400, err)
+        return ok(mistake)
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
 @router.delete("/papers/{paper_id}")
 def delete_paper(paper_id: int):
     conn = get_connection()
@@ -160,6 +238,8 @@ def delete_paper(paper_id: int):
         conn.commit()
         if cur.rowcount == 0:
             return error(404, "真题不存在")
+        # 图示题的页面原图存在 data/images/exam_papers/<id>/（不在库里，级联删不掉）
+        exam_paper_service.remove_paper_images(paper_id)
         return ok({"deleted": paper_id})
     except Exception as exc:
         return server_error(exc)

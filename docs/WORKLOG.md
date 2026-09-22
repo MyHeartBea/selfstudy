@@ -761,3 +761,46 @@ frontend-test-build / frontend-e2e 三个作业，与本地三门对齐。
 
 **验证**：后端 274 全绿 + ruff 双查；frontend_lint / preflight 钩子跑通；`npm run build` 通过；
 全仓 grep frontend-v3 只剩 WORKLOG（历史）与 ci.yml 注释（删除说明）。
+
+## 2026-09-22 · 真题专项 6 项 + 冲刺计划页 + 生词深挖（一/三档批次）
+
+**背景**：低价时段开工，用户拍板「一三挡开始，第四档不做手机相关，第二档不需要做」。
+
+### 真题专项（papers，6 项全落地）
+1. **导入前亮账单**：`GET /api/papers/estimate`——本地探针（pypdf 页数 + 文本层字符）估算
+   页数/拆分段数/AI 调用次数/耗时，`high_risk` 标记扫描卷；前端 `importPaper` 先取账单再确认，
+   高危卷确认按钮变红「我知道了，仍要导入」，mixed 角色推荐同目录纯试题册。全程零 AI 调用。
+2. **AI 拆题断点续跑**：进度存 `app_meta`（key=`paper_resume_<id>`，JSON），每段成功即存、
+   全卷完成即清；重导同卷时 `_apply_checkpoint` 校验段数一致才续跑（不一致丢弃重来）；
+   扫描/非扫描两条分块循环合并成一条，续跑文案进 status_note。
+3. **error 状态卷可重试**：`POST /papers/{id}/retry`（仅 error 可重试，置回 pending + 入队）；
+   前端 error 卡片加「重试导入」按钮。
+4. **答案人工修正**：`PATCH /papers/{id}/questions/{qid}`——choice 只收 A-D 或空、fill 原文
+   （不放大写，`x=1` ≠ `X=1`）、solution 拒绝（无标准答案字段）；前端答案徽章变可点按钮 +
+   未配答案的选择题给「补答案」入口。
+5. **单题转入错题本**：`POST /papers/{id}/questions/{qid}/to-mistake`——科目按关键词匹配
+   subjects（匹配不到拒绝并提示先建科目）、无答案的选择题拒绝（先补答案）、同卷同题干幂等
+   （返回已有错题）；前端逐题「转入错题本」按钮。
+6. **删卷清孤儿图 + N+1**：`delete_paper` 连带 `remove_paper_images`（`data/images/exam_papers/<pid>/`）；
+   papers 列表 answered_count 从逐行子查询改成单条 GROUP BY。
+
+### 冲刺计划页（`/sprint`，不进 Dock，Ctrl+K 可达）
+- 后端 `sprint_service.get_sprint_plan` + `GET /api/sprint/plan`：按 `EXAM_DATE` 倒推
+  `daily_target = ceil((到期+从未复习)/剩余天数)`，科目聚合（到期/新题/掌握度）与按周分桶
+  （每天目标 × 当周天数）；口径与今日复习队列**完全一致**，数字要能和复习页对上。
+  `EXAM_DATE` 非法/已考只回三态标志，前端降级说明不瞎算。
+- 前端 `SprintView.vue`：倒计时 hero（≤7 天金 / ≤30 朱砂 / 常态青）+ 4 块 MetricTile +
+  科目墨条（BarRow）+ 按周里程碑 + 「去复习」直达；路由/NAV_ORDER/TITLE_MAP/命令面板四件注册齐。
+
+### 生词深挖（零 AI）
+- **闪卡 TTS**：`utils/speech.js`（浏览器 speechSynthesis，en-US，rate 0.9）；闪卡正面
+  喇叭按钮 `@click.stop` 防误翻面；不支持的浏览器 toast 提示。
+- **真题语境回链**：`GET /api/vocab/{id}/context`——错题 `passage_text` LIKE 粗筛
+  （复用全站 `like_pattern` + `ESCAPE '\'` 口径）后 `\b` 词边界正则精选（art 不命中 start），
+  最多 3 条 `{mistake_id, source_name, source_year, snippet}`；闪卡背面翻面即取（会话内按词缓存、
+  答完即清），点条目直通 `/review?mode=curve&count=1&mistake_id=X` 单题直练（与知识点「练这题」同落点）。
+
+**测试**：新增后端 3 个文件（estimate 9 / retry+checkpoint 9 / question-ops 10 / sprint 7 /
+context 6——共 41 颗，全库 315）、前端 speech.test.js 3 颗（全库 141）、E2E 渲染烟测补
+`/sprint`（53）+ fixtures 补 `/api/sprint/plan` 与 `/api/vocab/{id}/context` 打桩。
+全部门禁：后端 315 全绿 + ruff 双查；Vitest 141 + build；E2E 53；ESLint/Prettier 干净。

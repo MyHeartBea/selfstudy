@@ -79,6 +79,10 @@ class PaperCreate(BaseModel):
     answer_path: str = ""
 
 
+class PaperAnswerPatch(BaseModel):
+    correct_answer: str = ""
+
+
 class MockCreate(BaseModel):
     exam_year: str = ""
     total: int = 0

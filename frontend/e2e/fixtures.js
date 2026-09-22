@@ -262,6 +262,29 @@ export const integrityReport = {
 }
 
 /**
+ * 冲刺计划（`GET /api/sprint/plan`）。形状照 `sprint_service.get_sprint_plan()`：
+ * 日期非法/已考时后端只回三态字段，daily_target 为 null —— 页面按此降级。
+ */
+export const sprintPlan = {
+  exam_date: '2026-12-19',
+  today: '2026-09-22',
+  days_left: 88,
+  passed: false,
+  date_invalid: false,
+  total_active: 320,
+  due_now: 120,
+  never_started: 56,
+  reviewed_today: 12,
+  daily_target: 3,
+  quota_note: '每天 3 题，考前刚好过完一遍全部积压',
+  subjects: [{ name: '数学二', total: 180, due: 80, never: 30, mastery: 42 }],
+  weeks: [
+    { label: '第 1 周', days: 7, end_date: '2026-09-29', target: 21 },
+    { label: '第 2 周', days: 7, end_date: '2026-10-06', target: 21 },
+  ],
+}
+
+/**
  * 数据备份与回滚（`/api/snapshots`、`POST /api/snapshots/restore`）。
  * 形状照 `database.list_snapshots()` / `restore_snapshot()`：
  * `label` 为空串就是启动自动备份（前端要显示成"启动自动备份"，不能留空白）；
@@ -419,10 +442,14 @@ function resolver(path, method, overrides) {
   if (path === '/api/vocab') return { items: [], total: 0 }
   if (path === '/api/vocab/due') return { items: [] }
   if (path === '/api/vocab/stats') return { total: 0, mastered: 0, due: 0, distribution: [] }
+  // 闪卡真题语境回链（按 vocab id 命中，闪卡背面才请求）
+  if (/^\/api\/vocab\/\d+\/context$/.test(path)) return []
   if (path === '/api/papers') return []
   // 真实接口返回的就是数组（不是 {items:[]}）——写成对象会让 .filter 直接抛异常
   if (path === '/api/papers/scan') return []
   if (path === '/api/mocks') return []
+  // 冲刺计划页：漏打桩会渲染成"考试日期没配置好"的空态而不是计划本身
+  if (path === '/api/sprint/plan') return sprintPlan
   // 作文档案：列表 {items,total}，详情 = brief + essay_text + result
   if (path === '/api/essays') return { items: essayRows, total: essayRows.length }
   if (/^\/api\/essays\/\d+$/.test(path)) {

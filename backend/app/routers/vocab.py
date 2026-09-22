@@ -66,6 +66,21 @@ def due_vocab(limit: int = Query(30, ge=1, le=100)):
         conn.close()
 
 
+@router.get("/{vocab_id}/context")
+def vocab_context(vocab_id: int):
+    """真题语境回链：这个词在哪几篇错题原文里出现过（零 AI，纯检索）。"""
+    conn = get_connection()
+    try:
+        hits = vocab_service.find_context(conn, vocab_id)
+        if hits is None:
+            return error(404, "生词不存在")
+        return ok(hits)
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
 @router.post("")
 def create_vocab(body: VocabCreate):
     """新增生词；单词已存在时返回已有条目（幂等）。"""

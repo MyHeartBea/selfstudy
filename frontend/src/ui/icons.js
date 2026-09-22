@@ -27,6 +27,8 @@ export const ICONS = {
   pause:
     '<rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/>',
   play: '<path d="M7 5.5v13a.8.8 0 0 0 1.2.7l10-6.5a.8.8 0 0 0 0-1.4l-10-6.5A.8.8 0 0 0 7 5.5Z"/>',
+  volume:
+    '<path d="M11 5 6.5 9H3.5v6h3L11 19V5Z"/><path d="M15.2 8.8a4.6 4.6 0 0 1 0 6.4"/><path d="M17.8 6.2a8.2 8.2 0 0 1 0 11.6"/>',
   tag: '<path d="m3 12 9-9h7a2 2 0 0 1 2 2v7l-9 9a2 2 0 0 1-2.8 0L3 14.8a2 2 0 0 1 0-2.8Z"/><circle cx="16.5" cy="7.5" r="1.2"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
   flame:

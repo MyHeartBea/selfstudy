@@ -26,6 +26,8 @@ const papers = ref([])
 const loadError = ref(false)
 const selected = ref(null) // 选中的卷（含 questions）
 const importing = ref({})
+const retrying = ref(0)
+const toMistaking = ref(0)
 let pollTimer = 0
 
 const SUBJECT_TONES = {
@@ -89,6 +91,46 @@ async function loadPapers() {
 }
 
 async function importPaper(c) {
+  // 导入前先亮账单：这份卷要多少次 AI 调用、大约多久、有什么风险，确认了才开跑
+  let bill
+  try {
+    const res = await request.get('/papers/estimate', {
+      params: { source_path: c.rel_path, answer_path: c.answer_path || '' },
+      silent: true,
+    })
+    bill = res.data.data
+  } catch (err) {
+    toast.warning('拿不到导入预估，请稍后重试')
+    return
+  }
+  if (!bill?.estimable) {
+    const ok = await confirmDialog({
+      title: '无法预估导入成本',
+      message: `后端没法估算这份卷的开销：\n${(bill?.warnings || ['未知原因']).join('\n')}\n\n仍要导入吗？`,
+      confirmText: '仍要导入',
+    })
+    if (!ok) return
+  } else {
+    const lines = []
+    const scale =
+      (bill.pages ? `${bill.pages} 页 · ` : '') +
+      (bill.chars ? `约 ${Math.round(bill.chars / 1000)} 千字` : '读不到文字')
+    lines.push(`规模：${scale}`)
+    lines.push(
+      bill.scanned
+        ? `AI 调用：约 ${bill.ai_calls} 次（扫描版逐页识别）`
+        : `AI 调用：约 ${bill.ai_calls} 次（拆题 ${bill.chunks} 段${bill.answer_path ? ' + 答案匹配 1 次' : ''}）`,
+    )
+    lines.push(`预计耗时：约 ${bill.minutes} 分钟`)
+    if (bill.warnings?.length) lines.push(...bill.warnings.map((w) => `注意：${w}`))
+    const ok = await confirmDialog({
+      title: `导入账单 · ${c.subject} ${c.year}`,
+      message: lines.join('\n'),
+      danger: bill.high_risk,
+      confirmText: bill.high_risk ? '我知道了，仍要导入' : '开始导入',
+    })
+    if (!ok) return
+  }
   const key = c.rel_path
   importing.value[key] = true
   try {
@@ -110,6 +152,20 @@ async function importPaper(c) {
     toast.error('导入失败')
   } finally {
     importing.value[key] = false
+  }
+}
+
+async function retryPaper(p) {
+  retrying.value = p.id
+  try {
+    await request.post(`/papers/${p.id}/retry`, {}, { silent: true })
+    toast.success('已重新入队，之前拆好的段不会重跑')
+    await loadPapers()
+    startPolling()
+  } catch (err) {
+    // 拦截器统一提示
+  } finally {
+    retrying.value = 0
   }
 }
 
@@ -149,6 +205,51 @@ function mockPaper(p) {
     path: '/review',
     query: { mode: 'mock', paper_id: p.id, duration: 180 },
   })
+}
+
+async function editAnswer(q) {
+  const isChoice = q.question_type === 'choice'
+  const res = await confirmDialog({
+    title: `修正答案 · 第 ${q.no} 题`,
+    message: isChoice
+      ? '识别或匹配的答案可能出错，直接输入正确答案（A-D）。'
+      : '填空题答案：输入参考答案（数值/表达式均可）。留空则清空。',
+    input: isChoice
+      ? {
+          placeholder: 'A / B / C / D',
+          value: q.correct_answer || '',
+          pattern: /^[A-D]$/,
+          error: '只能输入 A、B、C、D',
+        }
+      : { placeholder: '参考答案', value: q.correct_answer || '' },
+    confirmText: '保存',
+  })
+  if (res === null) return
+  try {
+    const r = await request.patch(`/papers/${selected.value.id}/questions/${q.id}`, {
+      correct_answer: res,
+    })
+    q.correct_answer = r.data.data.correct_answer
+    toast.success('答案已更新')
+  } catch (err) {
+    // 拦截器统一提示
+  }
+}
+
+async function toMistake(q) {
+  toMistaking.value = q.id
+  try {
+    await request.post(
+      `/papers/${selected.value.id}/questions/${q.id}/to-mistake`,
+      {},
+      { silent: true },
+    )
+    toast.success('已转入错题本（同卷同题只转一次）')
+  } catch (err) {
+    // 拦截器统一提示
+  } finally {
+    toMistaking.value = 0
+  }
 }
 
 function startPolling() {
@@ -264,6 +365,15 @@ onUnmounted(stopPolling)
               整卷模考
             </UiButton>
             <UiButton size="sm" variant="ghost" @click="openPaper(p)">查看卷面</UiButton>
+            <UiButton
+              v-if="p.status === 'error'"
+              size="sm"
+              variant="outline"
+              :loading="retrying === p.id"
+              @click="retryPaper(p)"
+            >
+              重试导入
+            </UiButton>
             <button type="button" class="p-del" aria-label="删除" @click="removePaper(p)">
               <Icon name="trash" :size="14" />
             </button>
@@ -291,10 +401,34 @@ onUnmounted(stopPolling)
                 </span>
               </div>
               <div v-if="q.correct_answer || q.analysis" class="pq-answer">
-                <span v-if="q.correct_answer" class="pq-ans-badge"
-                  >答案 {{ q.correct_answer }}</span
+                <button
+                  v-if="q.correct_answer"
+                  type="button"
+                  class="pq-ans-badge"
+                  title="点击修改答案"
+                  @click="editAnswer(q)"
                 >
+                  答案 {{ q.correct_answer }}
+                </button>
                 <span v-if="q.analysis" class="pq-analysis"><MathText :text="q.analysis" /></span>
+              </div>
+              <div class="pq-tools">
+                <UiButton
+                  v-if="!q.correct_answer && q.question_type === 'choice'"
+                  size="sm"
+                  variant="ghost"
+                  @click="editAnswer(q)"
+                >
+                  补答案
+                </UiButton>
+                <UiButton
+                  size="sm"
+                  variant="ghost"
+                  :loading="toMistaking === q.id"
+                  @click="toMistake(q)"
+                >
+                  转入错题本
+                </UiButton>
               </div>
             </div>
           </div>
@@ -609,6 +743,22 @@ onUnmounted(stopPolling)
   background: var(--surface);
   border-radius: 7px;
   padding: 2px 9px;
+  border: 1px dashed var(--line-strong);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+.pq-ans-badge:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.pq-tools {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 /* 扫描候选 */

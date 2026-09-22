@@ -331,6 +331,10 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - ⚠️ `knowledge_service` 里**不能顶层** `from app.database import mistake_to_dict`：`database.py` 反过来要 import 本模块的 `canonical_tags`，会循环导入。用局部导入（见 `_mistake_to_dict`）。
 - **数据体检页（只读）**：`/integrity`（不进 Dock，命令面板 Ctrl+K「数据体检」可达）显示"没人引用的文件"与
   "记录指向的图不见了"两张清单，**页面上没有任何删除入口**；判定与巡检脚本同源（见第 3 节）。
+- **冲刺计划页**：`/sprint`（不进 Dock，Ctrl+K「冲刺计划」可达）按考试日倒推每天/每周该清多少。
+  数据 `GET /api/sprint/plan`（`sprint_service`，纯 SQL 零 AI），口径**必须与今日复习队列一致**
+  （新题 = `review_count=0 AND next_review_at IS NULL`；积压 = `next_review_at < 明天`）——
+  页面数字要能和复习页对上，改队列口径要同步改这里。`EXAM_DATE` 非法/已考时页面降级说明，不瞎算。
 - **数据备份与回滚页**：`/snapshots`（同样不进 Dock，Ctrl+K「数据备份与回滚」可达）列最近快照
   （时间 / 来源标记翻人话 / 大小），可「立刻备份一次」与**整库回滚到某一份**。回滚要手输 `RESTORE`
   才发请求（服务端另有 `confirm === name` 那道），覆盖前会先留 `before-restore` 反悔点并把
@@ -344,7 +348,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - **真题模考（mode=mock）**：练习页选年份+时长 → `mode=mock&duration=分钟&source_type=real_exam&source_year=年`；ReviewView mock 分支：倒计时（归零自动交卷）、作答暂存不判分、自由翻题、交卷统一判分（choice/multi 本地、fill 走 /judge）并逐题写入复习记录 + POST /mocks 存档；卷面客户端过滤为客观题。
 - **真题库（v8，`/papers` 页）**：扫描 `PAPERS_DIR`（默认 `D:\km-v2\真题`，.env 可覆盖）→ 候选按 科目/年份/答案配对 识别（识别率 100%，配对率 90%+）→ 导入后**单工作线程后台流水线**：提取文本（docx=python-docx；pdf=pypdf 文本层，**空/过少/乱码即回退**：pypdfium2 渲染页为图 → **数学/408 优先 DeepSeek 视觉（输出 LaTeX，公式准）+ 本地 Windows OCR 兜底，文科目反之**；判定可读占比 `PDF_TEXT_RATIO`(0.6)/最小字符 `PDF_TEXT_MIN`(200)/最多页 `PDF_OCR_PAGES`(60) 可调，乱码文本层自动拒绝）→ **扫描/公式卷：扁平分块拆题（完整，避免逐页漏同页多个综合题）+ 按题号在逐页文本定位页码**（`_page_for_no`，可靠，供图示题取原图）；公式/上下标要求 `\(...\)` 包裹（MathText 渲染）→ 从配对答案文件文本匹配客观题答案（英语二实测 20/27 配上）。**表**：`exam_papers`（status: pending/extracting/structuring/done/error + status_note）+ `exam_questions`（含 `page_idx`/`diagram_image`，迁移 v9；**图示题存该页原图**到 `data/images/exam_papers/<pid>/p<n>.webp`，前端模考/详情可见）。**整卷模考**：`/review?mode=mock&paper_id=X&duration=分`——题目来自卷库（仅客观题进卷面），交卷判分后**「作答且错」的题自动入错题本**（subject 按 英语二→英语 等映射匹配；analysis/difficulty_points 有非空兜底文案，否则被必填校验 422），未作答不入本。
 - **AI 错因周报**：`POST /api/ai/weekly-report`（force=1 强制重生成）——近 7 天答错记录聚类为错因，**按天缓存于 app_meta（key=weekly_report_YYYY-MM-DD，自动清旧）**；统计页渲染，标签可点击直通练习。
-- **生词本**（英语）：闪卡快刷（认识→1/2/4/7/15/30/60 天阶梯，模糊→明天，不认识→留在队列）；批量导入词表；掌握度墨点；掌握度分布。
+- **生词本**（英语）：闪卡快刷（认识→1/2/4/7/15/30/60 天阶梯，模糊→明天，不认识→留在队列）；批量导入词表；掌握度墨点；掌握度分布。闪卡正面有**本地 TTS 发音**（`utils/speech.js`，浏览器 speechSynthesis，零 AI；按钮 `@click.stop` 防误翻面）；背面有**真题语境回链**（`GET /api/vocab/{id}/context`，`vocab_service.find_context` 在错题 `passage_text` 里按 LIKE 粗筛 + `\b` 词边界精选，点条目直通单题直练）；语境在会话内按词缓存、答完即清。
 - **知识点库**：标签同义归一、AI 自动总结、贴图分析、服务端分页；知识笺卡片墙（科目色脊+摘要+关联标签）。
 - **公式背诵**：分类 / 搜索 / 过卡循环背诵模式（没记住排队尾直到全会）；分类彩色印章。
 - **英语作文批改**（迁移 v10，`essay_records` 表）：录入页第三个 Tab「英语作文批改」→ `POST /api/essays/grade`（手写稿照片**逐张** `_vision_extract_text` 转录后合并，再走文本批改；同样遵守第 5 节"先提文字再分析"，禁止单次超大视觉生成）→ 按考研四型（e1/e2 × 小/大作文）五档评分，`ai_essay.normalize_essay_grade` 钳制分数、按档位兜底 band、四维分和与总分偏差超 1 分时按权重（内容.4/结构.2/语言.3/格式.1）重算。`persist` 默认存档到 `essay_records`，档案页 `/essays`（整卡可点看详情、逐词 diff 用 `utils/essayDiff.js` 的 LCS）。"存入错题库"走普通错题（`question_type=solution`，科目自动匹配「英语」，**匹配不到就拒绝并 toast**，因为 `subject_id` 是必填 int）。
@@ -366,6 +370,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 274、前端 Vitest 138、E2E 51**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 73%（门槛 55%）。
+- 测试基线：**后端 315、前端 Vitest 141、E2E 53**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 73%（门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

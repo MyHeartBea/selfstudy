@@ -252,6 +252,140 @@ def _is_math(subject: str) -> bool:
     return ("数学" in s) or ("408" in s) or ("计算机" in s)
 
 
+def _probe_file(path: Path, kind: str) -> dict:
+    """导入前"探针"：只花本地 IO 读页数与文本层规模，一次 AI 都不调。
+
+    给 estimate_import 估账单用；依赖缺失（CI 无 pypdf/python-docx）时返回
+    ok=False，调用方据此给出"无法预估"的诚实提示而不是编数字。
+    """
+    out = {"pages": 0, "chars": 0, "usable": False, "ok": False}
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            return out
+        try:
+            reader = PdfReader(str(path))
+            try:
+                out["pages"] = len(reader.pages)
+                text = "\n".join((p.extract_text() or "") for p in reader.pages)
+            finally:
+                try:
+                    reader.close()
+                except Exception:
+                    pass
+        except Exception:
+            return out
+        out["chars"] = len(text)
+        out["usable"] = _pdf_text_usable(text)
+        out["ok"] = True
+        return out
+    if suffix == ".docx":
+        try:
+            import docx
+        except ImportError:
+            return out
+        try:
+            d = docx.Document(str(path))
+            text = "\n".join(p.text for p in d.paragraphs if p.text)
+        except Exception:
+            return out
+        out["chars"] = len(text)
+        out["usable"] = bool(text.strip())
+        out["ok"] = True
+        return out
+    return out
+
+
+def estimate_import(source_rel: str, answer_rel: str = "") -> dict:
+    """导入前的"账单"：这份卷要花多少 AI 调用、大约多久，先亮出来用户再拍板。
+
+    全部数字来自本地探针（页数 / 文本层字数），**不调任何 AI**。扫描版、详解册、
+    依赖缺失这三类会在 warnings 里明说，宁可说"估不了"也不给假数字。
+    """
+    root = papers_root()
+    source = root / source_rel
+    result = {
+        "source_path": source_rel,
+        "answer_path": answer_rel or "",
+        "file_type": source.suffix.lower().lstrip("."),
+        "pages": 0,
+        "chars": 0,
+        "chunks": 0,
+        "ai_calls": 0,
+        "answer_pages": 0,
+        "scanned": False,
+        "high_risk": False,
+        "estimable": True,
+        "warnings": [],
+        "minutes": 0,
+    }
+    if not source.is_file():
+        result["estimable"] = False
+        result["warnings"].append("源文件不存在，无法预估")
+        return result
+
+    role = classify_file(source.name)
+    if role == "mixed":
+        result["warnings"].append(
+            "这是「题+答案合卷/解析册」：页数多、拆题调用成倍多。目录里有纯试题册的话，优先导纯试题册"
+        )
+    elif role not in ("question",):
+        result["warnings"].append(f"文件角色判定为 {role or '未知'}，不是标准试卷")
+
+    probe = _probe_file(source, "source")
+    if not probe["ok"]:
+        result["estimable"] = False
+        result["warnings"].append("服务器缺少 PDF/Word 解析依赖（pypdf / python-docx），无法预估")
+        return result
+
+    result["pages"] = probe["pages"]
+    result["chars"] = probe["chars"]
+
+    if source.suffix.lower() == ".pdf" and not probe["usable"]:
+        result["scanned"] = True
+        result["high_risk"] = True
+        per_page = min(probe["pages"], int(settings.PDF_OCR_PAGES))
+        result["ai_calls"] = per_page
+        result["minutes"] = per_page
+        result["warnings"].append(
+            f"扫描版 PDF（文本层不可用）：要逐页渲染走视觉/OCR，最多 {settings.PDF_OCR_PAGES} 页"
+            "——这是最贵最慢的路径，确认前请三思"
+        )
+    else:
+        # 账单口径：按每 _CHUNK_CHARS 字一段估（真实拆题按行切，误差可忽略）
+        chunks = max(1, -(-probe["chars"] // _CHUNK_CHARS)) if probe["chars"] else 0
+        result["chunks"] = chunks
+        result["ai_calls"] = chunks + (1 if answer_rel else 0)
+        # 拆题每段按 2~5 分钟估（推理模型 + 12000 token 上限），取中间值
+        result["minutes"] = chunks * 3
+        if not probe["chars"]:
+            result["warnings"].append("未能从文件读到文字，导入会直接失败")
+        elif chunks > 6:
+            result["warnings"].append(
+                f"文本量大（约 {probe['chars'] // 1000} 千字，拆 {chunks} 段），调用次数偏多"
+            )
+
+    if answer_rel:
+        answer = root / answer_rel
+        if not answer.is_file():
+            result["warnings"].append("配对的答案文件不存在，导入后答案会全部空缺")
+        else:
+            ans_probe = _probe_file(answer, "answer")
+            result["answer_pages"] = ans_probe["pages"]
+            if ans_probe["ok"] and answer.suffix.lower() == ".pdf" and not ans_probe["usable"]:
+                # 答案册文本层也不可用时，流水线会强制对它跑整册 OCR（见 _run_import）
+                result["high_risk"] = True
+                per_page = min(ans_probe["pages"], int(settings.PDF_OCR_PAGES))
+                result["ai_calls"] += per_page
+                result["minutes"] += per_page
+                result["warnings"].append(
+                    f"答案册也是扫描版（{ans_probe['pages']} 页）：配答案前要先整册 OCR，再增加约 {per_page} 次调用"
+                )
+    return result
+
+
 def _pdf_text_layer(path: Path) -> str:
     """用 pypdf 提取 PDF 文本层（前若干页合并）。"""
     reader = None
@@ -491,6 +625,124 @@ def _paper_img_dir(paper_id: int) -> Path:
     d = _IMAGE_ROOT / str(paper_id)
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def remove_paper_images(paper_id: int) -> int:
+    """删卷后清理该卷的图示页原图（整目录移除，文件不在库里、级联删不掉）。"""
+    import shutil
+
+    d = _IMAGE_ROOT / str(paper_id)
+    if not d.is_dir():
+        return 0
+    shutil.rmtree(d, ignore_errors=True)
+    return 1
+
+
+# 真题科目 → 错题本科目（subjects 是用户数据，按关键词 LIKE 匹配，匹配不到就拒绝）
+_SUBJECT_TO_MISTAKE = (
+    ("408", "408"),
+    ("计算机", "计算机"),
+    ("数学", "数学"),
+    ("英语", "英语"),
+    ("政治", "政治"),
+)
+
+
+def set_question_answer(conn, paper_id: int, question_id: int, answer: str):
+    """人工修正客观题答案（正则没配上/配错了，页面上直接改）。
+
+    choice 只收 A-D 或空串；fill 收任意文本（数值/表达式答案）；solution 不存答案。
+    返回 (question_dict, None) 或 (None, 错误消息)。
+    """
+    answer = str(answer or "").strip()
+    row = conn.execute(
+        "SELECT * FROM exam_questions WHERE id = ? AND paper_id = ?",
+        (question_id, paper_id),
+    ).fetchone()
+    if row is None:
+        return None, "题目不存在"
+    q = dict(row)
+    if q["question_type"] == "choice":
+        answer = answer.upper()
+        if answer and not re.fullmatch(r"[A-D]", answer):
+            return None, "选择题答案只能是 A、B、C、D 或留空"
+    elif q["question_type"] == "solution":
+        return None, "解答题没有标准答案字段"
+    else:
+        answer = answer[:200]
+    conn.execute(
+        "UPDATE exam_questions SET correct_answer = ? WHERE id = ?",
+        (answer, question_id),
+    )
+    conn.commit()
+    q["correct_answer"] = answer
+    return q, None
+
+
+def question_to_mistake(conn, paper_id: int, question_id: int):
+    """把一道真题转入错题本（单题手动入口；模考交卷的自动入库走前端）。
+
+    同卷同题干只转一次：已存在（source_name + 题干相同）时直接返回那条，不重复入库。
+    返回 (mistake_dict, None) 或 (None, 错误消息)。
+    """
+    from app.services import mistake_service
+
+    paper = conn.execute("SELECT * FROM exam_papers WHERE id = ?", (paper_id,)).fetchone()
+    if paper is None:
+        return None, "真题不存在"
+    paper = dict(paper)
+    row = conn.execute(
+        "SELECT * FROM exam_questions WHERE id = ? AND paper_id = ?",
+        (question_id, paper_id),
+    ).fetchone()
+    if row is None:
+        return None, "题目不存在"
+    q = dict(row)
+    qtype = q["question_type"] if q["question_type"] in ("choice", "fill", "solution") else "choice"
+
+    subject_row = None
+    for kw, _ in _SUBJECT_TO_MISTAKE:
+        if kw in (paper["subject"] or ""):
+            subject_row = conn.execute(
+                "SELECT id FROM subjects WHERE name LIKE ? LIMIT 1", (f"%{kw}%",)
+            ).fetchone()
+            if subject_row:
+                break
+    if subject_row is None:
+        return None, f"错题本科目里找不到「{paper['subject'] or '未知科目'}」对应的科目，请先建科目"
+
+    if qtype == "choice" and not (q["correct_answer"] or "").strip():
+        return None, "这题还没有答案，先「补答案」再转入错题本"
+
+    existing = conn.execute(
+        "SELECT * FROM mistakes WHERE source_name = ? AND question = ?",
+        (paper["title"] or "", q["question"] or ""),
+    ).fetchone()
+    if existing:
+        return mistake_service.mistake_to_dict(existing), None
+
+    body = {
+        "subject_id": subject_row["id"],
+        "question_type": qtype,
+        "question": q["question"] or "",
+        "option_a": q["option_a"] or "",
+        "option_b": q["option_b"] or "",
+        "option_c": q["option_c"] or "",
+        "option_d": q["option_d"] or "",
+        "correct_answer": q["correct_answer"] or "",
+        "analysis": q["analysis"] or f"来自真题《{paper['title']}》，解析待整理。",
+        "difficulty_points": q["section"] or f"真题 · {paper['title']}",
+        "difficulty": 3,
+        "knowledge_tags": [],
+        "source_type": "real_exam",
+        "source_year": paper["year"] or "",
+        "source_name": paper["title"] or "",
+        "images": [],
+    }
+    created, errors = mistake_service.create_mistake(conn, body)
+    if errors:
+        return None, "；".join(errors)
+    return created, None
 
 
 def _has_diagram_option(q: dict) -> bool:
@@ -764,6 +1016,66 @@ def _set_status(conn, paper_id: int, status: str, note: str = "") -> None:
     conn.commit()
 
 
+# ---- 拆题检查点（app_meta，免迁移）：断点续跑的实现 -------------------------
+# 每成功拆完一段就保存「已完成段数 + 至今拆出的题」；重试时若段数一致就跳过
+# 已完成段。段数不一致（源文件被换过/提取结果变了）则整体作废从头来——宁可重烧，
+# 不拼出半旧半新的题面。
+
+
+def _resume_key(paper_id: int) -> str:
+    return f"paper_resume_{paper_id}"
+
+
+def _save_checkpoint(conn, paper_id: int, done: int, questions: list, chunks_total: int) -> None:
+    payload = json.dumps(
+        {"done": done, "chunks_total": chunks_total, "questions": questions},
+        ensure_ascii=False,
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+        (_resume_key(paper_id), payload),
+    )
+    conn.commit()
+
+
+def _load_checkpoint(conn, paper_id: int):
+    try:
+        row = conn.execute(
+            "SELECT value FROM app_meta WHERE key = ?", (_resume_key(paper_id),)
+        ).fetchone()
+        if not row:
+            return None
+        data = json.loads(row["value"])
+        if not isinstance(data, dict):
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def _clear_checkpoint(conn, paper_id: int) -> None:
+    conn.execute("DELETE FROM app_meta WHERE key = ?", (_resume_key(paper_id),))
+    conn.commit()
+
+
+def _apply_checkpoint(conn, paper_id: int, chunks: list, questions: list, seen_nos: set) -> int:
+    """有可用检查点就把已拆的题灌回并返回起始段下标；否则返回 0（从头拆）。"""
+    cp = _load_checkpoint(conn, paper_id)
+    if not cp:
+        return 0
+    done = int(cp.get("done") or 0)
+    total = int(cp.get("chunks_total") or 0)
+    saved = cp.get("questions") or []
+    if done <= 0 or done > len(chunks) or total != len(chunks) or not saved:
+        return 0
+    for q in saved:
+        key = f"{q.get('no')}|{q.get('type')}"
+        if key not in seen_nos:
+            seen_nos.add(key)
+            questions.append(q)
+    return done
+
+
 def _worker_loop() -> None:
     from app.database import get_connection
 
@@ -899,44 +1211,43 @@ def _run_import(paper_id: int) -> None:
                     }
                 )
 
+        # 统一扁平分块拆题（扫描/公式卷更完整，避免逐页漏掉同页多个综合题）。
+        # 每成功一段就落一次检查点（app_meta）：中途失败重试时已拆好的段直接复用，
+        # 已花的 AI 费用不白付（此前一块失败整卷作废重烧）。
         if scanned:
-            # 统一扁平分块拆题（对扫描/公式卷更完整，避免逐页漏掉同页多个综合题）；
-            # 拆完再按题号在逐页文本里定位页码（可靠，供图示题存该页原图）。
             for i, _page_text, pil in pages:
                 page_pils[i] = pil
-            chunks = _chunk_text(exam_text)
-            for idx, chunk in enumerate(chunks):
-                parsed = ai_service._chat_json(
-                    [
-                        {
-                            "role": "user",
-                            "content": _structure_prompt(paper["subject"], paper["year"], chunk),
-                        }
-                    ],
-                    max_tokens=12000,
-                )
-                _collect(parsed.get("questions", []) or [])
-                _set_status(conn, paper_id, "structuring", f"AI 拆题中 {idx + 1}/{len(chunks)} 段")
+        chunks = _chunk_text(exam_text)
+        start_idx = _apply_checkpoint(conn, paper_id, chunks, questions, seen_nos)
+        if start_idx:
+            _set_status(
+                conn,
+                paper_id,
+                "structuring",
+                f"检测到上次进度，从第 {start_idx + 1}/{len(chunks)} 段继续",
+            )
+        for idx in range(start_idx, len(chunks)):
+            parsed = ai_service._chat_json(
+                [
+                    {
+                        "role": "user",
+                        "content": _structure_prompt(paper["subject"], paper["year"], chunks[idx]),
+                    }
+                ],
+                max_tokens=12000,
+            )
+            _collect(parsed.get("questions", []) or [])
+            _save_checkpoint(conn, paper_id, idx + 1, questions, len(chunks))
+            _set_status(conn, paper_id, "structuring", f"AI 拆题中 {idx + 1}/{len(chunks)} 段")
+
+        if scanned:
+            # 拆完再按题号在逐页文本里定位页码（可靠，供图示题存该页原图）。
             for q in questions:
                 # 只在文本定位成功时覆盖模型给的页码；定位失败(-1)保留模型自报值，
                 # 否则会把原本可用的页码清成 -1。
                 located = _page_for_no(q["no"], pages)
                 if located >= 0:
                     q["page_idx"] = located
-        else:
-            chunks = _chunk_text(exam_text)
-            for idx, chunk in enumerate(chunks):
-                parsed = ai_service._chat_json(
-                    [
-                        {
-                            "role": "user",
-                            "content": _structure_prompt(paper["subject"], paper["year"], chunk),
-                        }
-                    ],
-                    max_tokens=12000,
-                )
-                _collect(parsed.get("questions", []) or [])
-                _set_status(conn, paper_id, "structuring", f"AI 拆题中 {idx + 1}/{len(chunks)} 段")
 
         if not questions:
             _set_status(conn, paper_id, "error", "AI 未能从文本中整理出试题")
@@ -1051,5 +1362,6 @@ def _run_import(paper_id: int) -> None:
             ),
         )
         conn.commit()
+        _clear_checkpoint(conn, paper_id)
     finally:
         conn.close()

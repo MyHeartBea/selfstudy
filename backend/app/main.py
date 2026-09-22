@@ -22,6 +22,7 @@ from app.routers import (
     mistakes,
     papers,
     reviews,
+    sprint,
     stats,
     subjects,
     system,
@@ -149,6 +150,7 @@ app.include_router(reviews.router, dependencies=[Depends(verify_api_token)])
 app.include_router(ai.router, dependencies=[Depends(verify_api_token)])
 app.include_router(papers.router, dependencies=[Depends(verify_api_token)])
 app.include_router(essay.router, dependencies=[Depends(verify_api_token)])
+app.include_router(sprint.router, dependencies=[Depends(verify_api_token)])
 
 # 错题题干配图静态访问（data/images/）
 from app.services.mistake_service import _images_dir  # noqa: E402

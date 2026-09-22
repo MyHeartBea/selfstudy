@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from app.database import local_day_bounds_utc
+from app.services.search_service import like_pattern
 from ..vocab_filter import should_reject
 
 # mastery_level（答对次数）→ 下次间隔天数
@@ -336,3 +337,43 @@ def import_english_words(conn: sqlite3.Connection, items: List[dict], source: st
         created += 1
     conn.commit()
     return {"created": created, "updated": updated, "failed": failed}
+
+
+def find_context(conn: sqlite3.Connection, vocab_id: int, limit: int = 3):
+    """真题语境回链：在错题库的英语原文（passage_text）里找这个词出现的位置。
+
+    LIKE 粗筛（复用全站 like_pattern 口径）后再用 \\b 词边界正则精选，
+    避免 art 命中 start。找不到返回 []；生词不存在返回 None。
+    """
+    row = get_vocab(conn, vocab_id)
+    if row is None:
+        return None
+    word = (row["word"] or "").strip()
+    if not word:
+        return []
+    candidates = conn.execute(
+        "SELECT id, question, source_name, source_year, passage_text FROM mistakes "
+        "WHERE passage_text LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT 200",
+        (like_pattern(word),),
+    ).fetchall()
+    rx = re.compile(rf"(?<!\w){re.escape(word)}(?!\w)", re.IGNORECASE)
+    hits: List[dict] = []
+    for r in candidates:
+        text = r["passage_text"] or ""
+        m = rx.search(text)
+        if not m:
+            continue
+        start = max(0, m.start() - 60)
+        end = min(len(text), m.end() + 60)
+        snippet = text[start:end].replace("\n", " ").strip()
+        hits.append(
+            {
+                "mistake_id": r["id"],
+                "source_name": (r["source_name"] or "").strip() or (r["question"] or "")[:40],
+                "source_year": r["source_year"] or "",
+                "snippet": ("…" if start > 0 else "") + snippet + ("…" if end < len(text) else ""),
+            }
+        )
+        if len(hits) >= limit:
+            break
+    return hits

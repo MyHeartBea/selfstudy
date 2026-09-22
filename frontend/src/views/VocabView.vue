@@ -3,10 +3,11 @@
  * 生词本（英语二核心）：词表管理 + 闪卡快刷 + 批量导入。
  * 复习节奏：认识则阶梯拉远（1/2/4/7/15/30/60 天），模糊说明天，不认识留在队列。
  */
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
+import { speakEnglish, speechSupported } from '../utils/speech'
 import { useCountUp } from '../utils/useCountUp'
 import { formatTime } from '../composables/useBaseData'
 import { useResourceList } from '../composables/useResourceList'
@@ -24,6 +25,7 @@ import UiPagination from '../ui/UiPagination.vue'
 import Icon from '../ui/Icon.vue'
 
 const route = useRoute()
+const router = useRouter()
 const mode = ref('list') // list | flashcard
 const stats = ref({ total: 0, due: 0, mastered: 0, distribution: [] })
 const nTotal = useCountUp(computed(() => stats.value.total))
@@ -333,6 +335,47 @@ async function startFlashcards() {
 
 const currentCard = computed(() => queue.value[cardIndex.value] || null)
 
+// —— 闪卡发音（浏览器本地 TTS）+ 真题语境回链 ——
+const canSpeak = speechSupported()
+function speakCard(card) {
+  if (!card) return
+  if (!speakEnglish(card.word)) toast.warning('当前浏览器不支持语音朗读')
+}
+
+const ctxHits = ref([])
+const ctxLoading = ref(false)
+const ctxCache = new Map() // vocab_id 到命中列表的会话内缓存，翻回来看不再请求
+
+watch(
+  () => [flipped.value, cardIndex.value],
+  async ([isFlipped]) => {
+    const card = currentCard.value
+    if (!isFlipped || !card) return
+    if (ctxCache.has(card.id)) {
+      ctxHits.value = ctxCache.get(card.id)
+      return
+    }
+    ctxLoading.value = true
+    ctxHits.value = []
+    try {
+      const res = await request.get(`/vocab/${card.id}/context`, { silent: true })
+      const hits = res.data.data || []
+      ctxCache.set(card.id, hits)
+      // 等待期间可能已翻到下一张，别把旧词的语境挂错卡
+      if (currentCard.value && currentCard.value.id === card.id) ctxHits.value = hits
+    } catch (err) {
+      /* 语境是锦上添花，失败静默 */
+    } finally {
+      ctxLoading.value = false
+    }
+  },
+)
+
+/** 语境条目跳单题直练（与知识点详情「练这题」同一落点） */
+function goContext(hit) {
+  router.push({ path: '/review', query: { mode: 'curve', count: 1, mistake_id: hit.mistake_id } })
+}
+
 async function grade(result) {
   if (!currentCard.value) return
   try {
@@ -344,6 +387,8 @@ async function grade(result) {
     queue.value.push(currentCard.value)
   }
   flipped.value = false
+  ctxHits.value = []
+  ctxLoading.value = false
   if (cardIndex.value + 1 >= queue.value.length) {
     sessionDone.value = true
     loadStats()
@@ -552,7 +597,19 @@ async function exportAnki() {
               @pointercancel="onCardPointerUp"
             >
               <template #front>
-                <div class="flash-word serif">{{ currentCard.word }}</div>
+                <div class="flash-word-row">
+                  <div class="flash-word serif">{{ currentCard.word }}</div>
+                  <button
+                    v-if="canSpeak"
+                    type="button"
+                    class="flash-speak"
+                    title="朗读单词"
+                    aria-label="朗读单词"
+                    @click.stop="speakCard(currentCard)"
+                  >
+                    <Icon name="volume" :size="19" />
+                  </button>
+                </div>
                 <div v-if="currentCard.phonetic" class="flash-phonetic">
                   {{ currentCard.phonetic }}
                 </div>
@@ -562,6 +619,22 @@ async function exportAnki() {
                 <p class="flash-meaning">{{ currentCard.meaning || '（未填写释义）' }}</p>
                 <p v-if="currentCard.example" class="flash-example">{{ currentCard.example }}</p>
                 <p v-if="currentCard.note" class="flash-note">{{ currentCard.note }}</p>
+                <div v-if="ctxHits.length" class="flash-ctx">
+                  <span class="flash-ctx-label">真题里见过它</span>
+                  <button
+                    v-for="h in ctxHits"
+                    :key="h.mistake_id"
+                    type="button"
+                    class="flash-ctx-item"
+                    @click.stop="goContext(h)"
+                  >
+                    <span class="flash-ctx-src">{{
+                      h.source_name || (h.source_year ? `${h.source_year} 真题` : '错题原文')
+                    }}</span>
+                    <span class="flash-ctx-snippet">{{ h.snippet }}</span>
+                  </button>
+                </div>
+                <span v-else-if="ctxLoading" class="flash-ctx-label dim">找真题语境中…</span>
               </template>
             </FlipCard>
           </div>
@@ -1027,6 +1100,77 @@ async function exportAnki() {
   color: var(--gold);
   text-align: center;
   margin: 0;
+}
+.flash-word-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.flash-speak {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--accent);
+  cursor: pointer;
+  transition:
+    transform var(--dur-1) var(--ease-move),
+    background var(--dur-1) var(--ease-enter);
+}
+.flash-speak:hover {
+  background: var(--accent-soft);
+  transform: scale(1.08);
+}
+.flash-speak:active {
+  transform: scale(0.94);
+}
+.flash-ctx {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 92%;
+}
+.flash-ctx-label {
+  font-size: 11.5px;
+  color: var(--teal);
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.flash-ctx-label.dim {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.flash-ctx-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-1) var(--ease-enter);
+}
+.flash-ctx-item:hover {
+  background: var(--accent-soft);
+}
+.flash-ctx-src {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.flash-ctx-snippet {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .flash-tip {
   position: absolute;

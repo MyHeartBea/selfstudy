@@ -27,6 +27,7 @@ export const NAV_COMMANDS = [
   { icon: 'layers', label: '知识点库', hint: '资料', path: '/knowledge' },
   { icon: 'sigma', label: '公式背诵', hint: '资料', path: '/formulas' },
   { icon: 'compass', label: '科目指南', hint: '资料', path: '/subjects' },
+  { icon: 'target', label: '冲刺计划', hint: '考前倒推', path: '/sprint' },
   { icon: 'image', label: '数据体检', hint: '只读巡检', path: '/integrity' },
   { icon: 'clock', label: '数据备份与回滚', hint: '整库快照', path: '/snapshots' },
 ]

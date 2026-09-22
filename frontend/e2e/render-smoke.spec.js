@@ -22,6 +22,8 @@ const ROUTES = [
   { path: '/subjects', marker: /科目|指南/ },
   { path: '/papers', marker: /真题|卷/ },
   { path: '/essays', marker: /作文/ },
+  // 冲刺计划页（不在 Dock 里）：断言打在计划内容上，漏打桩会渲染成"考试日期没配置好"空态
+  { path: '/sprint', marker: /每天目标/ },
   // 只读巡检页（不在 Dock 里，直链/命令面板进入）：漏打桩会让它显示成"没查到"
   { path: '/integrity', marker: /数据体检/ },
   // 整库回滚页同上，且它一进来就要拉快照列表 —— 漏打桩会渲染成"还没有任何快照"
