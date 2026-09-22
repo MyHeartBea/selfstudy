@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 
 from fastapi import APIRouter, Query
 
@@ -18,10 +19,12 @@ def _resolve_inside(value: str) -> Path | None:
 
     Windows 上 `root / "C:/x/y.pdf"` 会被绝对路径整体替换 → 可读磁盘上任意
     PDF/DOCX（正文还能经 GET /api/papers/{id} 取回），所以入口必须先过这道门。
+    盘符路径要单独用正则拒绝：Linux 上 `Path("C:/x/y.pdf").is_absolute()` 是
+    False（CI 真踩过），它作为"相对路径"也永远不合法，在哪台主机上都得挡。
     """
     if not value:
         return None
-    if Path(value).is_absolute():
+    if Path(value).is_absolute() or re.match(r"^[A-Za-z]:[\\/]", value) or value.startswith("\\\\"):
         return None
     if ".." in value.replace("\\", "/").split("/"):
         return None
