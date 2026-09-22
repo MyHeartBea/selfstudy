@@ -300,5 +300,54 @@ class TestImportFingerprint(unittest.TestCase):
         self.assertEqual(one, self.fp(text, 1))  # 不比图片字节，只比张数
 
 
+class ImageUploadValidationTest(unittest.TestCase):
+    """图片上传内容校验：扩展名以文件头嗅探为准，非图片字节拒绝落盘。
+
+    旧行为是"裸 base64 一律按 .png 收进库里"，等于把任意文件当图片存；
+    图片删除链路（remove_image_files）还会照着这些文件名删文件。
+    Pillow 在 CI 上不存在（AGENTS 第 2 节），解码级校验要按有无 Pillow 分开断言。
+    """
+
+    PNG_1PX = __import__("base64").b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+    )
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self._patch = patch.object(mistake_service, "IMAGE_DIR", Path(self._tmp.name))
+        self._patch.start()
+        self.addCleanup(self._patch.stop)
+
+    def test_real_png_saved_with_content_truth_ext(self):
+        rel = mistake_service.process_images(
+            ["data:image/jpeg;base64," + __import__("base64").b64encode(self.PNG_1PX).decode()]
+        )
+        self.assertEqual(len(rel), 1)
+        self.assertTrue(rel[0].endswith(".png"))  # 内容是 png，扩展名跟着内容走
+
+    def test_garbage_bytes_rejected(self):
+        garbage = __import__("base64").b64encode(b"definitely not an image").decode()
+        with self.assertRaises(ValueError):
+            mistake_service.process_images([f"data:image/png;base64,{garbage}"])
+        self.assertEqual(list(Path(self._tmp.name).iterdir()), [])
+
+    def test_text_payload_with_png_mime_rejected(self):
+        text = __import__("base64").b64encode("这只是一段文字".encode()).decode()
+        with self.assertRaises(ValueError):
+            mistake_service.process_images([f"data:image/png;base64,{text}"])
+
+    def test_corrupt_png_rejected_when_pillow_available(self):
+        try:
+            import PIL  # noqa: F401
+        except ImportError:
+            self.skipTest("CI 无 Pillow，跳过解码级校验断言")
+        corrupt = self.PNG_1PX[:10] + b"broken-trailer"
+        with self.assertRaises(ValueError):
+            mistake_service.process_images(
+                ["data:image/png;base64," + __import__("base64").b64encode(corrupt).decode()]
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -327,11 +327,31 @@ def update_knowledge(
 
 
 def delete_knowledge(conn: sqlite3.Connection, knowledge_id: int) -> bool:
-    """删除知识点词条，不影响关联错题。"""
-    row = conn.execute("SELECT 1 FROM knowledge_base WHERE id = ?", (knowledge_id,)).fetchone()
+    """删除知识点词条，不影响关联错题。
+
+    其他词条 related_tags 里指向它的引用一并清掉，否则留下悬空标签：
+    名称没直接命中错题时会走 related_tags 兜底，悬空引用会让"练这些题"
+    拿一个不存在的知识点名去查标签，永远空手而归。
+    """
+    row = conn.execute(
+        "SELECT tag_name FROM knowledge_base WHERE id = ?", (knowledge_id,)
+    ).fetchone()
     if row is None:
         return False
+    tag = row["tag_name"]
     conn.execute("DELETE FROM knowledge_base WHERE id = ?", (knowledge_id,))
+    # related_tags 是逗号串（canonical_tags 归一后的形态）；全表量级小，Python 里过滤即可。
+    # 两边都过 canonical_tags 再比对，兼容手动改库留下的非归一写法。
+    others = conn.execute(
+        "SELECT id, related_tags FROM knowledge_base "
+        "WHERE related_tags IS NOT NULL AND related_tags != ''"
+    ).fetchall()
+    for other in others:
+        tags = canonical_tags([t.strip() for t in other["related_tags"].split(",") if t.strip()])
+        if tag not in tags:
+            continue
+        kept = ",".join(t for t in tags if t != tag)
+        conn.execute("UPDATE knowledge_base SET related_tags = ? WHERE id = ?", (kept, other["id"]))
     conn.commit()
     return True
 

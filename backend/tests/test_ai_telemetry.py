@@ -240,6 +240,18 @@ class RouterDegradeTest(unittest.TestCase):
         self.assertNotIn("降级", r.json()["message"], "没降级就别吓用户")
 
 
+class SenseRateLimitPinTest(unittest.TestCase):
+    """/api/ai/sense 是 AI 出口，必须挂 ai_rate_limit（曾是唯一漏挂的 AI 端点）。"""
+
+    def test_sense_route_has_rate_limit(self):
+        from app.routers.ai import router
+        from app.security import ai_rate_limit
+
+        routes = [r for r in router.routes if getattr(r, "path", "").endswith("/sense")]
+        self.assertEqual(len(routes), 1)
+        self.assertTrue(any(d.dependency is ai_rate_limit for d in routes[0].dependencies))
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -159,6 +159,22 @@ def create_mock(body: MockCreate):
         conn.close()
 
 
+@router.delete("/mocks/{mock_id}")
+def delete_mock(mock_id: int):
+    """删除一条模考存档（记错成绩时用；统计页趋势随之更新）。"""
+    conn = get_connection()
+    try:
+        cur = conn.execute("DELETE FROM mock_records WHERE id = ?", (mock_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            return error(404, "没有这条模考记录")
+        return ok({"id": mock_id})
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
 @router.get("/reviews/practice")
 def get_practice_reviews(
     mode: str = Query("curve", pattern="^(curve|wrong_time|random|real_exam|mock)$"),

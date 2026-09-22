@@ -10,6 +10,14 @@ const request = axios.create({
   paramsSerializer: { indexes: null },
 })
 
+request.interceptors.request.use((config) => {
+  // API_TOKEN 模式（局域网访问）：localStorage 里配了 km-api-token 就自动带头。
+  // <img> 走的是 main.js 写的 cookie（km_token），两条路服务端都认。
+  const token = localStorage.getItem('km-api-token')
+  if (token) config.headers['X-API-Token'] = token
+  return config
+})
+
 request.interceptors.response.use(
   (response) => response,
   (error) => {

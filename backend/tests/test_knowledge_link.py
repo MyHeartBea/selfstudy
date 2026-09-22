@@ -126,5 +126,45 @@ class KnowledgeLinkTest(unittest.TestCase):
         self.assertGreaterEqual(res["stats"]["never_reviewed"], 1)
 
 
+class DeleteKnowledgeCleansRelatedTagsTest(unittest.TestCase):
+    """删除知识点必须连带清掉其他词条 related_tags 里的悬空引用。
+
+    不清的后果在 get_knowledge_mistakes 的 related_tags 兜底路径上：
+    悬空标签拿去查错题永远空手而归，用户以为这个知识点"没有关联题"。
+    """
+
+    @staticmethod
+    def _add_knowledge(conn, tag_name: str, related: str) -> int:
+        cur = conn.execute(
+            "INSERT INTO knowledge_base (tag_name, subject_id, summary, related_tags) "
+            "VALUES (?, 1, '', ?)",
+            (tag_name, related),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+    def test_delete_removes_dangling_references(self):
+        conn = make_conn()
+        a = self._add_knowledge(conn, "矩阵", "特征值,逆矩阵")
+        self._add_knowledge(conn, "特征值", "矩阵,行列式")
+        self._add_knowledge(conn, "行列式", "矩阵")
+        self._add_knowledge(conn, "无关词条", "别的标签")
+
+        self.assertTrue(knowledge_service.delete_knowledge(conn, a))
+
+        related_of = dict(
+            (r["tag_name"], r["related_tags"])
+            for r in conn.execute("SELECT tag_name, related_tags FROM knowledge_base")
+        )
+        self.assertNotIn("矩阵", related_of["特征值"])
+        self.assertEqual(related_of["特征值"], "行列式")  # 其他引用原样保留
+        self.assertEqual(related_of["行列式"], "")
+        self.assertEqual(related_of["无关词条"], "别的标签")
+
+    def test_delete_missing_returns_false(self):
+        conn = make_conn()
+        self.assertFalse(knowledge_service.delete_knowledge(conn, 999))
+
+
 if __name__ == "__main__":
     unittest.main()

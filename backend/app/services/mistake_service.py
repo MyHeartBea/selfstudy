@@ -97,16 +97,54 @@ def _images_dir() -> Path:
     return IMAGE_DIR
 
 
+_MAGIC_EXTS = (
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"GIF87a", ".gif"),
+    (b"GIF89a", ".gif"),
+)
+
+
+def _sniff_ext(data: bytes) -> str:
+    """按文件头判真实图片类型。认不出返回空串（调用方拒绝，不许按 .png 落盘了事）。"""
+    for magic, ext in _MAGIC_EXTS:
+        if data.startswith(magic):
+            return ext
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    if data.startswith(b"BM"):
+        return ".bmp"
+    return ""
+
+
+def _verify_decodable(data: bytes) -> None:
+    """Pillow 存在时再验一次"能真的解码"（魔数对但内容截断/损坏的文件拦在库里外）。
+
+    CI 环境没有 Pillow（见 AGENTS 第 2 节），缺失时跳过这层，只靠魔数嗅探兜底。
+    """
+    try:
+        import io
+
+        from PIL import Image
+    except ImportError:
+        return
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.verify()
+    except Exception as exc:
+        raise ValueError("图片文件已损坏或不是真实图片") from exc
+
+
 def _save_image_data(data: bytes, mime: str = "") -> str:
-    """把图片字节存到 data/images/，返回相对路径 images/<name>。<name> 为 uuid + 扩展名。"""
-    ext_map = {
-        "image/png": ".png",
-        "image/jpeg": ".jpg",
-        "image/gif": ".gif",
-        "image/webp": ".webp",
-        "image/bmp": ".bmp",
-    }
-    ext = ext_map.get(mime.strip().lower(), ".png")
+    """把图片字节存到 data/images/，返回相对路径 images/<name>。<name> 为 uuid + 扩展名。
+
+    扩展名以**文件头嗅探**为准而不是请求声称的 mime：内容是唯一事实，
+    裸 base64 一律按 .png 落盘等于把任意文件当图片收进库里。
+    """
+    ext = _sniff_ext(data)
+    if not ext:
+        raise ValueError("不是可识别的图片格式（支持 png/jpg/gif/webp/bmp）")
+    _verify_decodable(data)
     name = f"{uuid.uuid4().hex}{ext}"
     (_images_dir() / name).write_bytes(data)
     return f"images/{name}"

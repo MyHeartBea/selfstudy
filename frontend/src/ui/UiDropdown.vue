@@ -25,12 +25,39 @@ function onDocClick(event) {
   if (root.value && !root.value.contains(event.target)) open.value = false
 }
 
+function focusItem(index) {
+  const list = root.value?.querySelectorAll('.dropdown-item')
+  if (!list?.length) return
+  list[Math.max(0, Math.min(index, list.length - 1))].focus()
+}
+
+function onRootKeydown(event) {
+  if (event.key === 'Escape' && open.value) {
+    event.preventDefault()
+    open.value = false
+    root.value?.querySelector('.dd-trigger')?.focus()
+    return
+  }
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    if (!open.value) open.value = true
+    const items = Array.from(root.value?.querySelectorAll('.dropdown-item') || [])
+    const idx = items.indexOf(document.activeElement)
+    focusItem(idx === -1 ? 0 : idx + 1)
+  } else if (event.key === 'ArrowUp' && open.value) {
+    event.preventDefault()
+    const items = Array.from(root.value?.querySelectorAll('.dropdown-item') || [])
+    const idx = items.indexOf(document.activeElement)
+    focusItem(idx === -1 ? items.length - 1 : idx - 1)
+  }
+}
+
 onMounted(() => document.addEventListener('mousedown', onDocClick))
 onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
 </script>
 
 <template>
-  <div ref="root" class="dropdown">
+  <div ref="root" class="dropdown" @keydown="onRootKeydown">
     <slot name="trigger" :open="open" :toggle="() => (open = !open)">
       <button type="button" class="dd-trigger" :disabled="disabled" @click="open = !open">
         <slot></slot>

@@ -163,7 +163,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 |---|---|---|
 | `HOST` | `127.0.0.1` | 监听地址。改 `0.0.0.0` 可手机/局域网访问，**必须同时设 `API_TOKEN`**（否则同网段任何人可读写全部数据） |
 | `PORT` | `8000` | 监听端口 |
-| `API_TOKEN` | 空 | 设置后所有 `/api` 需携带 `X-API-Token` 或 `Authorization: Bearer` |
+| `API_TOKEN` | 空 | 设置后所有 `/api` **与 `/images/**`（含缩略图）** 都要带 token。来源四选一：`X-API-Token` 头 / `Authorization: Bearer` / cookie `km_token` / query `?api_token=`（`<img>` 发不了 header，所以 cookie/query 必须存在；`/images` 静态挂载走 `main.py` 的 `images_token_guard` 中间件，StaticFiles 挂不了依赖）。前端自动配合：localStorage 写入 `km-api-token` 后，axios 请求拦截器带头、boot 时同步写 cookie |
 | `AI_RATE_LIMIT` | `30` | AI 端点每分钟限流 |
 | `REVIEW_DAILY_LIMIT` | `50` | 每日复习配额（含新题）；`0` = 不限 |
 | `SLOW_REQUEST_MS` | `3000` | 超过则日志 WARN，并计入 `/api/health` 的慢请求统计 |
@@ -296,7 +296,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - **故意不接的三处**：`StatsView` 十几个面板各自取数，整屏错误态会盖掉已成功的面板；`SubjectView` 每个科目的指南单独兜底（缺指南≠加载失败）；`PracticeView` 的试卷下拉只是模考的一个数据源，失败时留空即可。**轮询型加载（`PapersView.loadPapers`）只在 `!papers.length` 时才报失败**，否则导入流水线每 2.5s 轮一次、一次网络抖动就把已显示的卷库换成错误态。
   - **踩过的坑**：`useMistakeFilters` 早就 return 了 `loadError`，模板也写了 `v-if="loadError"`，但视图的解构里漏了它 —— 错误 UI 永远渲染不出来。用 composable 的返回值前先在解构里核对一遍。
 - **用了 `<Icon>` 却没 `import Icon` / 模板里引用了 setup 没导出的变量**：两类 bug **三道关卡全放过** —— `vite build` 不报错（编译成 `_ctx.xxx` 或 `resolveComponent("X")`，运行时只是 undefined）、ESLint 没有对应规则、单测不渲染那条分支就看不见。实际各踩一起（`FormulaView` 背诵完成页图标静默消失、`MistakeListView` 漏解构 `loadError` 导致错误 UI 永不渲染）。**现在由 `tests/templateBindings.test.js` 兜住**：拿 Vue 自己的编译器把 `src/**/*.vue` 全过一遍，断言没有 `_ctx.<标识符>`、没有非内置的 `resolveComponent("<X>")`，并自带"故意引用幽灵变量必须被抓到"的自检。新增全局组件/指令时要去那张内置名单里登记。
-- **交互型基件必须键盘可达，只读展示不许带 role/tabindex**：`UiStars` 现在是 `role="radiogroup"` + 每颗星 `role="radio"`，**roving tabindex**（组内只有一个 Tab 落点：选中那颗，未选中则第 1 颗），方向键/Home/End 改分并把焦点跟过去。改之前它是 `role="img"` 的裸 span，录入页**必填项**「难度」对键盘用户完全不可达（`tests/uiStars.test.js` + E2E `keyboard-guard.spec.js` 各兜一半：单测验按键，E2E 验"Tab 真能落进来"——`trigger('keydown')` 直接派发事件，永远抓不到 tabindex 缺失）。同理题干配图 `figure` 补了 `role="button" tabindex="0"` + Enter/Space。
+- **交互型基件必须键盘可达，只读展示不许带 role/tabindex**：`UiStars` 现在是 `role="radiogroup"` + 每颗星 `role="radio"`，**roving tabindex**（组内只有一个 Tab 落点：选中那颗，未选中则第 1 颗），方向键/Home/End 改分并把焦点跟过去。改之前它是 `role="img"` 的裸 span，录入页**必填项**「难度」对键盘用户完全不可达（`tests/uiStars.test.js` + E2E `keyboard-guard.spec.js` 各兜一半：单测验按键，E2E 验"Tab 真能落进来"——`trigger('keydown')` 直接派发事件，永远抓不到 tabindex 缺失）。同理题干配图 `figure` 补了 `role="button" tabindex="0"` + Enter/Space。体检第 8 批补齐 `UiSelect`（Esc 关/方向键进菜单移动焦点/Delete 清空——清空按钮嵌在 trigger 内部，键盘唯一路径）与 `UiDropdown`（Esc/方向键）；**`UiCheckbox`/`UiPagination` 本就是原生元素，别画蛇添足**。给这类"打开弹层"的基件写单测注意：①组件必须 `attachTo: document.body` 挂载，detached 元素 `.focus()` 不动 `activeElement`；②弹层是 `v-if` 异步渲染，打开后要 `await nextTick()` 才查得到内部元素。
 - **全站致命错由 `utils/errorBoundary.js` 兜住**：`main.js` 里 `installWindowGuards()` + `installErrorBoundary(app)`，`app.mount()` 包了 try/catch；组件渲染抛错会收起启动屏并弹原生 `#km-fatal` 面板（role=alert，一次会话只弹一次，留「知道了」）。面板**必须**用原生 DOM 而不是 Vue（走到这里应用本身已经不可信）。新增的全站监听照此成对注册，别在页面里各自 `window.onerror`。资源 404 的 `error` 事件没有 `event.error`，已按此过滤，不要改成 capture 监听把 404 也变成弹窗。
 - **模考（`mode=mock`）离开保护**：作答只暂存在内存，`ReviewView` 用 `beforeunload`（管刷新/关页）+ `onBeforeRouteLeave`（管站内导航）两道挽留，且**只在已作答 ≥1 题时**拦人（一题未答没有东西可丢，拦住就是骚扰）。给"未落库的输入"加保护时照这个分工：两条路缺一不可，且要有 dirty 判据。
 

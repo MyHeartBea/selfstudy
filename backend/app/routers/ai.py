@@ -396,7 +396,7 @@ def weekly_report(force: int = Query(0, ge=0, le=1)):
     return ok(report)
 
 
-@router.get("/sense")
+@router.get("/sense", dependencies=[Depends(ai_rate_limit)])
 def word_sense(word: str = Query(..., min_length=1, max_length=60)):
     """点词查义：用 AI 解释任意英语单词，返回多词性释义。"""
     try:

@@ -1,6 +1,6 @@
 <script setup>
 /** 下拉选择：options=[{label,value}] 或字符串数组；支持 clearable / disabled / 无边框紧凑模式。 */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import Icon from './Icon.vue'
 
 const props = defineProps({
@@ -43,6 +43,59 @@ function onDocClick(event) {
   if (root.value && !root.value.contains(event.target)) open.value = false
 }
 
+function focusOption(index) {
+  const list = root.value?.querySelectorAll('.select-option')
+  if (!list?.length) return
+  const i = Math.max(0, Math.min(index, list.length - 1))
+  list[i].focus()
+}
+
+async function onTriggerKeydown(event) {
+  if (props.disabled) return
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    if (!open.value) {
+      open.value = true
+      // 菜单是 v-if 异步渲染的，等这一帧 patch 完才能把焦点放进选项
+      await nextTick()
+    }
+    // 焦点落在当前选中项；没有选中时 ArrowDown 落第一项、ArrowUp 落最后一项
+    const activeIndex = normalized.value.findIndex((o) => o.value === props.modelValue)
+    focusOption(
+      activeIndex === -1
+        ? event.key === 'ArrowDown'
+          ? 0
+          : normalized.value.length - 1
+        : activeIndex,
+    )
+  } else if (
+    (event.key === 'Delete' || event.key === 'Backspace') &&
+    props.clearable &&
+    current.value
+  ) {
+    // 清空按钮在 trigger 按钮内部（嵌套 button 不合法），键盘路径用 Delete/Backspace
+    event.preventDefault()
+    emit('update:modelValue', null)
+    emit('change', null)
+  }
+}
+
+function onMenuKeydown(event) {
+  const list = Array.from(root.value?.querySelectorAll('.select-option') || [])
+  const idx = list.indexOf(event.target)
+  if (event.key === 'ArrowDown' && idx > -1) {
+    event.preventDefault()
+    focusOption(idx + 1)
+  } else if (event.key === 'ArrowUp' && idx > -1) {
+    event.preventDefault()
+    focusOption(idx - 1)
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    open.value = false
+    root.value?.querySelector('.select-trigger')?.focus()
+  }
+}
+
 onMounted(() => document.addEventListener('mousedown', onDocClick))
 onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
 </script>
@@ -53,7 +106,10 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
       type="button"
       class="select-trigger"
       :disabled="disabled"
+      aria-haspopup="listbox"
+      :aria-expanded="open"
       @click="!disabled && (open = !open)"
+      @keydown="onTriggerKeydown"
     >
       <span v-if="current" class="select-label">{{ current.label }}</span>
       <span v-else class="select-placeholder">{{ placeholder }}</span>
@@ -69,7 +125,7 @@ onUnmounted(() => document.removeEventListener('mousedown', onDocClick))
       <Icon v-else name="chevron-down" :size="14" class="select-arrow" />
     </button>
     <Transition name="drop">
-      <div v-if="open" class="select-menu" role="listbox">
+      <div v-if="open" class="select-menu" role="listbox" @keydown="onMenuKeydown">
         <button
           v-for="option in normalized"
           :key="option.value"

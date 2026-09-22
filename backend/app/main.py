@@ -28,7 +28,7 @@ from app.routers import (
     transfer,
     vocab,
 )
-from app.security import verify_api_token
+from app.security import token_ok, token_configured, verify_api_token
 
 logger = logging.getLogger("kaoyan")
 logging.basicConfig(
@@ -154,6 +154,22 @@ app.include_router(essay.router, dependencies=[Depends(verify_api_token)])
 from app.services.mistake_service import _images_dir  # noqa: E402
 
 _images_dir().mkdir(parents=True, exist_ok=True)
+
+
+@app.middleware("http")
+async def images_token_guard(request: Request, call_next):
+    """`/images/**`（静态挂载 + 缩略图端点）的口令守门。
+
+    StaticFiles mount 挂不了 router 依赖，只能用中间件；两者路径都以 /images 开头，
+    一处判断全覆盖。token 来源含 cookie/query（<img> 发不了 header），见 security.py。
+    """
+    if token_configured() and request.url.path.startswith("/images"):
+        if not token_ok(request):
+            return JSONResponse(
+                status_code=401,
+                content={"code": 401, "data": None, "message": "未授权：API Token 无效或缺失"},
+            )
+    return await call_next(request)
 
 
 @app.get("/images/thumb/{name}", include_in_schema=False)

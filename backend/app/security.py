@@ -13,22 +13,54 @@ from fastapi import Header, HTTPException, Request
 from app.config import settings
 
 
+TOKEN_COOKIE = "km_token"
+
+
+def _provided_token(request: Request, x_api_token: str | None, authorization: str | None) -> str:
+    """按优先级取请求携带的 token。
+
+    `<img>` 标签发不了自定义头，所以除两种 header 外还接受 cookie（前端 boot 时写入，
+    覆盖 /images 静态文件与缩略图）与 query 参数（手工调试/命令行用）。
+    """
+    provided = (x_api_token or request.headers.get("x-api-token") or "").strip()
+    if not provided:
+        authorization = authorization or request.headers.get("authorization")
+        if authorization:
+            # 支持 Authorization: Bearer <token> 形式
+            scheme, _, value = authorization.partition(" ")
+            if scheme.lower() == "bearer":
+                provided = value.strip()
+    if not provided:
+        provided = (request.query_params.get("api_token") or "").strip()
+    if not provided:
+        provided = (request.cookies.get(TOKEN_COOKIE) or "").strip()
+    return provided
+
+
+def token_configured() -> bool:
+    return bool((settings.API_TOKEN or "").strip())
+
+
+def token_ok(
+    request: Request,
+    x_api_token: str | None = None,
+    authorization: str | None = None,
+) -> bool:
+    """未配置 token 时放行（单机零配置）；配置了则要求请求携带一致 token。"""
+    if not token_configured():
+        return True
+    return (
+        _provided_token(request, x_api_token, authorization) == (settings.API_TOKEN or "").strip()
+    )
+
+
 def verify_api_token(
     request: Request,
     x_api_token: str | None = Header(default=None),
     authorization: str | None = Header(default=None),
 ) -> None:
     """校验 API Token（可选）。未配置 token 时放行，保持单机零配置可用。"""
-    token = (settings.API_TOKEN or "").strip()
-    if not token:
-        return
-    provided = (x_api_token or "").strip()
-    if not provided and authorization:
-        # 支持 Authorization: Bearer <token> 形式
-        scheme, _, value = authorization.partition(" ")
-        if scheme.lower() == "bearer":
-            provided = value.strip()
-    if provided != token:
+    if not token_ok(request, x_api_token, authorization):
         raise HTTPException(status_code=401, detail="未授权：API Token 无效或缺失")
 
 

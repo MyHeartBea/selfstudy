@@ -916,7 +916,12 @@ onBeforeRouteLeave(async () => {
                 <div
                   v-if="current.diagram_image"
                   class="mock-diagram"
+                  role="button"
+                  tabindex="0"
+                  aria-label="放大查看原卷图示"
                   @click="openDiagram(current.diagram_image)"
+                  @keydown.enter.prevent="openDiagram(current.diagram_image)"
+                  @keydown.space.prevent="openDiagram(current.diagram_image)"
                 >
                   <img :src="current.diagram_image" alt="原卷图示（点击放大）" />
                   <span class="mock-diagram-hint">原卷图示 · 点击放大</span>

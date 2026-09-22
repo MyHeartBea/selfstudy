@@ -68,7 +68,7 @@ async function scan() {
     const res = await request.get('/papers/scan', { silent: true })
     candidates.value = res.data.data || []
     if (!candidates.value.length)
-      toast.info(`真题文件夹里没有找到 docx/pdf（${''}检查 D:\\km-v2\\真题）`)
+      toast.info('真题文件夹里没有找到 docx/pdf（请检查 D:\\km-v2\\真题）')
   } catch (err) {
     toast.error('扫描失败')
   } finally {

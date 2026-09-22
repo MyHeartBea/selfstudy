@@ -678,3 +678,44 @@ to human jobs."），【思路】的排除理由也建立在这句编造的原�
 按现有停用表不算"简单词"但观感偏基础 —— 要不要收紧，等用户给具体判断。
 
 
+## 2026-09-22 · 全栈体检第 8 批：确凿问题打包（非真题版，`待补哈希`）
+
+**为什么是这批**：全库巡检（前后端两路并行）产出 22 条清单；用户拍板"避开真题（晚上再做）"，
+于是抽走真题相关的 5 条（error 重试 / N+1 / 图示孤儿 / 一键转错题 / 答案人工修正），留下 7 条
+全是"确凿、小而真"的问题一次打包。另有一条巡检误报被 AGENTS 记录在案后**放弃修复**：
+"StatsView/SubjectView 缺 UiLoadError"其实是第 6.5 节写明**故意不接**的两处，不能当缺陷修。
+
+**1. A1 图片路径口令缺口（本批最重）**：token 只挂在 12 组 /api 路由上，`/images` 静态挂载与
+缩略图端点匿名可访问——巡检还顺手揭出一个更大的事实：**前端压根没实现带 token**，设了
+API_TOKEN 整个 SPA 全 401，图片缺口只是"token 模式半成品"的一个症状。修复分三层：
+① `security.py` 的 token 来源从"两种 header"扩到四种（+ cookie `km_token` / query `?api_token=`，
+`<img>` 标签发不了自定义头，这两条是必须不是可选）；② `/images` 守门用 HTTP 中间件
+（`images_token_guard`，StaticFiles mount 挂不了 router 依赖，缩略图端点路径同以 /images 开头
+一处判断全覆盖）；③ 前端 axios 请求拦截器自动带头 + `main.js` boot 时把 localStorage 的
+`km-api-token` 同步写进 cookie。未设 token 时全部放行，单机零配置行为不变。
+测试用"401 拦下 vs 404 放行到处理器"来证放行，不碰真实图片目录。
+
+**2. A6 键盘可达（含一次巡检自我纠错）**：四基件里 **UiSelect/UiDropdown 真缺**（Esc 关、
+方向键进菜单移动焦点、UiSelect 的 Delete/Backspace 清空——清空按钮嵌在 trigger 按钮内部，
+嵌套 button 不合法，键盘此前没有任何清空路径）；**UiCheckbox/UiPagination 是误报**
+（原生 input/button 本就可达），如实记录不画蛇添足。ReviewView 模考图示补 role/tabindex/
+Enter/Space。单测两个环境坑写进了 AGENTS：happy-dom 里 detached 元素 `.focus()` 不动
+`activeElement`（必须 `attachTo: document.body`）；`v-if` 弹层要 `await nextTick()` 才查得到。
+
+**3. 其余四件小的**：`/api/ai/sense` 补挂 `ai_rate_limit`（曾是唯一漏挂的 AI 端点，用路由
+依赖内省钉住）；`DELETE /api/mocks/{id}`（模考成绩记错此前永远挂在趋势图上）；删知识点连带
+清其他词条 `related_tags` 里的悬空引用（不清的后果在"练这些题"的兜底路径上：拿不存在的
+知识点名查标签永远空手而归）；图片上传内容校验——**扩展名以文件头嗅探为准而不是请求声称的
+mime**（裸 base64 一律按 .png 收等于把任意文件当图片存，删除链路还会照着文件名删文件），
+Pillow 存在时再加解码级校验，CI 无 Pillow 按有无分开断言。
+
+**4. 连带修掉两处旧账**：PapersView 扫描空结果 toast 的 `${''}` 空插值残留；
+`test_export_import_round_trip` 的夹具假图（"hello" 的 base64）在新校验下现形，换成真 1x1 PNG——
+夹具造假被真实校验抓出来，正是这批要的效果。
+
+**测试**：后端 257 -> **272**（+15：security_images 6 / 图片校验 4 / knowledge 清引用 2 /
+mocks 2 / sense 限流 1）；前端 Vitest 133 -> **138**（+5 `uiSelectKeyboard.test.js`）；E2E 51 不变。
+覆盖率按 CI 口径约 73%。
+
+**明确没做**：真题相关 5 条（等晚上）；图片校验没做体积-分辨率双上限（8MB 尺寸门已有）；
+cookie 方案没有做成登录页（单用户场景 localStorage 手配，文档已写明）。

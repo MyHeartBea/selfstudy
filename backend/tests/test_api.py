@@ -190,7 +190,10 @@ class TestApiSmoke(unittest.TestCase):
             "source_type": "mock",
             "source_year": "2026",
             "source_name": "往返模拟卷",
-            "images": ["data:image/png;base64,aGVsbG8="],
+            # 真 1x1 PNG（图片内容校验上线后，假字节会被拒；校验本身由 test_data_safety 钉）
+            "images": [
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+            ],
         }
         r = self.client.post("/api/mistakes", json=payload)
         self.assertEqual(r.status_code, 200)
@@ -223,6 +226,41 @@ class TestApiSmoke(unittest.TestCase):
         self.assertNotIn("english_sentences", found[0])
         for row in found:
             self.client.delete(f"/api/mistakes/{row['id']}")
+
+
+class TestMocksDelete(unittest.TestCase):
+    """模考成绩记错要能删（此前只有 POST/GET，错的成绩永远挂在趋势图上）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        cls._client_ctx = TestClient(app)
+        cls._client_ctx.__enter__()
+        cls.client = cls._client_ctx
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._client_ctx.__exit__(None, None, None)
+        cls._tmpdir.cleanup()
+
+    def test_delete_mock_then_gone(self):
+        r = self.client.post(
+            "/api/mocks", json={"exam_year": "2025", "total": 20, "correct": 15, "score": 75}
+        )
+        self.assertEqual(r.status_code, 200, r.text)
+        mid = r.json()["data"]["id"]
+
+        r = self.client.delete(f"/api/mocks/{mid}")
+        self.assertEqual(r.status_code, 200, r.text)
+
+        ids = [m["id"] for m in self.client.get("/api/mocks").json()["data"]]
+        self.assertNotIn(mid, ids)
+
+    def test_delete_missing_returns_404(self):
+        r = self.client.delete("/api/mocks/999999")
+        self.assertEqual(r.status_code, 404)
 
 
 if __name__ == "__main__":

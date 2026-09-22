@@ -196,5 +196,10 @@
   `search` 按题干/正文 LIKE 过滤（命令面板跳回来用 `?search=`）；`GET /api/essays/{id}` 含 `essay_text` + 完整 `result`；
   `DELETE /api/essays/{id}`。
 
-AI 端点需在 `backend/.env` 配置密钥；有每分钟限流（默认 30）。设置 `API_TOKEN` 后所有 `/api`
-请求需携带 `X-API-Token` 或 `Authorization: Bearer`。
+AI 端点需在 `backend/.env` 配置密钥；有每分钟限流（默认 30，**点词查义 `/api/ai/sense` 也在内**）。
+设置 `API_TOKEN` 后所有 `/api` **与 `/images/**`（含缩略图）** 都要带 token，来源四选一：
+`X-API-Token` 头 / `Authorization: Bearer` / cookie `km_token` / query `?api_token=`。
+cookie 与 query 是给 `<img>` 标签用的（发不了自定义头）；前端约定在 localStorage 写
+`km-api-token`，axios 拦截器自动带头、启动时同步写 cookie。
+
+- `DELETE /api/mocks/{id}`：删除一条模考存档（记错成绩用；404=没有这条记录）。
