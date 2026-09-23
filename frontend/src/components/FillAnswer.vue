@@ -1,5 +1,5 @@
 <script setup>
-/** 填空题作答：输入 → 后端自动判分（别名/数值容差）或手动标记 */
+/** 填空题作答：提交后由后端自动判分（别名/数值容差）或手动标记 */
 import MathText from './MathText.vue'
 import UiButton from '../ui/UiButton.vue'
 
@@ -7,17 +7,36 @@ defineProps({
   current: { type: Object, required: true },
   userInput: { type: String, default: '' },
   judgeResult: { type: Object, default: null },
+  peeked: { type: Boolean, default: false }, // 直接看答案：跳过作答，看完自评对错
   judging: { type: Boolean, default: false },
   submitting: { type: Boolean, default: false },
   reviewSaved: { type: Boolean, default: false },
 })
 
-defineEmits(['update:userInput', 'submit', 'next', 'mark'])
+defineEmits(['update:userInput', 'submit', 'next', 'mark', 'peek'])
 </script>
 
 <template>
   <div>
-    <template v-if="!judgeResult">
+    <template v-if="!judgeResult && peeked">
+      <div class="answer-block">
+        <div class="block-label">参考答案</div>
+        <p style="margin: 0"><MathText :text="current.correct_answer || '暂无'" /></p>
+      </div>
+      <div v-if="current.analysis" class="analysis-block">
+        <div class="block-label">解析</div>
+        <MathText :text="current.analysis" />
+      </div>
+      <div class="review-footer">
+        <UiButton variant="success" size="lg" :loading="submitting" @click="$emit('mark', true)">
+          有思路，算对
+        </UiButton>
+        <UiButton variant="outline" size="lg" :loading="submitting" @click="$emit('mark', false)">
+          没思路，算错
+        </UiButton>
+      </div>
+    </template>
+    <template v-else-if="!judgeResult">
       <textarea
         :value="userInput"
         class="field-input"
@@ -29,6 +48,7 @@ defineEmits(['update:userInput', 'submit', 'next', 'mark'])
         <UiButton variant="primary" size="lg" :loading="judging" @click="$emit('submit')">
           提交答案，自动判断
         </UiButton>
+        <UiButton variant="ghost" size="lg" @click="$emit('peek')">直接看答案</UiButton>
         <UiButton
           variant="success"
           size="lg"

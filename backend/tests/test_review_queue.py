@@ -216,5 +216,79 @@ class TodayQueueTest(unittest.TestCase):
         self.assertEqual(len(res["items"]), 5)
 
 
+class DailyQuotaOverrideTest(unittest.TestCase):
+    """页内调节每日配额：app_meta 覆盖值优先，0 = 不限，非法值拒绝。"""
+
+    def test_override_persists_and_drives_queue(self):
+        conn = make_conn()
+        for i in range(6):
+            add_mistake(conn, f"题{i}", next_review_at=None, review_count=0)
+        conn.commit()
+        review_service.set_daily_limit(conn, 4)
+        self.assertEqual(review_service.get_daily_limit(conn), 4)
+        res = review_service.get_today_queue(conn, limit=50)
+        self.assertEqual(res["dailyLimit"], 4)
+        self.assertEqual(len(res["items"]), 4)
+
+    def test_zero_means_unlimited(self):
+        conn = make_conn()
+        for i in range(6):
+            add_mistake(conn, f"题{i}", next_review_at=None, review_count=0)
+        conn.commit()
+        review_service.set_daily_limit(conn, 0)
+        res = review_service.get_today_queue(conn, limit=50)
+        self.assertEqual(res["dailyLimit"], 0)
+        self.assertEqual(len(res["items"]), 6)
+
+    def test_falls_back_to_env_when_unset(self):
+        from app.config import settings
+
+        conn = make_conn()
+        self.assertEqual(
+            review_service.get_daily_limit(conn), int(settings.REVIEW_DAILY_LIMIT or 0)
+        )
+
+    def test_invalid_value_rejected(self):
+        conn = make_conn()
+        with self.assertRaises(ValueError):
+            review_service.set_daily_limit(conn, -3)
+        with self.assertRaises(ValueError):
+            review_service.set_daily_limit(conn, "abc")
+
+
+class SnoozeTest(unittest.TestCase):
+    """稍后再看：推到明天、不记复习、每天限 3 次。"""
+
+    def test_snooze_pushes_to_tomorrow_without_counts(self):
+        conn = make_conn()
+        mid = add_mistake(conn, "题", next_review_at=utc(-1), review_count=2)
+        review_service.snooze_mistake(conn, mid)
+        row = conn.execute(
+            "SELECT next_review_at, review_count FROM mistakes WHERE id = ?", (mid,)
+        ).fetchone()
+        # 推到明天（比现在晚 24h），复习计数不动
+        self.assertGreater(row["next_review_at"], utc(0.9))
+        self.assertEqual(row["review_count"], 2)
+        self.assertEqual(
+            conn.execute("SELECT COUNT(*) FROM review_records").fetchone()[0],
+            0,
+            "snooze 不写复习记录，统计页的复习量/正确率不该被它污染",
+        )
+
+    def test_daily_limit_three(self):
+        conn = make_conn()
+        ids = [add_mistake(conn, f"题{i}") for i in range(4)]
+        self.assertEqual(review_service.snooze_remaining(conn), 3)
+        for i in range(3):
+            res = review_service.snooze_mistake(conn, ids[i])
+            self.assertEqual(res["remaining"], 2 - i)
+        with self.assertRaises(ValueError):
+            review_service.snooze_mistake(conn, ids[3])
+
+    def test_missing_mistake_returns_none(self):
+        conn = make_conn()
+        self.assertIsNone(review_service.snooze_mistake(conn, 99999))
+
+
 if __name__ == "__main__":
     unittest.main()

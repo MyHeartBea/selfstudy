@@ -46,6 +46,27 @@ class TestApiSmoke(unittest.TestCase):
         self.assertEqual(r.status_code, 200, r.text)
         return r.json()["data"]["id"]
 
+    def test_star_toggle_and_filter(self):
+        mid = self._create_mistake()
+        # 不带 body：切换开
+        r1 = self.client.post(f"/api/mistakes/{mid}/star")
+        self.assertEqual(r1.status_code, 200, r1.text)
+        self.assertTrue(r1.json()["data"]["starred"])
+        # 带 body：显式取消
+        r2 = self.client.post(f"/api/mistakes/{mid}/star", json={"starred": False})
+        self.assertEqual(r2.status_code, 200)
+        self.assertFalse(r2.json()["data"]["starred"])
+        # 切回开，只看收藏筛选能命中
+        self.client.post(f"/api/mistakes/{mid}/star")
+        r3 = self.client.get("/api/mistakes", params={"starred": True, "page": 1, "page_size": 50})
+        self.assertEqual(r3.status_code, 200)
+        ids = [item["id"] for item in r3.json()["data"]["items"]]
+        self.assertIn(mid, ids)
+        self.assertTrue(r3.json()["data"]["items"][0]["starred"])
+        # 不存在：404
+        r4 = self.client.post("/api/mistakes/999999/star")
+        self.assertEqual(r4.status_code, 404)
+
     def test_base_data(self):
         r = self.client.get("/api/subjects")
         self.assertEqual(r.status_code, 200)

@@ -35,6 +35,11 @@ test.describe('命令面板全站搜索', () => {
     const calls = await mockApi(page, { '/api/formulas': FORMULAS })
     await page.goto('/stats')
     await expect(page.locator('body')).toHaveClass(/ready/)
+    // body.ready 由 BootCalibration 独立加上，而 AppLayout 是懒加载的路由 chunk ——
+    // 并发跑时 ready 可能先于外壳挂载出现，此刻 Ctrl+K 会落到还没挂监听的页面上被
+    // 整个丢掉（面板的 keydown 监听挂在 CommandPalette 的 onMounted）。
+    // .dock 可见 = AppLayout 已挂载 = 监听一定在了。
+    await expect(page.locator('.dock')).toBeVisible()
 
     await page.keyboard.press('Control+k')
     await expect(page.locator('.palette-input')).toBeFocused()
@@ -79,8 +84,11 @@ test.describe('命令面板全站搜索', () => {
     const calls = await mockApi(page)
     await page.goto('/stats')
     await expect(page.locator('body')).toHaveClass(/ready/)
+    // 同上：ready 先于懒加载外壳出现时，Ctrl+K 会被整个丢掉
+    await expect(page.locator('.dock')).toBeVisible()
 
     await page.keyboard.press('Control+k')
+    await expect(page.locator('.palette-input')).toBeFocused()
     await page.locator('.palette-input').fill('中值')
     await expect(page.locator('.palette-item')).toHaveCount(3)
     await expect(page.locator('.scope-chip.active')).toContainText('全部')

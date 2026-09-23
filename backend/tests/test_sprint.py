@@ -111,7 +111,7 @@ class QuotaNoteTest(SprintTestBase):
         settings.REVIEW_DAILY_LIMIT = 30
         plan = sprint_service.get_sprint_plan(self.conn)
         self.assertEqual(plan["daily_target"], 50)
-        self.assertIn("REVIEW_DAILY_LIMIT", plan["quota_note"])
+        self.assertIn("每日配额", plan["quota_note"])
 
     def test_no_backlog_note(self):
         import datetime

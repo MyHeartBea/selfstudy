@@ -485,6 +485,15 @@ function resolver(path, method, overrides) {
   if (path === '/api/reviews/forecast') return { overdue: 0, items: [] }
   // 日历热力图接口返回数组（ReviewHeatmap 直接 for..of 遍历）；返回对象会 TypeError
   if (path === '/api/reviews/calendar') return []
+  // 稍后再看/每日配额（复习页加载即请求剩余次数）
+  if (path === '/api/reviews/snooze') {
+    return method === 'POST' ? { mistake_id: 0, remaining: 2 } : { remaining: 3 }
+  }
+  if (path === '/api/reviews/quota') {
+    return method === 'PUT' ? { daily_limit: 50 } : { daily_limit: 50 }
+  }
+  if (/^\/api\/mistakes\/\d+\/star$/.test(path))
+    return { id: Number(path.split('/')[3]), starred: true }
   if (path === '/api/reviews/practice') return { items: [] }
   if (path === '/api/health') return { status: 'ok', database: true, version: 'e2e', metrics: {} }
   // 全局倒计时印（外壳每个页面都取；漏打桩 → 11 条烟测全红，正是想要的兜底）

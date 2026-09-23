@@ -201,7 +201,14 @@ export async function bindScrollMotion(root) {
       // 外层做遮罩、内层做位移 —— 与参考稿的 .line / .line__i 同构。
       // 不这么做的话 querySelectorAll 返回空集合，补间作用在空集合上，
       // 实测表现为"滚动到标题什么也没发生"。
-      if (!lines.length && host.textContent && host.textContent.trim()) {
+      // 只对【纯文本】host 才自动包裹：host 里有元素子节点（如热力图的格子矩阵）时
+      // textContent='' 会把整个组件 DOM 抹掉换成一行文字（真踩过，热力图因此消失）。
+      if (
+        !lines.length &&
+        host.children.length === 0 &&
+        host.textContent &&
+        host.textContent.trim()
+      ) {
         const raw = host.textContent.trim()
         host.textContent = ''
         host.style.overflow = 'hidden'

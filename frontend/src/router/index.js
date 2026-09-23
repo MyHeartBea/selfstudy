@@ -91,6 +91,12 @@ const routes = [
         component: () => import('../views/SnapshotsView.vue'),
       },
       {
+        // 维护页：从错题/知识点/公式页带着勾选跳进来，不进导航
+        path: 'print',
+        name: 'print-sheet',
+        component: () => import('../views/PrintView.vue'),
+      },
+      {
         path: 'design',
         name: 'design-gallery',
         component: () => import('../views/DesignView.vue'),
@@ -120,6 +126,7 @@ const TITLE_MAP = {
   'sprint-plan': '冲刺计划',
   'data-integrity': '数据体检',
   'data-snapshots': '数据备份与回滚',
+  'print-sheet': '打印背诵稿',
 }
 router.afterEach((to) => {
   const title = TITLE_MAP[to.name]
@@ -152,6 +159,7 @@ export const NAV_ORDER = [
   'sprint-plan',
   'data-integrity',
   'data-snapshots',
+  'print-sheet',
   'design-gallery',
   'mistake-edit',
 ]

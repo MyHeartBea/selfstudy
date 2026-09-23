@@ -1,7 +1,7 @@
 <script setup>
 /** 公式背诵库：分类/搜索 + 卡片网格 + 详情/编辑 + 背诵模式 */
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
 import RichText from '../components/RichText.vue'
@@ -22,6 +22,7 @@ import Icon from '../ui/Icon.vue'
 const categories = ['高等数学', '线性代数', '概率统计', '英语背诵', '政治背诵', '408背诵', '其他']
 
 const route = useRoute()
+const router = useRouter()
 
 // 公式是全量集合（后端返回裸数组），筛选与搜索在客户端做，所以只要 items + 两个状态位
 const {
@@ -80,6 +81,15 @@ function openCreate() {
 function openDetail(item) {
   detailItem.value = item
   detailVisible.value = true
+}
+
+function printCurrent() {
+  const list = filteredItems.value
+  if (!list.length) return
+  router.push({
+    path: '/print',
+    query: { type: 'formula', ids: list.map((it) => it.id).join(',') },
+  })
 }
 
 function plainPreview(item) {
@@ -242,6 +252,10 @@ onMounted(loadFormulas)
       <div class="header-actions">
         <UiButton v-if="filteredItems.length" variant="outline" @click="openMemorize">
           背诵模式
+        </UiButton>
+        <UiButton variant="outline" :disabled="!filteredItems.length" @click="printCurrent">
+          <Icon name="notebook" :size="13" />
+          打印
         </UiButton>
         <UiButton variant="primary" @click="openCreate">新增公式</UiButton>
       </div>

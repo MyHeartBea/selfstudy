@@ -11,6 +11,7 @@ import math
 import re
 
 from app.config import settings
+from app.services import review_service
 
 
 def _parse_exam_date(value: str):
@@ -77,11 +78,12 @@ def get_sprint_plan(conn) -> dict:
     daily = math.ceil(work / days_left) if days_left > 0 else work
     plan["daily_target"] = daily
 
-    limit = int(settings.REVIEW_DAILY_LIMIT or 0)
+    # 与今日复习队列同口径：页内覆盖值优先（review_service.get_daily_limit）
+    limit = review_service.get_daily_limit(conn)
     if limit and daily > limit:
         plan["quota_note"] = (
             f"按剩余天数平摊需要每天 {daily} 题，超过当前每日配额 {limit}——"
-            "要么调大 REVIEW_DAILY_LIMIT，要么接受清不完"
+            "要么在复习页调大每日配额，要么接受清不完"
         )
     elif work == 0:
         plan["quota_note"] = "没有积压，按今日队列正常滚动即可"

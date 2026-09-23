@@ -22,6 +22,7 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
     tag: '',
     approach: '',
     search: '',
+    starred: false,
   })
   const sortBy = ref('created_desc')
   const page = ref(1)
@@ -39,6 +40,7 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
         filters.tag,
         filters.approach,
         filters.search,
+        filters.starred,
       ].filter(Boolean).length,
   )
 
@@ -56,6 +58,7 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
     if (filters.tag) params.tag = filters.tag
     if (filters.approach) params.approach = filters.approach
     if (filters.search) params.search = filters.search
+    if (filters.starred) params.starred = true
     params.sort = sortBy.value
     return params
   }
@@ -94,6 +97,7 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
     filters.tag = ''
     filters.approach = ''
     filters.search = ''
+    filters.starred = false
     searchMistakes()
   }
 

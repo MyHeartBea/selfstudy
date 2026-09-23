@@ -22,7 +22,11 @@ const props = defineProps({
   selected: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['open', 'toggle-select'])
+const emit = defineEmits(['open', 'toggle-select', 'toggle-star'])
+
+function onStarClick() {
+  emit('toggle-star', props.mistake)
+}
 
 // 思路文本净化：去掉 $..$ 数学记号与反斜杠命令，截断展示
 function approachSummary(text, max = 22) {
@@ -124,6 +128,29 @@ const inkState = computed(() => {
           <span class="seal-no">{{ String(index).padStart(4, '0') }}</span>
           <MistakeMeta :mistake="mistake" compact />
           <span class="top-end" @click.stop>
+            <button
+              type="button"
+              class="star-btn"
+              :class="{ on: mistake.starred }"
+              :aria-pressed="!!mistake.starred"
+              :aria-label="mistake.starred ? '取消收藏' : '收藏这道题'"
+              @click.stop="onStarClick"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                :fill="mistake.starred ? 'currentColor' : 'none'"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M12 2.8l2.85 5.78 6.38.93-4.62 4.5 1.09 6.36L12 17.4l-5.7 2.97 1.09-6.36-4.62-4.5 6.38-.93z"
+                />
+              </svg>
+            </button>
             <UiStars :model-value="mistake.difficulty || 0" readonly :size="13" />
             <UiCheckbox
               :model-value="selected"
@@ -414,6 +441,33 @@ const inkState = computed(() => {
   align-items: center;
   gap: 9px;
   flex: none;
+}
+
+/* 收藏星钮：未收藏为描边淡墨，收藏后金色实心 */
+.star-btn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--paper-ink-3);
+  cursor: pointer;
+  transition:
+    color var(--dur-2) var(--ease-enter),
+    transform 0.25s var(--spring);
+}
+.star-btn:hover {
+  color: var(--gold);
+  transform: scale(1.12);
+}
+.star-btn.on {
+  color: var(--gold);
+}
+.star-btn:active {
+  transform: scale(0.92);
 }
 
 .question-text {

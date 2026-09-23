@@ -810,3 +810,47 @@ Windows 上 `Path("C:/x/y.pdf").is_absolute()` 是 True，Linux 上是 **False**
 在 CI 里被当成相对路径放行（探针探不到文件回 200 账单而非 400）。修复：`_resolve_inside`
 对盘符路径改用正则 `^[A-Za-z]:[\/]` 单独拒绝（盘符路径在任何主机上都不该当相对路径），
 UNC `\\` 开头一并挡；b2683f5 全绿。教训入档：**路径校验别只依赖 is_absolute 的主机语义**。
+
+## 2026-09-23 · 搁置清单 5 项 + 热力图修复 + 直接看答案（用户一次性全批）
+
+**背景**：用户对上次列的零散清单拍板「都可以做」，另提两条：复习热力图有很大问题（截图）；
+复习页要能「直接看答案」——不想算就先看答案，有思路选对、没思路选错。
+
+### 热力图修复（#17）
+`v-reveal` 的显现类只加不摘，`will-change:transform` 常驻在热力图格子上：一格一层常驻 GPU
+合成层，119 格让整条面板变灰、动画把格子打散。修法：显现完成（`reveal-in` 且动画结束）后
+摘掉 `reveal-pending` 并关合成层；`Heatmap.vue` 的入场动画同理收进令牌时长，动画完即关。
+
+### 直接看答案（#18）
+复习页四题型通用「直接看答案」按钮：选择/填空展示正确答案与解析（本次作答按未答处理，自评
+对错照常走 `POST /review`）；翻译展示参考译文对照；解答直接看 AI 解析。不判分、不计入今日
+正确率徽章，只有真正提交自评才写 `review_records`——口径与"翻译自评"一致。
+
+### 搁置清单 5 项（#19–#23 全落地）
+1. **收藏标星**：`mistakes.starred` 列（DDL + 迁移 additions，门控不动）+ `POST /mistakes/{id}/star`
+   （body 空则取反）+ 列表 `starred=true` 筛选 + 卡片星标/详情收藏键/筛选 chip。只影响展示，
+   不进复习调度。
+2. **打印背诵稿**：`/print?type=mistakes|knowledge|formula&ids=`（上限 100）——题干+选项在前、
+   答案/解析/思路在后，A4 打印样式（工具条 `@media print` 隐藏）。三处入口：错题勾选批量、
+   知识点/公式工具条「打印本页」。
+3. **每日配额调节**：`GET|PUT /api/reviews/quota`，覆盖值存 `app_meta`（key=`review_daily_limit`），
+   优先于 `.env`，`0`=不限；复习页积压 chip 变成可点按钮弹窗调节，改完即时重载队列；
+   **冲刺计划页的 daily_target 同源**（`sprint_service` 改用 `review_service.get_daily_limit`）。
+4. **复习日历**：统计页热力图面板可切「日历」——按月网格看每天完成（accent）/到期（金）/
+   未来 90 天预报（金点），周一开头，翻页边界 11 个月前 ~ 2 个月后；组件按需异步加载
+   （`defineAsyncComponent`，E2E 冷编译不加压）。
+5. **Snooze 稍后再看**：`GET|POST /api/reviews/snooze`——当前题推到明天（`next_review_at`
+   = UTC 明天同时刻），**不写复习记录、不动 mastery/SM-2**；每天 3 次（`app_meta`
+   `snooze_count_<本地日>`，自动清旧键），超限 400；复习页头部按钮带剩余次数。
+
+**E2E 命令面板假红排查（半天，教训入 AGENTS）**：command-palette 在 workers=2 下稳定红在
+`toBeFocused` not found。三段取证：① 页面侧 keydown 记录器 —— 按键**确实到达** window；
+② dispatch 后查 `defaultPrevented` —— 失败时 CommandPalette 的 handler **没跑**（post:false）；
+③ 包一层 addEventListener 记注册时机 —— 排除"被 stopImmediatePropagation 吃掉"。
+真因：`body.ready` 由 BootCalibration 独立加上，而 AppLayout 是懒加载路由 chunk —— 并发跑时
+ready 先于外壳出现，Ctrl+K 落在还没挂监听的页面上被整个丢掉。修法：按键前先等
+`.dock` 可见（= AppLayout 已挂载 = 监听一定在）。修后 workers=2 连跑 8 次全绿 + 全量 53 绿。
+
+**测试**：新增后端 8 颗（star 3 / quota 3 / snooze 2，全库 323）、E2E fixtures 补
+snooze/quota/star 三条打桩；全部门禁：后端 323 全绿 + ruff 双查；Vitest 141 + ESLint +
+Prettier + build；E2E 53。**需重启后端生效**（新增 star/quota/snooze 三组端点）。

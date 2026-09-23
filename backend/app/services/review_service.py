@@ -10,6 +10,39 @@ from app.services.answer_service import judge_fill, judge_letters
 
 INTERVALS = [1, 3, 7, 15, 30]  # v5 旧固定阶梯：仅迁移回填/兼容保留
 
+DAILY_LIMIT_META_KEY = "review_daily_limit"
+
+
+def get_daily_limit(conn: sqlite3.Connection) -> int:
+    """每日配额：页内覆盖值（app_meta）优先，未设置或非法时回退 .env 的 REVIEW_DAILY_LIMIT。"""
+    row = conn.execute(
+        "SELECT value FROM app_meta WHERE key = ?",
+        (DAILY_LIMIT_META_KEY,),
+    ).fetchone()
+    if row and row["value"] not in (None, ""):
+        try:
+            return max(0, int(row["value"]))
+        except (TypeError, ValueError):
+            pass
+    return int(settings.REVIEW_DAILY_LIMIT or 0)
+
+
+def set_daily_limit(conn: sqlite3.Connection, value: int) -> int:
+    """保存每日配额覆盖值（0 = 不限）；非法值抛 ValueError。"""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("每日配额必须是非负整数") from None
+    if value < 0:
+        raise ValueError("每日配额必须是非负整数")
+    conn.execute(
+        "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+        (DAILY_LIMIT_META_KEY, str(value)),
+    )
+    conn.commit()
+    return value
+
+
 # SM-2 简化版参数
 SM2_EASE_INIT = 2.5
 SM2_EASE_MIN = 1.3
@@ -202,7 +235,7 @@ def get_today_queue(
     传 category 时 dueTotal/remaining 只统计该块，每日配额仍是全局共享。
     """
     if daily_limit is None:
-        daily_limit = settings.REVIEW_DAILY_LIMIT
+        daily_limit = get_daily_limit(conn)
 
     subject_ids = _subject_ids_for_block(conn, category) if category else None
     if category and subject_ids == []:
@@ -436,6 +469,49 @@ def review_mistake(
 
     updated = conn.execute("SELECT * FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
     return mistake_to_dict(updated)
+
+
+SNOOZE_DAILY_LIMIT = 3
+SNOOZE_META_PREFIX = "snooze_count_"
+
+
+def snooze_remaining(conn: sqlite3.Connection) -> int:
+    """今天还能"稍后再看"几次（按本地日期计数，跨天自然清零）。"""
+    key = SNOOZE_META_PREFIX + datetime.now().astimezone().strftime("%Y-%m-%d")
+    row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (key,)).fetchone()
+    used = int(row["value"]) if row and row["value"] else 0
+    return max(0, SNOOZE_DAILY_LIMIT - used)
+
+
+def snooze_mistake(conn: sqlite3.Connection, mistake_id: int) -> Optional[dict]:
+    """把这道题推到明天同一时间再看：不改复习计数/掌握度，不占今日配额进度。
+
+    每天限 SNOOZE_DAILY_LIMIT 次（防止无脑跳过导致队列永远刷不动）；
+    超限抛 ValueError。返回 None 表示错题不存在。
+    """
+    row = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
+    if row is None:
+        return None
+    used = SNOOZE_DAILY_LIMIT - snooze_remaining(conn)
+    if used >= SNOOZE_DAILY_LIMIT:
+        raise ValueError(f"今天的「稍后再看」已用完（每天 {SNOOZE_DAILY_LIMIT} 次），明天再来")
+    today_key = SNOOZE_META_PREFIX + datetime.now().astimezone().strftime("%Y-%m-%d")
+    next_at = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "UPDATE mistakes SET next_review_at = ? WHERE id = ?",
+        (next_at, mistake_id),
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+        (today_key, str(used + 1)),
+    )
+    # 顺手清掉历史日期的计数键（weekly_report 缓存同款做法）
+    conn.execute(
+        "DELETE FROM app_meta WHERE key LIKE ? AND key != ?",
+        (SNOOZE_META_PREFIX + "%", today_key),
+    )
+    conn.commit()
+    return {"mistake_id": mistake_id, "remaining": snooze_remaining(conn)}
 
 
 def get_review_history(

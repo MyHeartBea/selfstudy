@@ -81,6 +81,9 @@
 - `PUT /api/mistakes/{id}`：全量更新。**例外**：`images` 与 `passage_text / passage_translation / english_*`
   这组"附加内容"键**不带键**时按库里原值保留（显式传 `""` / `[]` 才是清空），见 `mistake_service.ATTACHMENT_KEYS`
 - `POST /api/mistakes/{id}/pause|resume|source-type`
+- `POST /api/mistakes/{id}/star`：收藏/取消收藏（只影响筛选展示，不参与复习调度）
+  - 不传 body 或 `{"starred": null}` = 按当前状态取反；显式 `{"starred": true|false}` 设定
+  - 返回 `{id, starred}`；`GET /api/mistakes` 加 `starred=true` 只看收藏
 - `DELETE /api/mistakes/{id}`
 
 ## 复习
@@ -109,6 +112,12 @@
 - `POST /api/mistakes/{id}/review`：`{"result": bool, "note", "user_answer"}`
   - choice / multi / fill 且 `user_answer` 非空时，**服务端按 `answer_service.judge_letters` / `judge_fill` 重新判分并覆盖 `result`**（前端自己判的那次只用于即时反馈）；
   - 没传 `user_answer`（翻译 / 解答的 Q/W 自评）时尊重前端给的 `result`。
+- `GET|PUT /api/reviews/quota`：每日配额的运行时覆盖（存 `app_meta`，**优先于** `.env` 的
+  `REVIEW_DAILY_LIMIT`）。PUT `{"daily_limit": 0..1000}`，`0`=今天不限；非法值 400。
+  改这里不用重启后端；`GET /api/sprint/plan` 的每日目标同源
+- `GET /api/reviews/snooze`：今天的「稍后再看」剩余次数 `{remaining}`（每天 3 次，按本地日计）
+- `POST /api/reviews/snooze`：`{"mistake_id"}` 推到明天再看（`next_review_at` = 明天同一时刻）。
+  **不写复习记录、不动 mastery/SM-2 计数**；超限 400，题不存在 404
 
 ## 生词本（英语）
 

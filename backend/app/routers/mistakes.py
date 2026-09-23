@@ -14,6 +14,7 @@ from app.schemas import (
     MistakeCreate,
     MistakeUpdate,
     SourceTypeUpdate,
+    StarRequest,
 )
 from app.security import ai_rate_limit
 from app.services import ai_service, answer_service, mistake_service, review_service
@@ -33,6 +34,7 @@ def list_mistakes(
     search: Optional[str] = Query(None),
     source_type: Optional[str] = Query(None),
     source_year: Optional[str] = Query(None),
+    starred: Optional[bool] = Query(None),
     sort: str = Query("created_desc"),
     page: Optional[int] = Query(None, ge=1),
     page_size: Optional[int] = Query(None, ge=1, le=1000),
@@ -56,6 +58,7 @@ def list_mistakes(
                 "search": search,
                 "source_type": source_type,
                 "source_year": source_year,
+                "starred": starred,
                 "sort": sort,
             },
             page=page,
@@ -303,6 +306,37 @@ def resume_mistake(mistake_id: int):
         )
         conn.commit()
         return ok({"id": mistake_id, "review_paused": False}, "已恢复复习")
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.post("/{mistake_id}/star")
+def star_mistake(mistake_id: int, body: Optional[StarRequest] = None):
+    """收藏/取消收藏：不传 starred 时为切换。"""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT starred FROM mistakes WHERE id = ?",
+            (mistake_id,),
+        ).fetchone()
+        if row is None:
+            return error(404, "错题不存在")
+        current = bool(row["starred"])
+        if body is not None and body.starred is not None:
+            value = 1 if body.starred else 0
+        else:
+            value = 0 if current else 1
+        conn.execute(
+            "UPDATE mistakes SET starred = ? WHERE id = ?",
+            (value, mistake_id),
+        )
+        conn.commit()
+        return ok(
+            {"id": mistake_id, "starred": bool(value)},
+            "已收藏" if value else "已取消收藏",
+        )
     except Exception as exc:
         return server_error(exc)
     finally:

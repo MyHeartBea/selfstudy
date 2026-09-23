@@ -1,6 +1,6 @@
 <script setup>
 /** 学习统计 · 墨韵 2.0 Bento：英雄卡 + 瓷砖 + SVG 趋势 + 墨阶掌握度 + 热力图 + 科目分析 */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -8,6 +8,9 @@ import { toast } from '../ui/toast'
 import { sourceTypeColor, subjectColor } from '../composables/useBaseData'
 import { useCountUp } from '../utils/useCountUp'
 import ReviewHeatmap from '../components/ReviewHeatmap.vue'
+// 日历视图按需异步加载：默认显示的是热力图，日历是低频切换项；
+// 静态 import 会把它的编译压进 /stats 首屏冷路径（E2E 并发下加剧 vite 排队超时）
+const ReviewCalendar = defineAsyncComponent(() => import('../components/ReviewCalendar.vue'))
 import Icon from '../ui/Icon.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiButton from '../ui/UiButton.vue'
@@ -299,6 +302,8 @@ function practiceTag(tag) {
    本页据此把根元素的 .entered 打开，页面动效才播放。
    不直接用 `body.ready` 选择器承接：scoped CSS 与全局类的组合太脆（实测踩过）。 */
 const entered = ref(document.body.classList.contains('ready'))
+// 热力图卡片的双视图：false = 17 周格子，true = 按月日历（过去复习量 + 未来到期负荷）
+const calMode = ref(false)
 let enterObserver = null
 
 onMounted(() => {
@@ -548,11 +553,19 @@ onBeforeUnmount(() => {
         <span class="km-live__scan" aria-hidden="true"></span>
         <div class="panel-head">
           <h3 class="panel-title" data-reveal-lines>复习热力图</h3>
-          <UiButton size="sm" variant="ghost" @click="router.push('/review')">
-            去复习，点亮今天
-          </UiButton>
+          <div class="panel-head-actions">
+            <UiButton size="sm" variant="ghost" @click="calMode = !calMode">
+              {{ calMode ? '热力图' : '日历' }}
+            </UiButton>
+            <UiButton size="sm" variant="ghost" @click="router.push('/review')">
+              去复习，点亮今天
+            </UiButton>
+          </div>
         </div>
-        <ReviewHeatmap :days="119" data-reveal-lines />
+        <!-- 注意：这里不能挂 data-reveal-lines —— 那是给纯文本标题用的，
+             挂到组件上会把内部 DOM（整个格子矩阵）抹掉换成一行文字（真踩过） -->
+        <ReviewCalendar v-if="calMode" />
+        <ReviewHeatmap v-else :days="119" />
       </GlassCard>
 
       <!-- 复习负荷预报 -->
@@ -1185,6 +1198,11 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+}
+.panel-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .panel-title {
   font-family: var(--font-display);

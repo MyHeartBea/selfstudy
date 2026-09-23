@@ -86,6 +86,14 @@ function resetFilters() {
   searchKnowledge()
 }
 
+function printCurrent() {
+  if (!items.value.length) return
+  router.push({
+    path: '/print',
+    query: { type: 'knowledge', ids: items.value.map((it) => it.id).join(',') },
+  })
+}
+
 function practiceTag(tag) {
   router.push({
     path: '/review',
@@ -256,6 +264,10 @@ watch(
       />
       <UiButton variant="primary" :loading="loading" @click="searchKnowledge">搜索</UiButton>
       <UiButton variant="ghost" @click="resetFilters">重置</UiButton>
+      <UiButton variant="outline" :disabled="!items.length" @click="printCurrent">
+        <Icon name="notebook" :size="13" />
+        打印
+      </UiButton>
     </div>
 
     <template v-if="loading && !items.length">

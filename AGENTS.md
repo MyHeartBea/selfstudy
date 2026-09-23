@@ -32,7 +32,7 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（272 个）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（323 个）
 cd frontend && npm test                                  # Vitest 138 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
 cd frontend && npm run test:e2e                          # Playwright 51 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
 
@@ -70,6 +70,12 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > - 用 `expectAllApiStubbed(calls)` 兜住漏打桩（未打桩只回 404 时，axios 只弹 toast、
 >   不写 console，`page.on('console')` 也抓不到，烟测会假绿）；
 > - 定位隐藏 `input[type=file]` 用 `data-testid`，别按序号/文案（页面上有多个，会静默点错）。
+> - **键盘类用例在 `body.ready` 之后还要等外壳真的挂载**（`await expect(page.locator('.dock')).toBeVisible()`）再按键：
+>   `ready` 由 BootCalibration 独立加上，而 AppLayout 是懒加载 chunk —— 并发跑时 ready 可能先于外壳出现，
+>   此刻 Ctrl+K 会落到还没挂监听的页面上被**整个丢掉**（面板 keydown 监听挂在 CommandPalette 的 onMounted），
+>   表现为"`palette-input` not found 满 7s"的稳定假红。排查这类丢按键：在 init script 里给 window 的
+>   keydown 挂记录器 + 包一层 addEventListener 记注册时机，dispatch 后查 `defaultPrevented` 就能分辨
+>   "监听没挂"还是"挂了没跑"。
 
 > **CI 与本地不等价，别再被"本地全绿"骗一次**：CI 是 **Python 3.11**（本地 3.12）、
 > **没有 `backend/.env`**、依赖只有 `fastapi uvicorn pydantic httpx coverage ruff`
@@ -343,8 +349,8 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - **全站搜索 / 命令面板**：`GET /api/search?q=&limit=`（`search_service`）一次问错题/知识点/公式/生词/作文，
   空组不返回；`Ctrl+K` 面板的作用域 chips 是**对已取回结果做本地过滤**（不重新请求），
   列表一维（键盘）+ 分组渲染（`visibleSections()` 带扁平下标），落地页统一吃 `?search=`、知识点走 `?tag=`。
-- **错题库**：题型按科目感知（数学 / 408：选择·填空·解答；政治：单选·多选·分析；英语：客观题·翻译·作文）；筛选 / 排序 / 分页 / 批量操作 / URL 同步筛选状态 / 导入导出 JSON / **Anki TSV 导出（`/api/export/anki?type=mistakes|vocab`）** / 打印（`window.print()` + 全局 print 样式）。列表首图走**缩略图**：`/images/thumb/{name}`（懒生成 WebP 到 `data/images/_thumbs/`，失败回退原图；删除错题同步清缩略图）。
-- **今日复习**：间隔重复由 SM-2 驱动；选择 / 多选（全对判分，顺序无关，判分统一走 `utils/examScoring.js` 的 scoreLetters）/ 填空（别名 + 数值容差）/ 翻译（对照参考译文自评）/ 解答（AI 按步骤给分 0-100）；全键盘流（1-4 选答、Enter 下一题、Q/W 标记）；`?` 呼出快捷键速查。**单题直练**：practice 接口支持 `mistake_id` 参数（详情「练这道题」用）。
+- **错题库**：题型按科目感知（数学 / 408：选择·填空·解答；政治：单选·多选·分析；英语：客观题·翻译·作文）；筛选 / 排序 / 分页 / 批量操作 / URL 同步筛选状态 / 导入导出 JSON / **Anki TSV 导出（`/api/export/anki?type=mistakes|vocab`）** / 打印（`window.print()` + 全局 print 样式）。列表首图走**缩略图**：`/images/thumb/{name}`（懒生成 WebP 到 `data/images/_thumbs/`，失败回退原图；删除错题同步清缩略图）。**收藏标星**（`starred` 列 + `POST /{id}/star` + 只看收藏筛选；只影响展示，不进复习调度）。**打印背诵稿**：勾选错题 / 知识点 / 公式 → `/print?type=&ids=`（上限 100 题，题干 + 选项在前、答案解析在后，A4 打印样式；三处入口都在列表页工具条）。
+- **今日复习**：间隔重复由 SM-2 驱动；选择 / 多选（全对判分，顺序无关，判分统一走 `utils/examScoring.js` 的 scoreLetters）/ 填空（别名 + 数值容差）/ 翻译（对照参考译文自评）/ 解答（AI 按步骤给分 0-100）；全键盘流（1-4 选答、Enter 下一题、Q/W 标记）；`?` 呼出快捷键速查。**单题直练**：practice 接口支持 `mistake_id` 参数（详情「练这道题」用）。**每日配额页内可调**（`GET|PUT /api/reviews/quota`，存 `app_meta` 优先于 `.env`，`0`=不限；冲刺计划页同源）。**稍后再看（Snooze）**：`POST /api/reviews/snooze` 把当前题推到明天（每天 3 次，按本地日记在 `app_meta`；不写复习记录、不动 SM-2 计数——想跳过又不想算答错时用）。
 - **真题模考（mode=mock）**：练习页选年份+时长 → `mode=mock&duration=分钟&source_type=real_exam&source_year=年`；ReviewView mock 分支：倒计时（归零自动交卷）、作答暂存不判分、自由翻题、交卷统一判分（choice/multi 本地、fill 走 /judge）并逐题写入复习记录 + POST /mocks 存档；卷面客户端过滤为客观题。
 - **真题库（v8，`/papers` 页）**：扫描 `PAPERS_DIR`（默认 `D:\km-v2\真题`，.env 可覆盖）→ 候选按 科目/年份/答案配对 识别（识别率 100%，配对率 90%+）→ 导入后**单工作线程后台流水线**：提取文本（docx=python-docx；pdf=pypdf 文本层，**空/过少/乱码即回退**：pypdfium2 渲染页为图 → **数学/408 优先 DeepSeek 视觉（输出 LaTeX，公式准）+ 本地 Windows OCR 兜底，文科目反之**；判定可读占比 `PDF_TEXT_RATIO`(0.6)/最小字符 `PDF_TEXT_MIN`(200)/最多页 `PDF_OCR_PAGES`(60) 可调，乱码文本层自动拒绝）→ **扫描/公式卷：扁平分块拆题（完整，避免逐页漏同页多个综合题）+ 按题号在逐页文本定位页码**（`_page_for_no`，可靠，供图示题取原图）；公式/上下标要求 `\(...\)` 包裹（MathText 渲染）→ 从配对答案文件文本匹配客观题答案（英语二实测 20/27 配上）。**表**：`exam_papers`（status: pending/extracting/structuring/done/error + status_note）+ `exam_questions`（含 `page_idx`/`diagram_image`，迁移 v9；**图示题存该页原图**到 `data/images/exam_papers/<pid>/p<n>.webp`，前端模考/详情可见）。**整卷模考**：`/review?mode=mock&paper_id=X&duration=分`——题目来自卷库（仅客观题进卷面），交卷判分后**「作答且错」的题自动入错题本**（subject 按 英语二→英语 等映射匹配；analysis/difficulty_points 有非空兜底文案，否则被必填校验 422），未作答不入本。
 - **AI 错因周报**：`POST /api/ai/weekly-report`（force=1 强制重生成）——近 7 天答错记录聚类为错因，**按天缓存于 app_meta（key=weekly_report_YYYY-MM-DD，自动清旧）**；统计页渲染，标签可点击直通练习。
@@ -353,7 +359,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - **公式背诵**：分类 / 搜索 / 过卡循环背诵模式（没记住排队尾直到全会）；分类彩色印章。
 - **英语作文批改**（迁移 v10，`essay_records` 表）：录入页第三个 Tab「英语作文批改」→ `POST /api/essays/grade`（手写稿照片**逐张** `_vision_extract_text` 转录后合并，再走文本批改；同样遵守第 5 节"先提文字再分析"，禁止单次超大视觉生成）→ 按考研四型（e1/e2 × 小/大作文）五档评分，`ai_essay.normalize_essay_grade` 钳制分数、按档位兜底 band、四维分和与总分偏差超 1 分时按权重（内容.4/结构.2/语言.3/格式.1）重算。`persist` 默认存档到 `essay_records`，档案页 `/essays`（整卡可点看详情、逐词 diff 用 `utils/essayDiff.js` 的 LCS）。"存入错题库"走普通错题（`question_type=solution`，科目自动匹配「英语」，**匹配不到就拒绝并 toast**，因为 `subject_id` 是必填 int）。
 - **科目指南**：各科复习重点与方法建议（政治 / 英语已预置默认档案，可编辑）；首字印章+顶部色条。
-- **统计**：Bento 网格——英雄卡（今日待复习+进度环+连续复习火苗章+正确率/掌握度徽章）、瓷砖、今日速览条、SVG 趋势、**复习负荷预报（`/api/reviews/forecast`）**、AI 错因周报、**模考成绩趋势**、热力图、薄弱知识点、题型/来源/科目分析（两张旧表已合并为科目分析墨条；**不再展示二级科目统计**）。
+- **统计**：Bento 网格——英雄卡（今日待复习+进度环+连续复习火苗章+正确率/掌握度徽章）、瓷砖、今日速览条、SVG 趋势、**复习负荷预报（`/api/reviews/forecast`）**、AI 错因周报、**模考成绩趋势**、热力图（可切**复习日历**视图，按月看每天完成/到期与未来 90 天预报）、薄弱知识点、题型/来源/科目分析（两张旧表已合并为科目分析墨条；**不再展示二级科目统计**）。
 - **前端体验**：墨纸印/墨韵2.0 设计系统、启动动画、按钮涟漪、复习礼花、命令面板（Ctrl+K 全局搜索+快捷动作）、`?` 快捷键速查、图片灯箱、深色模式（墨漫纸面 rAF 圆形扩散换肤，未手动选择时跟随系统）、搜索高亮（Highlight API）、打印样式。
 
 ## 8. openviking 记忆库（已跑通，**勿动坏**）
@@ -370,6 +376,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 315、前端 Vitest 141、E2E 53**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 73%（门槛 55%）。
+- 测试基线：**后端 323、前端 Vitest 141、E2E 53**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 73%（门槛 55%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

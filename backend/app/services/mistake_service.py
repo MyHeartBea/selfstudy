@@ -82,6 +82,7 @@ LIST_COLUMNS = (
     "last_reviewed_at",
     "next_review_at",
     "review_paused",
+    "starred",
     "images",
     "passage_text",
     "created_at",
@@ -485,6 +486,8 @@ def list_mistakes(
     if filters.get("question_type"):
         conditions.append("question_type = ?")
         params.append(filters["question_type"])
+    if filters.get("starred"):
+        conditions.append("starred = 1")
 
     sort_map = {
         "created_desc": "created_at DESC, id DESC",

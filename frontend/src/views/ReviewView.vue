@@ -15,6 +15,7 @@ import { confirmDialog } from '../ui/confirm'
 import { confetti } from '../utils/confetti'
 import { scoreLetters } from '../utils/examScoring'
 import UiButton from '../ui/UiButton.vue'
+import UiModal from '../ui/UiModal.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiLoadError from '../ui/UiLoadError.vue'
 import Icon from '../ui/Icon.vue'
@@ -30,12 +31,89 @@ const route = useRoute()
 const queue = ref([])
 // 今日队列的配额信息（dueTotal/remaining/dailyLimit/reviewedToday），旧接口无此字段
 const queueInfo = ref(null)
+
+/* 每日配额页内调节：写到 app_meta 覆盖值，立即生效（冲刺页同口径跟着变） */
+const quotaVisible = ref(false)
+const quotaInput = ref(50)
+const quotaSaving = ref(false)
+
+function openQuota() {
+  quotaInput.value = queueInfo.value?.dailyLimit ?? 50
+  quotaVisible.value = true
+}
+
+async function saveQuota() {
+  const value = Number(quotaInput.value)
+  if (!Number.isInteger(value) || value < 0) {
+    toast.warning('配额要是非负整数，0 表示今天不限量')
+    return
+  }
+  quotaSaving.value = true
+  try {
+    const res = await request.put('/reviews/quota', { daily_limit: value })
+    toast.success(`每日配额已调到 ${res.data.data.daily_limit} 题`)
+    quotaVisible.value = false
+    loadQueue()
+  } catch (err) {
+    // 失败提示由请求拦截器统一处理
+  } finally {
+    quotaSaving.value = false
+  }
+}
+
+/* 稍后再看：跳过当前题推到明天（不记复习、不占配额），每天限 3 次 */
+const snoozeLeft = ref(null)
+
+const showSnooze = computed(
+  () => !isPractice.value && !isMock.value && !done.value && !!current.value,
+)
+
+async function loadSnoozeLeft() {
+  try {
+    const res = await request.get('/reviews/snooze')
+    snoozeLeft.value = res.data.data.remaining
+  } catch (err) {
+    snoozeLeft.value = null
+  }
+}
+
+/** 复用「进下一题」的清场逻辑（与 submitReview 的 advance 段一致） */
+function advanceAfterSkip() {
+  index.value += 1
+  selected.value = null
+  answered.value = false
+  revealed.value = false
+  peeked.value = false
+  userInput.value = ''
+  judgeResult.value = null
+  gradeResult.value = null
+  reviewSaved.value = false
+  if (index.value >= queue.value.length) {
+    done.value = true
+    setTimeout(() => confetti.celebrate({ count: 30 }), 250)
+  }
+}
+
+async function snoozeCurrent() {
+  if (!current.value) return
+  try {
+    const res = await request.post('/reviews/snooze', { mistake_id: current.value.id })
+    snoozeLeft.value = res.data.data.remaining
+    toast.success('已推到明天再看')
+  } catch (err) {
+    // 超限/失败由拦截器统一提示
+    return
+  }
+  advanceAfterSkip()
+}
 const index = ref(0)
 const loading = ref(false)
 const loadError = ref(false)
 const selected = ref(null)
 const answered = ref(false)
 const revealed = ref(false)
+// 直接看答案：跳过作答，看完自评对错（choice/multi/fill）
+const peeked = ref(false)
 const userInput = ref('')
 const judging = ref(false)
 const grading = ref(false)
@@ -128,6 +206,7 @@ watch(
     selected.value = null
     answered.value = false
     revealed.value = false
+    peeked.value = false
     userInput.value = ''
     judgeResult.value = null
     gradeResult.value = null
@@ -452,6 +531,7 @@ async function loadQueue() {
       }
       if (!queue.value.length) done.value = !isPractice.value
       loadBlocks()
+      if (!isPractice.value && !isMock.value) loadSnoozeLeft()
     }
     if (isMock.value) {
       // 模考仅含客观题（选择/多选/填空），主观题与英语整篇不进卷面
@@ -470,13 +550,13 @@ async function loadQueue() {
 }
 
 function confirmAnswer() {
-  if (!selected.value) return
+  if (!selected.value || peeked.value) return
   answered.value = true
   submitReview(selected.value === current.value.correct_answer, false)
 }
 
 async function submitFill() {
-  if (!current.value) return
+  if (!current.value || peeked.value) return
   if (!userInput.value.trim()) {
     toast.warning('请输入你的答案')
     return
@@ -571,6 +651,7 @@ async function submitReview(result, advance = true) {
     selected.value = null
     answered.value = false
     revealed.value = false
+    peeked.value = false
     userInput.value = ''
     judgeResult.value = null
     gradeResult.value = null
@@ -628,7 +709,12 @@ function onKeydown(event) {
 
   if (isChoice.value) {
     if (!answered.value) {
-      if (KEY_TO_OPTION[key]) {
+      if (peeked.value) {
+        // 看过答案：Q=算对 W=算错（与翻译/填空自评同一套键位）
+        if (key === 'q') submitReview(true, true)
+        else if (key === 'w') submitReview(false, true)
+        event.preventDefault()
+      } else if (KEY_TO_OPTION[key]) {
         const letter = KEY_TO_OPTION[key]
         if (isMulti.value) {
           // 多选：数字/字母键切换勾选
@@ -638,6 +724,10 @@ function onKeydown(event) {
         } else {
           selected.value = letter
         }
+        event.preventDefault()
+      } else if (event.key === ' ') {
+        // 空格：不想算，直接看答案（看完 Q/W 自评）
+        peeked.value = true
         event.preventDefault()
       } else if (event.key === 'Enter' && selected.value) {
         confirmAnswer()
@@ -666,6 +756,13 @@ function onKeydown(event) {
       submitReview(true, true)
     } else if (judgeResult.value && key === 'w') {
       submitReview(false, true)
+    } else if (peeked.value && key === 'q') {
+      submitReview(true, true)
+    } else if (peeked.value && key === 'w') {
+      submitReview(false, true)
+    } else if (!peeked.value && event.key === ' ') {
+      peeked.value = true
+      event.preventDefault()
     }
     return
   }
@@ -727,13 +824,18 @@ onBeforeRouteLeave(async () => {
           {{ mockClock }}
         </span>
         <span class="count-tip remaining">待复习 {{ Math.max(0, queue.length - index) }} 题</span>
-        <span
-          v-if="!isPractice && queueInfo && queueInfo.remaining > 0"
-          class="count-tip backlog"
-          :title="`今日配额 ${queueInfo.dailyLimit} 题；今日已做 ${queueInfo.reviewedToday} 题。积压的题会按顺序在之后的日子里轮到你，不会被丢掉。`"
+        <button
+          v-if="!isPractice && queueInfo"
+          type="button"
+          class="count-tip backlog quota-chip"
+          :title="`今日配额 ${queueInfo.dailyLimit} 题；今日已做 ${queueInfo.reviewedToday} 题。点击调节每日配额。`"
+          @click="openQuota"
         >
           积压 {{ queueInfo.remaining }} 题（每日上限 {{ queueInfo.dailyLimit }}）
-        </span>
+        </button>
+        <UiButton v-if="showSnooze" size="sm" variant="ghost" @click="snoozeCurrent">
+          稍后再看<template v-if="snoozeLeft !== null">（剩 {{ snoozeLeft }} 次）</template>
+        </UiButton>
       </div>
     </div>
 
@@ -968,11 +1070,14 @@ onBeforeRouteLeave(async () => {
                   :current="current"
                   :selected="selected"
                   :answered="answered"
+                  :peeked="peeked"
                   :submitting="submitting"
                   :review-saved="reviewSaved"
                   @select="selected = $event"
                   @confirm="confirmAnswer"
                   @next="next"
+                  @peek="peeked = true"
+                  @mark="(result) => submitReview(result, true)"
                 />
               </template>
 
@@ -1032,11 +1137,13 @@ onBeforeRouteLeave(async () => {
                   v-model:user-input="userInput"
                   :current="current"
                   :judge-result="judgeResult"
+                  :peeked="peeked"
                   :judging="judging"
                   :submitting="submitting"
                   :review-saved="reviewSaved"
                   @submit="submitFill"
                   @next="nextFill"
+                  @peek="peeked = true"
                   @mark="(result) => submitReview(result, true)"
                 />
               </template>
@@ -1098,9 +1205,14 @@ onBeforeRouteLeave(async () => {
                 <template v-else-if="isMulti && !answered"
                   ><span><kbd>1-4</kbd> 勾选/取消</span><span><kbd>Enter</kbd> 提交</span></template
                 >
+                <template v-else-if="isChoice && !answered && peeked"
+                  ><span><kbd>Q</kbd> 有思路，算对</span
+                  ><span><kbd>W</kbd> 没思路，算错</span></template
+                >
                 <template v-else-if="isChoice && !answered"
                   ><span><kbd>1-4</kbd>/<kbd>A-D</kbd> 选选项</span
-                  ><span><kbd>Enter</kbd> 确认</span></template
+                  ><span><kbd>Enter</kbd> 确认</span
+                  ><span><kbd>空格</kbd> 直接看答案</span></template
                 >
                 <template v-else-if="isChoice && reviewSaved"
                   ><span><kbd>Enter</kbd> 下一题</span></template
@@ -1147,12 +1259,63 @@ onBeforeRouteLeave(async () => {
         <Skeleton variant="rect" :height="44" :width="'40%'" :radius="12" />
       </div>
     </GlassCard>
+
+    <!-- 每日配额调节：0 = 今天不限量 -->
+    <UiModal v-model="quotaVisible" title="每日复习配额" size="sm">
+      <p class="quota-hint">
+        一天最多复习多少题（含新题）。配额是全局的，四个复习分块共享；0 表示今天不限量。
+      </p>
+      <div class="quota-row">
+        <input
+          v-model.number="quotaInput"
+          type="number"
+          min="0"
+          max="1000"
+          class="field-input quota-input"
+          aria-label="每日配额题数"
+          @keyup.enter="saveQuota"
+        />
+        <span class="quota-unit">题 / 天</span>
+      </div>
+      <template #footer>
+        <UiButton variant="ghost" @click="quotaVisible = false">取消</UiButton>
+        <UiButton variant="primary" :loading="quotaSaving" @click="saveQuota">保存</UiButton>
+      </template>
+    </UiModal>
   </div>
 </template>
 
 <style scoped>
 .remaining {
   align-self: center;
+}
+
+/* 配额 chip 可点 + 调节弹窗 */
+.quota-chip {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px dashed currentColor;
+}
+.quota-hint {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.quota-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.quota-input {
+  width: 110px;
+}
+.quota-unit {
+  color: var(--ink-3);
+  font-size: 13px;
 }
 
 /* ---------- 沉浸舞台 ---------- */

@@ -293,6 +293,7 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         "last_reviewed_at": "DATETIME",
         "next_review_at": "DATETIME",
         "review_paused": "INTEGER DEFAULT 0",
+        "starred": "INTEGER DEFAULT 0",
         "source_type": "TEXT DEFAULT ''",
         "source_year": "TEXT DEFAULT ''",
         "source_name": "TEXT DEFAULT ''",

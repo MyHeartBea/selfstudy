@@ -166,6 +166,24 @@ class SourceTypeUpdate(BaseModel):
     source_name: str = ""
 
 
+class StarRequest(BaseModel):
+    """收藏标星：不传 starred 时为切换（toggle）。"""
+
+    starred: Optional[bool] = None
+
+
+class QuotaUpdate(BaseModel):
+    """每日复习配额覆盖值：0 = 不限。"""
+
+    daily_limit: int = Field(ge=0, le=1000)
+
+
+class SnoozeRequest(BaseModel):
+    """「稍后再看」：把这道题推到明天再看，每天限 3 次。"""
+
+    mistake_id: int
+
+
 class FormulaCreate(BaseModel):
     category: str = "高等数学"
     title: str = Field(min_length=1)

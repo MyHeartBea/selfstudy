@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query
 
 from app.database import get_connection
 from app.responses import error, ok, server_error
-from app.schemas import MockCreate, ReviewCreate
+from app.schemas import MockCreate, QuotaUpdate, ReviewCreate, SnoozeRequest
 from app.services import review_service
 
 router = APIRouter(prefix="/api", tags=["复习"])
@@ -45,6 +45,62 @@ def get_today_reviews(
     conn = get_connection()
     try:
         return ok(review_service.get_today_queue(conn, limit, daily_limit, category))
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.get("/reviews/quota")
+def get_quota():
+    """当前每日复习配额（页内覆盖值优先，未设置时回退 .env 的 REVIEW_DAILY_LIMIT）。"""
+    conn = get_connection()
+    try:
+        return ok({"daily_limit": review_service.get_daily_limit(conn)})
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.put("/reviews/quota")
+def update_quota(body: QuotaUpdate):
+    """保存每日复习配额覆盖值（0 = 不限）。"""
+    conn = get_connection()
+    try:
+        value = review_service.set_daily_limit(conn, body.daily_limit)
+        return ok({"daily_limit": value}, "每日配额已更新")
+    except ValueError as exc:
+        return error(400, str(exc))
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.get("/reviews/snooze")
+def get_snooze_remaining():
+    """今天剩余的「稍后再看」次数。"""
+    conn = get_connection()
+    try:
+        return ok({"remaining": review_service.snooze_remaining(conn)})
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.post("/reviews/snooze")
+def snooze_mistake(body: SnoozeRequest):
+    """把这道题推到明天再看（不记复习、不占配额；每天限 3 次）。"""
+    conn = get_connection()
+    try:
+        data = review_service.snooze_mistake(conn, body.mistake_id)
+        if data is None:
+            return error(404, "错题不存在")
+        return ok(data, "已推到明天再看")
+    except ValueError as exc:
+        return error(400, str(exc))
     except Exception as exc:
         return server_error(exc)
     finally:

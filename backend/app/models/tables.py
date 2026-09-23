@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS mistakes (
     last_reviewed_at DATETIME,
     next_review_at DATETIME,
     review_paused INTEGER DEFAULT 0,
+    -- 收藏标星：只影响筛选展示，不参与复习调度
+    starred INTEGER DEFAULT 0,
     -- SM-2 简化版自适应调度（v6）：难度系数与上次间隔天数
     ease_factor REAL DEFAULT 2.5,
     last_interval INTEGER DEFAULT 0,

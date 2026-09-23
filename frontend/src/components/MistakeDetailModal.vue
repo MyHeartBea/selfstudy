@@ -121,6 +121,16 @@ async function markReview(result) {
   }
 }
 
+async function toggleStar() {
+  if (!detail.value) return
+  try {
+    const res = await request.post(`/mistakes/${detail.value.id}/star`)
+    detail.value.starred = !!res.data.data?.starred
+  } catch (err) {
+    // 错误提示由请求拦截器统一处理
+  }
+}
+
 async function pauseReview() {
   if (!detail.value) return
   pausing.value = true
@@ -245,6 +255,10 @@ async function deleteCurrent() {
           </UiTag>
         </div>
         <div class="review-actions">
+          <UiButton size="sm" :variant="detail.starred ? 'success' : 'outline'" @click="toggleStar">
+            <Icon name="star" :size="13" />
+            {{ detail.starred ? '已收藏' : '收藏' }}
+          </UiButton>
           <UiButton size="sm" variant="outline" @click="practiceThis">
             <Icon name="play" :size="13" />
             练这道题

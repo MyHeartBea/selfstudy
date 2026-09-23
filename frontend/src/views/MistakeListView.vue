@@ -56,6 +56,7 @@ function readFiltersFromQuery() {
     tag: q.tag ? String(q.tag) : '',
     approach: q.approach ? String(q.approach) : '',
     search: q.search ? String(q.search) : '',
+    starred: q.starred ? 1 : 0,
     sort: q.sort ? String(q.sort) : 'created_desc',
     page: q.page ? num(q.page) || 1 : 1,
   }
@@ -144,6 +145,11 @@ const activeFilterChips = computed(() => {
       f.approach = ''
       searchMistakes()
     })
+  if (f.starred)
+    push('starred', '只看收藏', () => {
+      f.starred = false
+      searchMistakes()
+    })
   return chips
 })
 
@@ -158,6 +164,7 @@ Object.assign(filters, {
   tag: init.tag,
   approach: init.approach,
   search: init.search,
+  starred: !!init.starred,
 })
 sortBy.value = init.sort
 page.value = init.page
@@ -255,6 +262,27 @@ function debouncedSearch() {
   searchTimer = setTimeout(() => {
     searchMistakes()
   }, 300)
+}
+
+function toggleStarFilter() {
+  filters.starred = !filters.starred
+  searchMistakes()
+}
+
+function printSelected() {
+  if (!selectedIds.value.length) return
+  router.push({ path: '/print', query: { type: 'mistakes', ids: selectedIds.value.join(',') } })
+}
+
+/** 卡片/详情的收藏开关：本地更新，免整页重载；只看收藏视图里取消收藏后把卡移走 */
+async function toggleStar(item) {
+  try {
+    const res = await request.post(`/mistakes/${item.id}/star`)
+    item.starred = !!res.data.data?.starred
+    if (filters.starred && !item.starred) loadMistakes()
+  } catch (err) {
+    /* 失败提示由请求拦截器统一处理 */
+  }
 }
 
 // —— Anki 卡组导出（TSV：正面/背面/标签） ——
@@ -420,6 +448,16 @@ watch(
           <span class="count-tip">共 {{ total }} 条</span>
           <button
             type="button"
+            class="star-toggle"
+            :class="{ active: filters.starred }"
+            :aria-pressed="filters.starred"
+            @click="toggleStarFilter"
+          >
+            <Icon name="star" :size="13" />
+            收藏
+          </button>
+          <button
+            type="button"
             class="more-toggle"
             :class="{ open: showMore }"
             @click="showMore = !showMore"
@@ -529,6 +567,9 @@ watch(
       <UiButton size="sm" variant="outline" :loading="batchRunning" @click="bulkSetOther"
         >设为自编</UiButton
       >
+      <UiButton size="sm" variant="outline" class="bulk-print" @click="printSelected"
+        >打印背诵稿</UiButton
+      >
       <UiButton
         size="sm"
         variant="danger"
@@ -567,6 +608,7 @@ watch(
           :selected="selectedIds.includes(item.id)"
           @open="openDetail"
           @toggle-select="toggleSelect"
+          @toggle-star="toggleStar"
         />
       </div>
     </template>
@@ -826,6 +868,34 @@ watch(
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.star-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--dur-2) var(--ease-enter),
+    border-color var(--dur-2) var(--ease-enter),
+    background var(--dur-2) var(--ease-enter);
+}
+.star-toggle:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.star-toggle.active {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  color: var(--gold);
 }
 
 /* 激活筛选 chips（B1）：每枚一枚墨点 + 可单独移除 */
