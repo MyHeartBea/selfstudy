@@ -16,10 +16,13 @@ const props = defineProps({
 
 const optionList = computed(() => {
   if (!props.detail) return []
-  return ['A', 'B', 'C', 'D'].map((key) => ({
-    key,
-    text: props.detail['option_' + key.toLowerCase()],
-  }))
+  // A-D 恒渲染；E-G（七选五等）只在有内容时出现
+  return ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+    .filter((key, i) => i < 4 || (props.detail['option_' + key.toLowerCase()] || '').trim())
+    .map((key) => ({
+      key,
+      text: props.detail['option_' + key.toLowerCase()],
+    }))
 })
 
 const hasOptions = computed(() => optionList.value.some((o) => o.text))

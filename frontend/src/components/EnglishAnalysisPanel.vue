@@ -216,7 +216,42 @@ async function importVocabItems(items) {
   return r
 }
 
+// 点词弹窗里的「加入生词本」：AI 没提取到的词也能加（查义失败时释义留空，进生词本后可补）
+const addingLookup = ref(false)
+async function addLookupWord() {
+  if (!lookupWord.value) return
+  const d = lookupData.value
+  const meaning = (d?.meanings || [])
+    .map((m) => [m.pos, m.meaning].filter(Boolean).join(' '))
+    .join('；')
+  addingLookup.value = true
+  try {
+    await importVocabItems([
+      {
+        word: lookupWord.value,
+        meaning,
+        phonetic: d?.phonetic || '',
+        example: d?.example || '',
+        kind: 'word',
+      },
+    ])
+    lookupVisible.value = false
+  } catch (err) {
+  } finally {
+    addingLookup.value = false
+  }
+}
+
 // —— 多题列表 ——
+// A-D 恒展示；E-G（七选五等）只在有内容时出现
+function optionLetters(q) {
+  const letters = ['A', 'B', 'C', 'D']
+  for (const L of ['E', 'F', 'G']) {
+    if (String(q?.['option_' + L.toLowerCase()] || '').trim()) letters.push(L)
+  }
+  return letters
+}
+
 const questions = computed(() => {
   const eq = props.parsed?.english_questions || []
   const base = {
@@ -225,6 +260,9 @@ const questions = computed(() => {
     option_b: props.parsed?.option_b || '',
     option_c: props.parsed?.option_c || '',
     option_d: props.parsed?.option_d || '',
+    option_e: props.parsed?.option_e || '',
+    option_f: props.parsed?.option_f || '',
+    option_g: props.parsed?.option_g || '',
     correct_answer: props.parsed?.correct_answer || '',
     analysis: props.parsed?.analysis || '',
     difficulty: props.parsed?.difficulty,
@@ -276,6 +314,9 @@ async function saveAll() {
       option_b: q.option_b || '',
       option_c: q.option_c || '',
       option_d: q.option_d || '',
+      option_e: q.option_e || '',
+      option_f: q.option_f || '',
+      option_g: q.option_g || '',
       correct_answer: q.correct_answer || '',
       analysis: q.analysis || base.analysis || '',
       difficulty: q.difficulty || base.difficulty || 3,
@@ -299,6 +340,9 @@ async function saveAll() {
     option_b: first.option_b,
     option_c: first.option_c,
     option_d: first.option_d,
+    option_e: first.option_e,
+    option_f: first.option_f,
+    option_g: first.option_g,
     correct_answer: first.correct_answer,
     answer_aliases: [],
     analysis: first.analysis,
@@ -429,14 +473,12 @@ async function saveAll() {
           </div>
           <p class="ep-question-text"><MathText :text="q.question" /></p>
           <div v-if="q.question_type === 'choice'" class="ep-options">
-            <div
-              v-for="(ok, k) in ['option_a', 'option_b', 'option_c', 'option_d']"
-              :key="k"
-              class="ep-option"
-            >
-              <span class="ep-option-letter">{{ 'ABCD'[k] }}</span>
-              <span class="ep-option-text"><MathText :text="q[ok]" /></span>
-              <span v-if="q.correct_answer === 'ABCD'[k]" class="ep-correct">
+            <div v-for="L in optionLetters(q)" :key="L" class="ep-option">
+              <span class="ep-option-letter">{{ L }}</span>
+              <span class="ep-option-text"
+                ><MathText :text="q['option_' + L.toLowerCase()]"
+              /></span>
+              <span v-if="q.correct_answer === L" class="ep-correct">
                 <Icon name="check" :size="13" />
               </span>
             </div>
@@ -533,11 +575,12 @@ async function saveAll() {
         <p v-if="lookupData.example" class="ep-lookup-example">例：{{ lookupData.example }}</p>
       </div>
       <p v-else class="muted">暂未查询到释义。</p>
-      <template #footer
-        ><UiButton variant="ghost" size="sm" @click="lookupVisible = false"
-          >关闭</UiButton
-        ></template
-      >
+      <template #footer>
+        <UiButton variant="ghost" size="sm" :loading="addingLookup" @click="addLookupWord">
+          <Icon name="plus-circle" :size="14" />加入生词本
+        </UiButton>
+        <UiButton variant="ghost" size="sm" @click="lookupVisible = false">关闭</UiButton>
+      </template>
     </UiModal>
   </div>
 </template>

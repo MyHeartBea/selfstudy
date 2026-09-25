@@ -51,6 +51,31 @@ class TestSmoke(unittest.TestCase):
         multi = normalize_parsed({"question_type": "choice", "correct_answer": "ABCD"})
         self.assertEqual(multi["correct_answer"], "")
 
+    def test_ai_normalize_supports_seven_options(self):
+        """七选五：E/F/G 选项原样保留、correct_answer 接受 A-G；四选项题不受影响。"""
+        parsed = normalize_parsed(
+            {
+                "question_type": "choice",
+                "correct_answer": "G",
+                "option_a": "A. He says that",
+                "option_e": "E. Which says",
+                "option_f": "F. What says",
+                "option_g": "G. It says that",
+            }
+        )
+        self.assertEqual(parsed["question_type"], "choice")
+        self.assertEqual(parsed["correct_answer"], "G")
+        self.assertEqual(parsed["option_a"], "He says that")
+        self.assertEqual(parsed["option_e"], "Which says")
+        self.assertEqual(parsed["option_f"], "What says")
+        self.assertEqual(parsed["option_g"], "It says that")
+        self.assertEqual(parsed["option_b"], "")
+        # 完形（四选项）仍正常钳到 A-D
+        four = normalize_parsed({"question_type": "choice", "correct_answer": "D"})
+        self.assertEqual(four["correct_answer"], "D")
+        seven_letter = normalize_parsed({"question_type": "choice", "correct_answer": "答案E"})
+        self.assertEqual(seven_letter["correct_answer"], "E")
+
     def test_extract_json_tolerates_surrounding_text(self):
         self.assertEqual(_extract_json('前缀 {"a": 1} 后缀'), {"a": 1})
 

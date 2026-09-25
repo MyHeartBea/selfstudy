@@ -15,6 +15,10 @@ export function createMistakeDraft(question = '') {
     option_b: '',
     option_c: '',
     option_d: '',
+    // 七选五等扩展选项：平时为空串，编辑带 E-G 的题时保留原值，避免全量 PUT 静默清空
+    option_e: '',
+    option_f: '',
+    option_g: '',
     correct_answer: '',
     answer_aliases: [],
     analysis: '',

@@ -854,3 +854,39 @@ ready 先于外壳出现，Ctrl+K 落在还没挂监听的页面上被整个丢�
 **测试**：新增后端 8 颗（star 3 / quota 3 / snooze 2，全库 323）、E2E fixtures 补
 snooze/quota/star 三条打桩；全部门禁：后端 323 全绿 + ruff 双查；Vitest 141 + ESLint +
 Prettier + build；E2E 53。**需重启后端生效**（新增 star/quota/snooze 三组端点）。
+
+## 2026-09-25 批次：英语录入三件（完形填空 + 七选五 + 点词增强）
+
+用户反馈三个痛点：完形/七选五录入质量没有阅读理解高、原文里 AI 没提取到的词没法手动加
+生词本、点词查义每次都调 AI 又慢又花钱。三件全走「提示词/缓存」路径，零新增 AI 调用。
+
+### #24 完形填空高质量录入（提示词改造）
+`ai_english` 捕获提示词与 `_parse_english_questions_prompt` 写明拆题规则：**每个空一道题**，
+题干 = 该空所在完整句子（保留编号如 (41)，空位写 `____`），四个选项**原样照抄**，
+解析仍是【定位/来源/思路/总结】四段。不增调用、不加表。
+
+### #25 七选五支持（A-G 全链）
+- **DB**：`mistakes` 加 `option_e/f/g TEXT`（TABLES_DDL + 迁移 additions 字典，
+  与 `starred` 同模式，`migration_version` 门控不动）。真题库 `exam_questions` 仍 A-D。
+- **判分**：`answer_service.MULTI_LETTERS_RE` → `[A-Ga-g]`（去重排序整体相等的口径不变）；
+  `normalize_parsed` 选项键扩到 a-g、choice 答案钳制 `[ABCD]`→`[A-G]`；
+  `mistake_service` 校验放行 A-G、插入/更新走 `MISTAKE_COLUMNS` 自动带新列。
+- **前端**：`examScoring.js` 过滤到 A-G；ChoiceAnswer / DetailMeta / PrintView / 面板多题列表
+  / 模考卷面一律 **A-D 恒渲染、E-G 非空才出现**（阅读题零回归）；复习页 `KEY_TO_OPTION`
+  加 5-7/e/f/g，并加「选项存在才响应按键」守卫（顺带修掉按不存在选项的键会静默选中的老问题）；
+  MistakeForm 的 E/F/G 输入与答案字母按钮只在题带 E-G（或手动展开）时出现——
+  手动表单平时不变，编辑七选五时不会被全量 PUT 清掉 E-G。
+- **提示词**：标准/英语两套提示词的 correct_answer 放宽到单个字母 A-G，
+  七选五规则（A-G 整句选项填 option_a~g、题干含上下文句）写进两处。
+- 共享判分用例表两侧各补 5 条 E/F/G 用例（TestScoringSingleSource + examScoring.test.js）。
+
+### #26 点词加生词本 + 查义缓存
+- **加入生词本**：查义弹窗 footer 加按钮（复用 `importVocabItems`）——AI 没提取到的词也能加，
+  查义失败时释义留空照常入库（进生词本后可补）；readonly 错题详情里同样可用。
+- **`/api/ai/sense` 服务端缓存**：按词存 `app_meta`（key=`sense_<小写词>`，命中忽略大小写、
+  响应带 `cached:true`）；TTL 90 天 + 500 条上限双清理（写入时淘汰过期与最旧）；
+  **查不到释义的不缓存**。同一个词第二次点击零 AI 调用、即时返回。
+
+**测试**：新增后端 4 颗（normalize E-G / 缓存命中忽略大小写 / 空释义不缓存 / 500 条上限淘汰，
+全库 327）；examScoring 双侧用例表补 E-G。全部门禁：后端 327 全绿 + ruff 双查；
+Vitest 141 + ESLint + Prettier + build；E2E 53。**需重启后端生效**（迁移加列 + 缓存）。

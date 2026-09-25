@@ -396,15 +396,90 @@ def weekly_report(force: int = Query(0, ge=0, le=1)):
     return ok(report)
 
 
+# 点词查义缓存：词义不随时间变化，长期缓存省 AI 调用；按 TTL 过期 + 条目上限双清理
+SENSE_CACHE_PREFIX = "sense_"
+SENSE_CACHE_TTL_DAYS = 90
+SENSE_CACHE_MAX_ENTRIES = 500
+
+
+def _sense_cache_key(word: str) -> str:
+    return SENSE_CACHE_PREFIX + (word or "").strip().lower()
+
+
+def _read_sense_cache(conn, cache_key: str):
+    """命中返回释义 dict（带 cached 标记），过期/损坏返回 None。"""
+    row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (cache_key,)).fetchone()
+    if not row or not row["value"]:
+        return None
+    try:
+        cached = json.loads(row["value"])
+    except (TypeError, ValueError):
+        return None
+    ts = float(cached.get("ts") or 0)
+    data = cached.get("data")
+    if not isinstance(data, dict) or not data.get("meanings"):
+        return None
+    if time.time() - ts > SENSE_CACHE_TTL_DAYS * 86400:
+        return None
+    payload = dict(data)
+    payload["cached"] = True
+    return payload
+
+
+def _write_sense_cache(conn, cache_key: str, data: dict) -> None:
+    """写缓存并清理：过期条目全删，超出上限按 ts 淘汰最旧。"""
+    now = time.time()
+    conn.execute(
+        "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+        (cache_key, json.dumps({"ts": now, "data": data}, ensure_ascii=False)),
+    )
+    rows = conn.execute(
+        "SELECT key, value FROM app_meta WHERE key LIKE ?",
+        (SENSE_CACHE_PREFIX + "%",),
+    ).fetchall()
+    entries = []
+    for row in rows:
+        if row["key"] == cache_key:
+            entries.append((cache_key, now))
+            continue
+        try:
+            ts = float(json.loads(row["value"]).get("ts") or 0)
+        except (TypeError, ValueError):
+            ts = 0
+        entries.append((row["key"], ts))
+    stale = [key for key, ts in entries if now - ts > SENSE_CACHE_TTL_DAYS * 86400]
+    keep = sorted((e for e in entries if e[0] not in set(stale)), key=lambda e: -e[1])
+    stale.extend(key for key, _ in keep[SENSE_CACHE_MAX_ENTRIES:])
+    for key in stale:
+        conn.execute("DELETE FROM app_meta WHERE key = ?", (key,))
+    conn.commit()
+
+
 @router.get("/sense", dependencies=[Depends(ai_rate_limit)])
 def word_sense(word: str = Query(..., min_length=1, max_length=60)):
-    """点词查义：用 AI 解释任意英语单词，返回多词性释义。"""
+    """点词查义：用 AI 解释任意英语单词，返回多词性释义（同词 90 天内直接走缓存）。"""
+    cache_key = _sense_cache_key(word)
+    conn = get_connection()
     try:
-        return ok(ai_service.lookup_word(word))
+        cached = _read_sense_cache(conn, cache_key)
+    finally:
+        conn.close()
+    if cached is not None:
+        return ok(cached)
+    try:
+        result = ai_service.lookup_word(word)
     except AiNotConfigured:
         return error(400, AI_NOT_CONFIGURED_MESSAGE)
     except Exception as exc:
         return error(502, _ai_error_message(exc))
+    # 查不到释义（空词/乱码）不缓存，下次重试可能就对了
+    if result.get("meanings"):
+        conn = get_connection()
+        try:
+            _write_sense_cache(conn, cache_key, result)
+        finally:
+            conn.close()
+    return ok(result)
 
 
 def _vision_extract_with_fallback(images: List[str], instruction: str) -> tuple:

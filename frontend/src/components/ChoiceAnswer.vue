@@ -22,10 +22,13 @@ const isMulti = computed(() => props.current?.question_type === 'multi')
 
 const optionList = computed(() => {
   if (!props.current) return []
-  return ['A', 'B', 'C', 'D'].map((key) => ({
-    key,
-    text: props.current['option_' + key.toLowerCase()],
-  }))
+  // A-D 恒渲染（缺了显式提示「未填写」）；E-G 是七选五等扩展选项，只在有内容时出现
+  return ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+    .filter((key, i) => i < 4 || (props.current['option_' + key.toLowerCase()] || '').trim())
+    .map((key) => ({
+      key,
+      text: props.current['option_' + key.toLowerCase()],
+    }))
 })
 
 const selectedSet = computed(() => new Set((props.selected || '').split('').filter(Boolean)))

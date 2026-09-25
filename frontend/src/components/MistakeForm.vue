@@ -53,11 +53,22 @@ watch(currentKind, () => {
 
 // 多选题正确答案（存库为排序后的字母串）
 const multiAnswer = computed({
-  get: () => (form.correct_answer || '').split('').filter((ch) => 'ABCD'.includes(ch)),
+  get: () => (form.correct_answer || '').split('').filter((ch) => 'ABCDEFG'.includes(ch)),
   set: (letters) => {
     form.correct_answer = [...letters].sort().join('')
   },
 })
+
+// 七选五等题的 E/F/G 选项输入框：只在载入的题已带扩展选项（或用户主动展开）时出现
+const showExtraOptions = ref(false)
+const hasExtraOptions = computed(() =>
+  [form.option_e, form.option_f, form.option_g].some((v) => String(v || '').trim()),
+)
+const answerLetters = computed(() =>
+  showExtraOptions.value || hasExtraOptions.value
+    ? ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+    : ['A', 'B', 'C', 'D'],
+)
 
 function applyApproachPreset(preset) {
   if (!form.approach.includes(preset)) {
@@ -78,6 +89,9 @@ function fillForm(initial) {
   form.option_b = initial.option_b || ''
   form.option_c = initial.option_c || ''
   form.option_d = initial.option_d || ''
+  form.option_e = initial.option_e || ''
+  form.option_f = initial.option_f || ''
+  form.option_g = initial.option_g || ''
   form.correct_answer = initial.correct_answer || ''
   form.answer_aliases = (initial.answer_aliases || []).slice()
   form.analysis = initial.analysis || ''
@@ -185,6 +199,9 @@ async function submitForm() {
     option_b: form.option_b,
     option_c: form.option_c,
     option_d: form.option_d,
+    option_e: form.option_e,
+    option_f: form.option_f,
+    option_g: form.option_g,
     correct_answer: form.correct_answer,
     answer_aliases: form.answer_aliases,
     analysis: form.analysis,
@@ -333,7 +350,29 @@ onMounted(loadApproachOptions)
           <label class="field-label">选项 D</label>
           <input v-model="form.option_d" class="field-input" placeholder="选项 D 内容" />
         </div>
+        <template v-if="showExtraOptions || hasExtraOptions">
+          <div class="field">
+            <label class="field-label">选项 E</label>
+            <input v-model="form.option_e" class="field-input" placeholder="选项 E 内容" />
+          </div>
+          <div class="field">
+            <label class="field-label">选项 F</label>
+            <input v-model="form.option_f" class="field-input" placeholder="选项 F 内容" />
+          </div>
+          <div class="field">
+            <label class="field-label">选项 G</label>
+            <input v-model="form.option_g" class="field-input" placeholder="选项 G 内容" />
+          </div>
+        </template>
       </div>
+      <UiButton
+        v-if="!showExtraOptions && !hasExtraOptions"
+        variant="ghost"
+        size="sm"
+        @click="showExtraOptions = true"
+      >
+        七选五等题？添加选项 E/F/G
+      </UiButton>
 
       <div class="field">
         <label class="field-label required">{{
@@ -341,7 +380,7 @@ onMounted(loadApproachOptions)
         }}</label>
         <div v-if="!isMulti" class="seg-row">
           <button
-            v-for="k in ['A', 'B', 'C', 'D']"
+            v-for="k in answerLetters"
             :key="k"
             type="button"
             class="seg-btn"
@@ -353,7 +392,7 @@ onMounted(loadApproachOptions)
         </div>
         <div v-else class="seg-row">
           <button
-            v-for="k in ['A', 'B', 'C', 'D']"
+            v-for="k in answerLetters"
             :key="k"
             type="button"
             class="seg-btn"

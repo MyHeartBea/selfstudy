@@ -322,7 +322,8 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
         "你是一个考研错题整理助手。请根据用户提供的题目内容，输出严格的 JSON（不要 Markdown），字段如下：\n"
         '{"question": "...", "question_type": "choice/fill/solution", '
         '"option_a": "...", "option_b": "...", "option_c": "...", '
-        '"option_d": "...", "correct_answer": "选择题填 A/B/C/D，其他题型填参考答案文本", "analysis": "详细解析", '
+        '"option_d": "...", "option_e": "...", "option_f": "...", "option_g": "...", '
+        '"correct_answer": "选择题填 A/B/C/D/E/F/G 单个字母，其他题型填参考答案文本", "analysis": "详细解析", '
         '"difficulty": 1-5 的整数, "difficulty_points": "这道题的主要难点简析", '
         '"knowledge_tags": ["标签1", "标签2"], '
         '"approach": "解题思路", "source": "来源备注", '
@@ -330,11 +331,11 @@ def _parse_prompt(standard_tags: List[str] | None = None) -> str:
         '"source_year": "如 2025", "source_name": "如 李林六套卷(一)", '
         '"subject_hint": "数学/英语/408/政治"}\n'
         "question_type 只能输出三个值之一：choice/fill/solution，根据题目形式判断："
-        "有 A/B/C/D 选项选 choice，只要求填数值或结果的选 fill，"
+        "有选项（A/B/C/D，英语七选五可能到 E/F/G）选 choice，只要求填数值或结果的选 fill，"
         "需要写完整过程或证明的选 solution。"
-        "选择题的 correct_answer 只能填单个字母 A/B/C/D，不要填多个字母，"
+        "选择题的 correct_answer 只能填单个字母 A-G，不要填多个字母，"
         "也不要写“ABCD”或“A、B”；四个选项各自只填该选项自己的内容，"
-        "不要把题干或全部选项重复填进每个选项。"
+        "不要把题干或全部选项重复填进每个选项；没有 E/F/G 选项时对应字段填空字符串。"
         "如果某个选项缺失，填空字符串即可；如果无法确定正确答案，"
         "给出最可能的答案并在解析中说明。source_type：真题填 real_exam 并填写年份，"
         "模拟题填 mock 并填写年份和卷名，其他填 other。\n"
@@ -605,7 +606,7 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
 
     def as_option(value) -> str:
         text = as_text(value)
-        text = re.sub(r"^\s*[A-Da-d]\s*[\.、．:：)]\s*", "", text)
+        text = re.sub(r"^\s*[A-Ga-g]\s*[\.、．:：)]\s*", "", text)
         return text.strip()
 
     question_type = as_text(parsed.get("question_type")).lower()
@@ -617,19 +618,36 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
         question_type = "solution"
     else:
         has_options = any(
-            as_option(parsed.get(key)) for key in ("option_a", "option_b", "option_c", "option_d")
+            as_option(parsed.get(key))
+            for key in (
+                "option_a",
+                "option_b",
+                "option_c",
+                "option_d",
+                "option_e",
+                "option_f",
+                "option_g",
+            )
         )
         question_type = "choice" if has_options else "fill"
 
-    option_keys = ("option_a", "option_b", "option_c", "option_d")
+    option_keys = (
+        "option_a",
+        "option_b",
+        "option_c",
+        "option_d",
+        "option_e",
+        "option_f",
+        "option_g",
+    )
     option_values = [as_option(parsed.get(key)) for key in option_keys]
     non_empty_options = [value for value in option_values if value]
     if len(non_empty_options) >= 2 and len(set(non_empty_options)) == 1:
-        option_values = ["", "", "", ""]
+        option_values = ["" for _ in option_keys]
 
     correct = as_text(parsed.get("correct_answer"))
     if question_type == "choice":
-        letters = re.findall(r"[ABCD]", correct.upper())
+        letters = re.findall(r"[A-G]", correct.upper())
         unique_letters = list(dict.fromkeys(letters))
         correct = unique_letters[0] if len(unique_letters) == 1 else ""
 
@@ -668,6 +686,9 @@ def normalize_parsed(parsed: dict, fallback_text: str = "") -> dict:
         "option_b": _wrap_math(option_values[1]),
         "option_c": _wrap_math(option_values[2]),
         "option_d": _wrap_math(option_values[3]),
+        "option_e": _wrap_math(option_values[4]),
+        "option_f": _wrap_math(option_values[5]),
+        "option_g": _wrap_math(option_values[6]),
         "correct_answer": _wrap_math(correct),
         "analysis": _wrap_math(as_text(parsed.get("analysis"))),
         "difficulty": difficulty,

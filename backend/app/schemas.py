@@ -14,6 +14,9 @@ class MistakeCreate(BaseModel):
     option_b: str = ""
     option_c: str = ""
     option_d: str = ""
+    option_e: str = ""
+    option_f: str = ""
+    option_g: str = ""
     correct_answer: str = ""
     answer_aliases: List[str] = []
     analysis: str = ""

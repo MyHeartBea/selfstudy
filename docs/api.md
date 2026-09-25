@@ -196,7 +196,9 @@
   - 逐批失败不整体中断，未识别的批次会在文本里标注「未能识别」。
 
 - `POST /api/ai/english`：英语整篇精读（`{"images":[...], "text", "instruction"}`，先提文字再文本分析）
-- `GET /api/ai/sense?word=`：点词查义（多词性释义，≤60 字符）
+- `GET /api/ai/sense?word=`：点词查义（多词性释义，≤60 字符）。
+  **按词缓存在 `app_meta`**（key=`sense_<小写词>`，命中忽略大小写，响应带 `cached:true`）；
+  TTL 90 天 + 最多 500 条（超出淘汰最旧），**查不到释义的不缓存**（下次重试）
 - `POST /api/ai/weekly-report?force=0|1`：近 7 天答错记录聚类成错因的 AI 周报。
   **按天缓存在 `app_meta`**（key=`weekly_report_YYYY-MM-DD`，自动清旧），同一天重复调用直接命中缓存；
   `force=1` 才重新生成

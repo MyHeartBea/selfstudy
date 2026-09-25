@@ -284,5 +284,119 @@ class TestMocksDelete(unittest.TestCase):
         self.assertEqual(r.status_code, 404)
 
 
+class TestSenseCache(unittest.TestCase):
+    """点词查义缓存：同词（忽略大小写）第二次直接回缓存、零 AI 调用；
+    查不到释义不缓存；写入时按条目上限淘汰最旧。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        cls._client_ctx = TestClient(app)
+        cls._client_ctx.__enter__()
+        cls.client = cls._client_ctx
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._client_ctx.__exit__(None, None, None)
+        cls._tmpdir.cleanup()
+
+    def test_cache_hit_ignores_case(self):
+        from unittest.mock import patch
+
+        from app.services import ai_service
+
+        calls = {"n": 0}
+
+        def fake_lookup(word, timeout=None):
+            calls["n"] += 1
+            return {
+                "word": word,
+                "phonetic": "/əˈbændən/",
+                "meanings": [{"pos": "v.", "meaning": "放弃"}],
+                "example": "abandon a plan",
+            }
+
+        with patch.object(ai_service, "lookup_word", side_effect=fake_lookup):
+            r1 = self.client.get("/api/ai/sense", params={"word": "Abandon"})
+            self.assertEqual(r1.status_code, 200, r1.text)
+            self.assertFalse(r1.json()["data"].get("cached"))
+            r2 = self.client.get("/api/ai/sense", params={"word": "ABANDON"})
+            self.assertEqual(r2.status_code, 200)
+            self.assertTrue(r2.json()["data"]["cached"])
+            # 命中的是首次查询（Abandon）的缓存内容
+            self.assertEqual(r2.json()["data"]["word"], "Abandon")
+        self.assertEqual(calls["n"], 1)
+
+    def test_empty_meaning_not_cached(self):
+        from unittest.mock import patch
+
+        from app.services import ai_service
+
+        calls = {"n": 0}
+
+        def fake_lookup(word, timeout=None):
+            calls["n"] += 1
+            return {"word": word, "phonetic": "", "meanings": [], "example": ""}
+
+        with patch.object(ai_service, "lookup_word", side_effect=fake_lookup):
+            for _ in range(2):
+                r = self.client.get("/api/ai/sense", params={"word": "zzz"})
+                self.assertEqual(r.status_code, 200, r.text)
+                self.assertFalse(r.json()["data"].get("cached"))
+        self.assertEqual(calls["n"], 2)
+
+    def test_cache_cleanup_cap(self):
+        import json as _json
+        import time as _time
+
+        from app.database import get_connection
+        from app.routers.ai import SENSE_CACHE_MAX_ENTRIES, _sense_cache_key, _write_sense_cache
+
+        conn = get_connection()
+        try:
+            # 全部用新鲜时间戳（TTL 清不掉），才能专门压测条目上限淘汰
+            now = _time.time()
+            for i in range(SENSE_CACHE_MAX_ENTRIES + 5):
+                key = _sense_cache_key(f"zzfill{i}")
+                conn.execute(
+                    "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+                    (
+                        key,
+                        _json.dumps(
+                            {
+                                "ts": now - i,
+                                "data": {"meanings": [{"pos": "n.", "meaning": "x"}]},
+                            }
+                        ),
+                    ),
+                )
+            conn.commit()
+            fresh = _sense_cache_key("zzfresh")
+            _write_sense_cache(conn, fresh, {"meanings": [{"pos": "n.", "meaning": "新词"}]})
+            count = conn.execute(
+                "SELECT COUNT(*) AS c FROM app_meta WHERE key LIKE 'sense\\_%' ESCAPE '\\'"
+            ).fetchone()["c"]
+            self.assertLessEqual(count, SENSE_CACHE_MAX_ENTRIES)
+            # 刚写入的与 ts 最新的条目必须还在（淘汰只针对最旧）
+            self.assertIsNotNone(
+                conn.execute("SELECT 1 FROM app_meta WHERE key = ?", (fresh,)).fetchone()
+            )
+            self.assertIsNotNone(
+                conn.execute(
+                    "SELECT 1 FROM app_meta WHERE key = ?", (_sense_cache_key("zzfill0"),)
+                ).fetchone()
+            )
+            # ts 最旧的被淘汰
+            self.assertIsNone(
+                conn.execute(
+                    "SELECT 1 FROM app_meta WHERE key = ?", (_sense_cache_key("zzfill504"),)
+                ).fetchone()
+            )
+        finally:
+            conn.close()
+
+
 if __name__ == "__main__":
     unittest.main()

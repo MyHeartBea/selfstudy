@@ -286,6 +286,9 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     additions = {
         "question_type": "TEXT DEFAULT 'choice'",
         "answer_aliases": "TEXT",
+        "option_e": "TEXT",
+        "option_f": "TEXT",
+        "option_g": "TEXT",
         "difficulty_points": "TEXT",
         "review_count": "INTEGER DEFAULT 0",
         "wrong_count": "INTEGER DEFAULT 0",

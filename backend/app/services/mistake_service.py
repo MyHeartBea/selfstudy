@@ -65,6 +65,9 @@ LIST_COLUMNS = (
     "option_b",
     "option_c",
     "option_d",
+    "option_e",
+    "option_f",
+    "option_g",
     "correct_answer",
     "answer_aliases",
     "analysis",
@@ -301,7 +304,7 @@ def build_mistake_fields(
         question = str(question).strip()
 
     option_fields = {}
-    for key in ("option_a", "option_b", "option_c", "option_d"):
+    for key in ("option_a", "option_b", "option_c", "option_d", "option_e", "option_f", "option_g"):
         value = body.get(key)
         option_fields[key] = str(value).strip() if value is not None else ""
 
@@ -312,8 +315,8 @@ def build_mistake_fields(
             correct_answer = None
         else:
             upper = correct_answer.upper()
-            if upper not in ("A", "B", "C", "D"):
-                errors.append("选择题正确答案必须是 A/B/C/D 之一")
+            if upper not in ("A", "B", "C", "D", "E", "F", "G"):
+                errors.append("选择题正确答案必须是 A-G 之一")
                 correct_answer = None
             else:
                 correct_answer = upper
@@ -381,6 +384,9 @@ def build_mistake_fields(
         "option_b": option_fields["option_b"],
         "option_c": option_fields["option_c"],
         "option_d": option_fields["option_d"],
+        "option_e": option_fields["option_e"],
+        "option_f": option_fields["option_f"],
+        "option_g": option_fields["option_g"],
         "correct_answer": correct_answer,
         "answer_aliases": aliases,
         "answer_aliases_text": ";;".join(aliases),

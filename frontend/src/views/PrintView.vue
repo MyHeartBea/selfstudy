@@ -112,7 +112,7 @@ function doPrint() {
           <div class="item-question"><MathText :text="item.question || '（无题干）'" /></div>
           <div v-if="isChoiceLike(item)" class="item-options">
             <p
-              v-for="key in ['a', 'b', 'c', 'd']"
+              v-for="key in ['a', 'b', 'c', 'd', 'e', 'f', 'g']"
               :key="key"
               :class="{ empty: !item['option_' + key] }"
             >

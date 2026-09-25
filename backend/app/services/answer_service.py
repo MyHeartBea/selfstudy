@@ -6,8 +6,8 @@ from typing import List, Optional
 
 PUNCTUATION = set("，。；：、！？“”‘’（）()【】[]《》〈〉·…—")
 NUMERIC_RE = re.compile(r"^[+-]?(\d+(\.\d+)?|\.\d+)([eE][+-]?\d+)?$")
-# 多选题答案只取 A-D 字母；模块级预编译，避免每次判分重复编译
-MULTI_LETTERS_RE = re.compile(r"[A-Da-d]")
+# 字母题答案取 A-G 字母（英语七选五用到 E/F/G）；模块级预编译，避免每次判分重复编译
+MULTI_LETTERS_RE = re.compile(r"[A-Ga-g]")
 
 
 def normalize_answer(value: str) -> str:
@@ -74,7 +74,7 @@ def judge_fill(
 
 
 def _multi_letters(value: str) -> List[str]:
-    """提取答案中的 A-D 字母，去重排序（多选判分的统一口径）。"""
+    """提取答案中的 A-G 字母，去重排序（字母题判分的统一口径）。"""
     return sorted({m.upper() for m in MULTI_LETTERS_RE.findall(value or "")})
 
 
@@ -84,7 +84,7 @@ def normalize_multi_answer(value: str) -> str:
 
 
 def judge_letters(user_answer: str, expected: str) -> dict:
-    """单选 / 多选的**唯一判分口径**：取 A-D 字母、去重、排序后整体相等才算对。
+    """单选 / 多选的**唯一判分口径**：取 A-G 字母、去重、排序后整体相等才算对。
 
     少选、错选、多选都不得分，与书写顺序和重复字母无关（"aab" 与 "ab" 等价）。
     前端 utils/examScoring.js 的 scoreLetters 必须与本函数同口径 —— 它只负责即时

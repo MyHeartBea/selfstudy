@@ -50,26 +50,35 @@ def _parse_english_prompt(standard_tags: List[str] | None = None) -> str:
         '"question_type": "choice/fill/solution", '
         '"question": "题目题干", '
         '"option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...", '
-        '"correct_answer": "选择题填 A/B/C/D，其他填参考答案文本", '
+        '"option_e": "...", "option_f": "...", "option_g": "...", '
+        '"correct_answer": "选择题填单个字母 A-G，其他填参考答案文本", '
         '"analysis": "解析：先写【定位】原文第几句/哪一段；再写【来源】哪年真题或篇目出处；再写【思路】如何理解与作答；最后【总结】该题考点与答题要点", '
         '"difficulty": 1-5 的整数, "difficulty_points": "主要难点简析", '
         '"knowledge_tags": ["标签1", "标签2"], "approach": "解题思路", '
         '"source": "来源备注", "source_type": "real_exam/mock/other", '
         '"source_year": "如 2017", "source_name": "如 2017 英语二 阅读 Text 2", '
         '"questions": [{"question": "第2题题干", "option_a": "...", "option_b": "...", '
-        '"option_c": "...", "option_d": "...", "correct_answer": "另一题的答案", '
+        '"option_c": "...", "option_d": "...", "option_e": "...", "option_f": "...", "option_g": "...", '
+        '"correct_answer": "另一题的答案", '
         '"analysis": "该题解析（含定位/来源/思路/总结）", "difficulty": 3, '
         '"difficulty_points": "该题难点", "approach": "该题思路"}]}\n'
         "判断规则：若图片/文本是英语篇章（多为句英文、阅读/完形/翻译段落），is_english=true，"
         "完整填写 passage/translation/sentences/phrases/words；"
-        "段落含多道题目时，把第 2 道及以后的题目逐一放进 questions 数组（每题含 question/option_a~d/"
+        "段落含多道题目时，把第 2 道及以后的题目逐一放进 questions 数组（每题含 question/option_a~g/"
         "correct_answer/analysis/difficulty 等标准字段，解析同样要写【定位/来源/思路/总结】）；"
-        "顶层 question/option_a~d/answer/analysis 填第一道题，避免与 questions 重复；"
+        "顶层 question/option_a~g/answer/analysis 填第一道题，避免与 questions 重复；"
         "若只有一道题，questions 填空数组。"
         "若不是英语篇章（如数学、政治、计算机等），is_english=false，passage 填空字符串，"
         "只按通用错题字段输出（question/options/answer/analysis 等）。\n"
-        "选择题的 correct_answer 只能填单个字母 A/B/C/D。question_type：有 A/B/C/D 选项选 choice，"
+        "选择题的 correct_answer 只能填单个字母 A/B/C/D/E/F/G。question_type：有选项选 choice，"
         "只填数值/结果选 fill，写完整过程选 solution。\n"
+        "完形填空/七选五的拆题规则（务必遵守）：\n"
+        "完形填空：**每一个空就是一道题**。题干写该空所在的完整句子，把空的位置写成四个下划线 "
+        "____（若句中有编号如 (41)，保留编号）；四个选项**原样照抄**该空的四个候选词，"
+        "correct_answer 填该空的正确字母；不要把整篇文章塞进题干。\n"
+        "七选五：五个空各是一道题，选项是 A-G 七个**完整句子**，把每个选项的完整句子原样填进 "
+        "option_a~option_g（用不到的字段填空字符串）；题干写该空所在位置的上下文句子（含前一句与后一句），"
+        "空的位置用 ____ 表示，correct_answer 填 A-G 中的正确字母。\n"
         "题干与选项中的数学/LaTeX 表达式用 $...$ 或 $$...$$ 包裹；但英语原文 passage 与翻译不要用 $ 包裹。\n"
         "sentences 必须覆盖原文的每一个句子（包括引号内的对话、破折号后的分句），逐句给出 "
         "text/structure/pattern/translation，不要合并、不要省略；words 尽量完整收录原文里的考研重点词与生词、高频词，"
@@ -288,7 +297,8 @@ def _parse_english_questions_prompt(standard_tags: List[str] | None = None) -> s
         "你是考研英语阅读精读助手。根据用户提供的英语原文与题目要求，输出严格的 JSON（不要 Markdown），字段如下：\n"
         '{"question_type": "choice/fill/solution", "question": "题目题干", '
         '"option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...", '
-        '"correct_answer": "选择题填 A/B/C/D，其他填参考答案文本", '
+        '"option_e": "...", "option_f": "...", "option_g": "...", '
+        '"correct_answer": "选择题填单个字母 A-G，其他填参考答案文本", '
         '"analysis": "解析：用【定位】【来源】【思路】【总结】四段。'
         "【定位】要指明原文具体句（如“第二段第二句”）并引用关键词，禁止只写“全文”；"
         "【来源】写明哪年真题/哪篇哪题；"
@@ -299,10 +309,14 @@ def _parse_english_questions_prompt(standard_tags: List[str] | None = None) -> s
         '"source": "来源备注", "source_type": "real_exam/mock/other", "source_year": "如 2010", '
         '"source_name": "如 2010 英语一 阅读 Text 4", '
         '"questions": [{"question": "下一题题干", "option_a": "...", "option_b": "...", '
-        '"option_c": "...", "option_d": "...", "correct_answer": "另一题答案", '
+        '"option_c": "...", "option_d": "...", "option_e": "...", "option_f": "...", "option_g": "...", '
+        '"correct_answer": "另一题答案", '
         '"analysis": "该题解析（含定位/来源/思路/总结）", "difficulty": 3, '
         '"difficulty_points": "该题难点", "approach": "该题思路"}]}\n'
-        "顶层填第 1 题，第 2 题起的题目逐一放进 questions 数组。选择题 correct_answer 只能填单个字母 A/B/C/D。"
+        "顶层填第 1 题，第 2 题起的题目逐一放进 questions 数组。选择题 correct_answer 只能填单个字母 A-G。"
+        "完形填空：每个空一道题，题干写该空所在完整句子、空位用 ____ 表示，选项原样照抄四个候选词。"
+        "七选五：每个空一道题，A-G 七个完整句子选项原样填进 option_a~option_g（用不到的填空字符串），"
+        "题干写该空上下文句子、空位用 ____ 表示。\n"
         "题干与选项里的数学/LaTeX 表达式用 $...$ 包裹。\n"
         "**题干与选项必须原样照抄用户给出的文字**：严禁改写、精简、翻译或自行编造题目；"
         "用户给了几道题就输出几道，不要增减。只有解析（analysis）需要你自己撰写。"
@@ -418,7 +432,8 @@ def analyze_english(
                         "content": (
                             "你是考研英语阅读助手。用户会给你【题目与选项】原文，请**逐题照抄**成严格 JSON（不要 Markdown）：\n"
                             '{"questions": [{"question": "题干", "option_a": "...", "option_b": "...", '
-                            '"option_c": "...", "option_d": "...", "correct_answer": "单字母或参考答案文本"}]}\n'
+                            '"option_c": "...", "option_d": "...", "option_e": "...", "option_f": "...", '
+                            '"option_g": "...", "correct_answer": "单字母或参考答案文本"}]}\n'
                             "**必须遵守**：\n"
                             "1. question 与 option_* 要**原样照抄**用户给的文字，禁止改写、翻译、润色或自行编题；\n"
                             "2. 用户给了几道题就输出几道，不要多也不要少；选项缺失就留空串；\n"
@@ -452,7 +467,16 @@ def analyze_english(
 
     def _qa_task(q: dict) -> dict:
         opts = " ".join(
-            str(q.get(k) or "") for k in ("option_a", "option_b", "option_c", "option_d")
+            str(q.get(k) or "")
+            for k in (
+                "option_a",
+                "option_b",
+                "option_c",
+                "option_d",
+                "option_e",
+                "option_f",
+                "option_g",
+            )
         )
         try:
             return _svc()._chat_json(

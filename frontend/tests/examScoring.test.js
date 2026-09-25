@@ -6,7 +6,8 @@ describe('normalizeLetters', () => {
   it('大写化、过滤非法字符并排序', () => {
     expect(normalizeLetters('b a')).toBe('AB')
     expect(normalizeLetters('dbca')).toBe('ABCD')
-    expect(normalizeLetters('aef')).toBe('A')
+    expect(normalizeLetters('aef')).toBe('AEF')
+    expect(normalizeLetters('gefdcba')).toBe('ABCDEFG')
   })
 
   it('空值返回空串', () => {
@@ -50,6 +51,12 @@ describe('scoreLetters（单选 + 多选统一判分）', () => {
       ['aabc', 'abc', true],
       ['', 'A', false],
       ['ex', 'A', false],
+      // 七选五扩展：A-G 同口径（E/F/G 也是合法字母）
+      ['e', 'E', true],
+      ['gfe', 'EFG', true],
+      ['EFG', 'efg', true],
+      ['eg', 'EFG', false],
+      ['efg', 'EG', false],
     ]
     for (const [user, expected, want] of CASES) {
       expect(scoreLetters(user, expected), `scoreLetters(${user}, ${expected})`).toBe(want)

@@ -304,7 +304,7 @@ function startMockTimer() {
 
 const mockOptionList = computed(() => {
   if (!current.value) return []
-  return ['A', 'B', 'C', 'D']
+  return ['A', 'B', 'C', 'D', 'E', 'F', 'G']
     .map((key) => ({ key, text: current.value['option_' + key.toLowerCase()] }))
     .filter((o) => o.text)
 })
@@ -427,6 +427,9 @@ async function submitMock(auto = false) {
               option_b: q.option_b || '',
               option_c: q.option_c || '',
               option_d: q.option_d || '',
+              option_e: q.option_e || '',
+              option_f: q.option_f || '',
+              option_g: q.option_g || '',
               correct_answer: q.correct_answer || '',
               analysis:
                 q.analysis || `模考答错（正确答案 ${q.correct_answer || '见解析'}），解析待整理。`,
@@ -491,6 +494,9 @@ async function loadQueue() {
         option_b: q.option_b,
         option_c: q.option_c,
         option_d: q.option_d,
+        option_e: q.option_e,
+        option_f: q.option_f,
+        option_g: q.option_g,
         correct_answer: q.correct_answer,
         analysis: q.analysis,
         diagram_image: q.diagram_image || '',
@@ -666,8 +672,23 @@ async function submitReview(result, advance = true) {
 
 onMounted(loadQueue)
 
-// —— 键盘快捷键：1-4/A-D 选选项、Enter 确认/下一题、空格看答案 ——
-const KEY_TO_OPTION = { 1: 'A', 2: 'B', 3: 'C', 4: 'D', a: 'A', b: 'B', c: 'C', d: 'D' }
+// —— 键盘快捷键：1-7/A-G 选选项（5-7/E-G 只在七选五等题上出现）、Enter 确认/下一题、空格看答案 ——
+const KEY_TO_OPTION = {
+  1: 'A',
+  2: 'B',
+  3: 'C',
+  4: 'D',
+  5: 'E',
+  6: 'F',
+  7: 'G',
+  a: 'A',
+  b: 'B',
+  c: 'C',
+  d: 'D',
+  e: 'E',
+  f: 'F',
+  g: 'G',
+}
 
 function onKeydown(event) {
   // 完成页：Enter 直达主操作（返回错题列表），键盘流不断线
@@ -691,10 +712,13 @@ function onKeydown(event) {
     return
   }
   const key = event.key.toLowerCase()
+  // 该字母对应的选项在这道题上真实存在才响应（防按 E 选中不存在的选项）
+  const optionExists = (letter) =>
+    !!String(current.value?.['option_' + letter.toLowerCase()] || '').trim()
 
   // 模考：数字键作答、Enter 翻题，不即时判分
   if (isMock.value) {
-    if (isChoice.value && KEY_TO_OPTION[key]) {
+    if (isChoice.value && KEY_TO_OPTION[key] && optionExists(KEY_TO_OPTION[key])) {
       mockPick(KEY_TO_OPTION[key])
       event.preventDefault()
       return
@@ -714,7 +738,7 @@ function onKeydown(event) {
         if (key === 'q') submitReview(true, true)
         else if (key === 'w') submitReview(false, true)
         event.preventDefault()
-      } else if (KEY_TO_OPTION[key]) {
+      } else if (KEY_TO_OPTION[key] && optionExists(KEY_TO_OPTION[key])) {
         const letter = KEY_TO_OPTION[key]
         if (isMulti.value) {
           // 多选：数字/字母键切换勾选
@@ -1210,7 +1234,7 @@ onBeforeRouteLeave(async () => {
                   ><span><kbd>W</kbd> 没思路，算错</span></template
                 >
                 <template v-else-if="isChoice && !answered"
-                  ><span><kbd>1-4</kbd>/<kbd>A-D</kbd> 选选项</span
+                  ><span><kbd>1-7</kbd>/<kbd>A-G</kbd> 选选项</span
                   ><span><kbd>Enter</kbd> 确认</span
                   ><span><kbd>空格</kbd> 直接看答案</span></template
                 >

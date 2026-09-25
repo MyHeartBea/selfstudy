@@ -210,6 +210,12 @@ class TestScoringSingleSource(_DbCase):
         ("aabc", "abc", True),
         ("", "A", False),
         ("ex", "A", False),
+        # 七选五扩展：A-G 同口径（E/F/G 也是合法字母）
+        ("e", "E", True),
+        ("gfe", "EFG", True),
+        ("EFG", "efg", True),
+        ("eg", "EFG", False),
+        ("efg", "EG", False),
     ]
 
     def test_judge_letters_table(self):
