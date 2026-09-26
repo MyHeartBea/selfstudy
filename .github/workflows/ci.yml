@@ -24,9 +24,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      # CI 只装跑测试必需的子集。python-docx / pypdf / Pillow / winsdk 是 Windows 侧
-      # 可选依赖，没有它们时相关测试必须自行 skip（曾因缺 python-docx 导致 CI 变红）
+          # 与 ruff 的 target-version（pyproject 里 py312）及本地开发环境对齐
+          python-version: '3.12'
+      # CI 只装跑测试必需的子集。python-docx / pypdf / Pillow 是可选依赖，没有它们时
+      # 相关测试必须自行 skip（曾因缺 python-docx 导致 CI 变红）；winsdk 已在
+      # requirements.txt 加 sys_platform 平台标记，Linux 上装整个文件也不会再失败
       - run: pip install "fastapi>=0.110" "uvicorn[standard]>=0.29" "pydantic>=2.5" "httpx>=0.27" coverage ruff
       - name: Lint (ruff)
         run: |

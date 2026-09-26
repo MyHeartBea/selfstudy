@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from app.database import local_day_bounds_utc
+from app.pagination import resolve_pagination
 from app.services.search_service import like_pattern
 from ..vocab_filter import should_reject
 
@@ -71,6 +72,7 @@ def list_vocab(
 
     total = conn.execute(f"SELECT COUNT(*) FROM vocab_items {where_sql}", params).fetchone()[0]
 
+    page, page_size = resolve_pagination(page, page_size)
     if page is not None:
         rows = conn.execute(
             f"SELECT * FROM vocab_items {where_sql} ORDER BY {order} LIMIT ? OFFSET ?",

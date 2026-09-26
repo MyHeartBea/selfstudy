@@ -5,8 +5,9 @@ uvicorn[standard]>=0.29.0
 # 数据校验（FastAPI 自带 Pydantic）
 pydantic>=2.5.0
 
-# 本地 Windows OCR（截图粘贴后先转文字，再交给 AI 解析）
-winsdk>=1.0.0b10
+# 本地 Windows OCR（截图粘贴后先转文字，再交给 AI 解析）。
+# 仅 Windows 安装：加平台标记后，Linux/CI 上 `pip install -r requirements.txt` 不再整体失败
+winsdk>=1.0.0b10; sys_platform == "win32"
 
 # 图片预处理（本地 OCR 多档增强：灰度/对比度/放大）
 Pillow>=10.0.0

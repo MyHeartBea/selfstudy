@@ -130,6 +130,38 @@ def list_snapshots(limit: int = 20) -> List[dict]:
     ]
 
 
+# 每日定时备份：启动备份只覆盖"进程重启"那一刻；服务长期不重启时（生产常态），
+# 这是唯一还在走的备份线。
+DAILY_BACKUP_LABEL = "daily"
+DAILY_BACKUP_INTERVAL_HOURS = 24.0
+
+
+def last_daily_backup_age_hours() -> Optional[float]:
+    """最近一份 daily 快照距今多少小时；一份都没有则返回 None。"""
+    if not settings.BACKUP_DIR.exists():
+        return None
+    newest = None
+    for path in settings.BACKUP_DIR.glob("kaoyan_mistakes_*.db"):
+        if snapshot_label(path.name) != DAILY_BACKUP_LABEL:
+            continue
+        mtime = path.stat().st_mtime
+        newest = mtime if newest is None else max(newest, mtime)
+    if newest is None:
+        return None
+    return (datetime.now().timestamp() - newest) / 3600
+
+
+def maybe_daily_backup(min_interval_hours: float = DAILY_BACKUP_INTERVAL_HOURS) -> Optional[str]:
+    """距上一份 daily 快照超过 min_interval_hours（或从没有过）就自动补一份。
+
+    失败返回 None，且已由 snapshot_database 记 ERROR 日志——调用方不得把 None 当成功处理。
+    """
+    age = last_daily_backup_age_hours()
+    if age is not None and age < min_interval_hours:
+        return None
+    return snapshot_database(DAILY_BACKUP_LABEL)
+
+
 # 快照文件名由本模块自己生成，回滚时按这个名字反向校验 —— 一个能整库覆盖当前数据的
 # 入口如果接受任意字符串，就等于把 BACKUP_DIR 变成了"读哪个文件都行"的口子。
 SNAPSHOT_NAME_RE = re.compile(r"^kaoyan_mistakes_\d{8}_\d{6}(?:_[A-Za-z0-9_\-]{1,40})?\.db$")

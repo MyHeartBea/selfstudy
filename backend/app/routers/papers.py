@@ -3,10 +3,12 @@
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+from typing import Optional
 
 from fastapi import APIRouter, Query
 
 from app.database import get_connection
+from app.pagination import resolve_pagination
 from app.responses import error, ok, server_error
 from app.schemas import PaperAnswerPatch, PaperCreate
 from app.services import exam_paper_service
@@ -73,8 +75,16 @@ def scan_papers():
 
 
 @router.get("/papers")
-def list_papers(status: str = Query("", pattern="^(|pending|extracting|structuring|done|error)$")):
-    """真题库列表（可按状态过滤），按年份倒序。"""
+def list_papers(
+    status: str = Query("", pattern="^(|pending|extracting|structuring|done|error)$"),
+    page: Optional[int] = Query(None, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    """真题库列表（可按状态过滤），按年份倒序。
+
+    沿用全站"page 可选"双信封约定：不传 page 返回裸数组（前端卷库全量渲染），
+    传 page 返回 `{items, total, page, page_size}`。
+    """
     conn = get_connection()
     try:
         sql = "SELECT * FROM exam_papers"
@@ -83,7 +93,19 @@ def list_papers(status: str = Query("", pattern="^(|pending|extracting|structuri
             sql += " WHERE status = ?"
             params.append(status)
         sql += " ORDER BY year DESC, id DESC"
-        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        page, page_size = resolve_pagination(page, page_size)
+        total = None
+        if page is None:
+            rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+        else:
+            total = conn.execute(f"SELECT COUNT(*) AS c FROM ({sql})", params).fetchone()["c"]
+            rows = [
+                dict(r)
+                for r in conn.execute(
+                    f"{sql} LIMIT ? OFFSET ?",
+                    params + [page_size, (page - 1) * page_size],
+                ).fetchall()
+            ]
         # 已配答案数一次分组查询取回（此前逐卷子查询，卷多了就是 N+1）
         answered = {
             r["paper_id"]: r["c"]
@@ -94,7 +116,9 @@ def list_papers(status: str = Query("", pattern="^(|pending|extracting|structuri
         }
         for r in rows:
             r["answered_count"] = answered.get(r["id"], 0)
-        return ok(rows)
+        if page is None:
+            return ok(rows)
+        return ok({"items": rows, "total": total, "page": page, "page_size": page_size})
     except Exception as exc:
         return server_error(exc)
     finally:

@@ -185,7 +185,15 @@ def list_essays(
             f"SELECT * FROM essay_records {where} ORDER BY id DESC LIMIT ? OFFSET ?",
             [*params, page_size, (page - 1) * page_size],
         ).fetchall()
-        return ok({"items": [_row_brief(r) for r in rows], "total": total})
+        # page/page_size 之前漏在信封外（全站其余分页端点都带）——补齐，属加字段不减字段
+        return ok(
+            {
+                "items": [_row_brief(r) for r in rows],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+            }
+        )
     finally:
         conn.close()
 

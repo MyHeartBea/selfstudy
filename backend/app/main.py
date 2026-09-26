@@ -1,8 +1,10 @@
 """FastAPI 应用入口：路由注册、中间件、异常处理与前端静态资源挂载。"""
 
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -12,8 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import metrics
-from app.config import settings
-from app.database import init_database
+from app.config import PROJECT_ROOT, settings
+from app.database import init_database, maybe_daily_backup
 from app.routers import (
     ai,
     essay,
@@ -30,18 +32,64 @@ from app.routers import (
     vocab,
 )
 from app.security import token_ok, token_configured, verify_api_token
+from app.services.exam_paper_service import recover_stuck_papers
 
+
+def _setup_logging() -> None:
+    """应用与 uvicorn 日志统一落盘到轮转文件；控制台只留 WARNING 以上。
+
+    start_backend.cmd 把 stdout/stderr 重定向进根目录 backend_out/err.log 且无法轮转，
+    uvicorn 的逐请求 access 日志长期运行会把它们撑到无限大。改由 RotatingFileHandler
+    收口（data/logs/backend.log，2MB×3），uvicorn.* 的 console handler 摘掉后，
+    err.log 只剩启动崩溃现场，正常输出全部进轮转文件。
+    """
+    log_dir = PROJECT_ROOT / "data" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+    file_handler = RotatingFileHandler(
+        log_dir / "backend.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8", delay=True
+    )
+    file_handler.setFormatter(formatter)
+    console = logging.StreamHandler()
+    console.setLevel(logging.WARNING)
+    console.setFormatter(formatter)
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.handlers = [file_handler, console]
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uv_logger = logging.getLogger(name)
+        uv_logger.handlers = [file_handler, console]
+        uv_logger.propagate = False
+
+
+_setup_logging()
 logger = logging.getLogger("kaoyan")
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+
+_backup_stop = threading.Event()
+
+
+def _daily_backup_loop(check_interval_seconds: int = 1800) -> None:
+    """每半小时醒一次，距上一份 daily 快照超过 24h 就补一份（见 database.maybe_daily_backup）。
+
+    生产是"开机自启后长期不重启"的形态：启动备份只覆盖重启那一刻，这条线程是常态备份线。
+    """
+    while not _backup_stop.wait(check_interval_seconds):
+        try:
+            maybe_daily_backup()
+        except Exception:
+            # 数据路径禁止静默失败：线程里的异常没人接，必须落日志
+            logger.exception("每日自动备份失败")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_database()
+    recovered = recover_stuck_papers()
+    if recovered:
+        logger.warning("真题导入队列恢复：%s 份卡在中间态的卷已重新排队", len(recovered))
+    threading.Thread(target=_daily_backup_loop, daemon=True, name="km-daily-backup").start()
     yield
+    _backup_stop.set()
 
 
 app = FastAPI(

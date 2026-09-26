@@ -25,6 +25,7 @@ from app.services.knowledge_service import (
     get_related_knowledge,
     knowledge_to_dict,
 )
+from app.pagination import resolve_pagination
 from app.services.search_service import like_pattern
 
 SOURCE_TYPES = {"real_exam", "mock", "other"}
@@ -513,9 +514,8 @@ def list_mistakes(
 
     sql = "SELECT " + ", ".join(LIST_COLUMNS) + " FROM mistakes" + where_sql
     sql += " ORDER BY " + order_by
+    page, page_size = resolve_pagination(page, page_size)
     if page is not None:
-        # 只传 page 不传 page_size 时兜底默认值，避免 (page-1)*None 抛 TypeError
-        page_size = page_size or 20
         sql += " LIMIT ? OFFSET ?"
         rows = conn.execute(
             sql,

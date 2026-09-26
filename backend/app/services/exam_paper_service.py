@@ -1008,6 +1008,41 @@ def enqueue_import(paper_id: int) -> None:
             t.start()
 
 
+def recover_stuck_papers() -> List[int]:
+    """服务重启后把卡在中间态的卷重新排入导入队列，返回重新排队的卷 id。
+
+    导入队列是进程内 `queue.Queue`（单工作线程），进程一死队列就没了——不重新入队，
+    卡在 pending/extracting/structuring 的卷永远没人消费，页面上表现为"一直在导入中"。
+    error 状态的卷不自动重烧（仍走显式 /retry）：重启自动烧失败卷等于没人批准就烧 AI 额度。
+    """
+    from app.database import get_connection
+
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id FROM exam_papers "
+            "WHERE status IN ('pending', 'extracting', 'structuring') ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+    ids = [r["id"] for r in rows]
+    if not ids:
+        return []
+    conn = get_connection()
+    try:
+        conn.executemany(
+            "UPDATE exam_papers SET status = 'pending', status_note = '服务重启，已自动重新排队' "
+            "WHERE id = ?",
+            [(i,) for i in ids],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    for paper_id in ids:
+        enqueue_import(paper_id)
+    return ids
+
+
 def _set_status(conn, paper_id: int, status: str, note: str = "") -> None:
     conn.execute(
         "UPDATE exam_papers SET status = ?, status_note = ? WHERE id = ?",

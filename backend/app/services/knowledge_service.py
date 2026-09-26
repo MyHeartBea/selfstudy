@@ -3,6 +3,7 @@
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from app.pagination import resolve_pagination
 from app.services.search_service import like_pattern
 
 # 注意：不能在模块顶层 `from app.database import mistake_to_dict`——
@@ -230,9 +231,8 @@ def list_knowledge(
         params,
     ).fetchone()[0]
     sql += where_sql + " ORDER BY kb.created_at DESC, kb.id DESC"
+    page, page_size = resolve_pagination(page, page_size)
     if page is not None:
-        # 只传 page 不传 page_size 时兜底默认值，避免 (page-1)*None 抛 TypeError
-        page_size = page_size or 20
         sql += " LIMIT ? OFFSET ?"
         rows = conn.execute(
             sql,
