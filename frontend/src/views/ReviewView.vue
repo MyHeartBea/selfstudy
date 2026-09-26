@@ -244,6 +244,19 @@ const stageNumeral = computed(() =>
 const isMock = computed(() => practiceMode.value === 'mock')
 const mockDuration = computed(() => Math.min(240, Math.max(5, Number(route.query.duration) || 60)))
 const mockAnswers = ref({})
+// 答题卡：卷面题号总览（已答实心、当前框线），点格跳题；模考专用
+const sheetOpen = ref(false)
+const answeredCount = computed(
+  () =>
+    Object.keys(mockAnswers.value).filter((k) => String(mockAnswers.value[k] ?? '').trim()).length,
+)
+function isSheetAnswered(q) {
+  return String(mockAnswers.value[q.id] ?? '').trim().length > 0
+}
+function jumpTo(i) {
+  index.value = i
+  sheetOpen.value = false
+}
 const mockLeft = ref(0)
 const mockSubmitting = ref(false)
 const mockReport = ref(null)
@@ -990,7 +1003,7 @@ onBeforeRouteLeave(async () => {
           <div class="tp-fill" :style="{ width: Math.max(3, progress) + '%' }"></div>
         </div>
 
-        <GlassCard class="stage-card" :hover="false">
+        <GlassCard class="stage-card" :class="{ 'paper-mode': isMock }" :hover="false">
           <template #badge>
             <StageBadge :text="`第 ${index + 1} / ${queue.length} 题`" />
           </template>
@@ -1040,6 +1053,16 @@ onBeforeRouteLeave(async () => {
 
               <!-- 模考：暂存作答，不即时判分 -->
               <template v-if="isMock">
+                <!-- 卷头：考卷身份 + 答题卡入口（纸感卷面的"姓名条"位置） -->
+                <div class="mock-paper-head">
+                  <span class="mph-title serif">客观题卷面 · 暂不计分</span>
+                  <span class="mph-meta num"
+                    >共 {{ queue.length }} 题 · 已答 {{ answeredCount }}</span
+                  >
+                  <UiButton size="sm" variant="ghost" @click="sheetOpen = !sheetOpen">
+                    {{ sheetOpen ? '收起答题卡' : '答题卡' }}
+                  </UiButton>
+                </div>
                 <p v-if="displayPassage" class="mock-passage">
                   <MathText :text="displayPassage" />
                 </p>
@@ -1230,6 +1253,24 @@ onBeforeRouteLeave(async () => {
 
               <!-- 答错归因：非模考流程、本题已按"错"保存时出现（组件内自隐于其他状态） -->
               <ErrorReasonChips :mistake-id="current?.id" :visible="wrongSaved && !isMock" />
+
+              <!-- 模考答题卡：题号总览，点格跳题（模考作答可乱序，这是导航件不是统计件） -->
+              <div v-if="isMock && sheetOpen" class="sheet-panel" role="group" aria-label="答题卡">
+                <div class="sheet-grid">
+                  <button
+                    v-for="(q, i) in queue"
+                    :key="q.id"
+                    type="button"
+                    class="sheet-cell num"
+                    :class="{ answered: isSheetAnswered(q), current: i === index }"
+                    :aria-label="`第 ${i + 1} 题${isSheetAnswered(q) ? '，已作答' : '，未作答'}`"
+                    @click="jumpTo(i)"
+                  >
+                    {{ i + 1 }}
+                  </button>
+                </div>
+                <p class="sheet-hint">实心 = 已作答 · 框线 = 当前题 · 点题号直接跳转</p>
+              </div>
 
               <div class="kbd-hints">
                 <template v-if="isMock"
@@ -1917,6 +1958,82 @@ onBeforeRouteLeave(async () => {
 }
 .mr-sep {
   margin: 0 6px;
+  color: var(--ink-3);
+}
+
+/* ── 模考纸感：卷面是一张"考卷"而不是网页卡片 ──
+   米白纸底 + 淡横格线（答题纸意象），深色主题下横线自然变墨色；克制、不抢内容。 */
+.stage-card.paper-mode :deep(.gcard-body) {
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0 36px,
+    color-mix(in srgb, var(--ink) 3.5%, transparent) 36px 37px
+  );
+}
+.mock-paper-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.mph-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+}
+.mph-meta {
+  margin-right: auto;
+  font-size: 12.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 答题卡：卷面侧边的题号总览 */
+.sheet-panel {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.sheet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+}
+.sheet-cell {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.sheet-cell.answered {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.sheet-cell.current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-ring);
+}
+.sheet-cell:hover {
+  border-color: var(--accent-ring);
+}
+.sheet-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
   color: var(--ink-3);
 }
 </style>
