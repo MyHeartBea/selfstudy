@@ -117,6 +117,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   - 已花掉 AI 调用的结果不许因为一次 INSERT 失败变成 500——`/api/essays/grade` 返回 200 + `persisted:false` + `persist_error`，前端 toast 明说"未存档"；
   - 删行必须连带删文件：`batch_mistakes(action='delete')` 先取回 `images` 再删，事后 `remove_image_files()`。巡检跑 `python scripts/clean_orphan_images.py`（默认 dry-run；孤儿文件的内容仍能通过 `/images/<name>` 访问，这是隐私问题不是磁盘问题）。
 - **PUT /api/mistakes 的"附加内容"键有特殊语义**：`images` 与 `passage_text / passage_translation / english_*`（见 `mistake_service.ATTACHMENT_KEYS`）**压根不带键**时服务层按库里原值回填，显式提交 `""` / `[]` 才是清空——这几列是 AI 整篇精读的唯一副本，被一个只含基础字段的表单覆盖就再也生成不回来。Pydantic 侧靠 `body.model_fields_set` 区分，新增字段时要一起维护那张名单。
+  - **反向的坑（2026-09-26 实测）**：只有 ATTACHMENT_KEYS 享受"不传就回填"；`source_type / source_year / source_name / source / knowledge_tags` 等普通字段**不传会被按默认值重置**（`build_mistake_fields` 用 body.get 兜底，不查库）。前端表单永远全量提交所以没暴露；**脚本 / 自动化做单字段 PUT 必须把这些字段一起带上**（实测一次部分更新把真题来源和标签全冲掉了），或者先 GET 再全量 PUT。
 - **全站"按关键词 LIKE"只有一个口径：`search_service.like_pattern()` + `ESCAPE '\'`**：`%`/`_` 是用户
   内容而不是查询语法（搜 `50%` 命中一切含 5 的东西就是静默给错数据）。新增可搜字段要复用它，别自己
   拼 `f"%{q}%"`；跨实体搜索也只改 `search_service.search_all`（响应形状已按"分组 + 每组 total"钉好）。

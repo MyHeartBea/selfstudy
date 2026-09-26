@@ -910,3 +910,21 @@ Vitest 141 + ESLint + Prettier + build；E2E 53。**需重启后端生效**（�
 加词后立刻变红、点短语零 AI 调用且 kind=phrase），Vitest 141→144。
 ESLint 抓到一次改名残留（`/ai/sense` 还用旧参数名 `word`），已修。
 门禁全绿：ESLint + Prettier + Vitest 144 + build + E2E 53。纯前端改动，无需重启后端。
+
+## 2026-09-26 人工录入 2014 英语二完形（零 AI）+ PUT 部分更新踩坑
+
+用户智能录入 2014 英语二完形超时（`/api/health` 账本：deepseek-flash 30 调 4 错，
+最后错误 = `AI 连接中断：The read operation timed out`——网络层断连，非流程 bug），
+且明确要求不再花 AI 余额。改走**人工录入**：我直接读原图转录全文 + 20 空题干/选项 +
+答案键（BACADACCDBABCDBDADCB），自写全文翻译（按段落对齐进 `english_sentences`，
+对照翻译右栏才有内容），3 张原图（原文/选项/答案键）以 data URL 随错题入库，
+`POST /api/mistakes` 一条整篇记录（id 189，english_questions 20 题）。
+浏览器实测详情页：对照翻译、点词、20 题与答案全部正常。
+
+**踩坑（已写进 AGENTS 第 3 节）**：PUT /api/mistakes 的"不传就回填"只保护
+ATTACHMENT_KEYS；`source_type/source_year/source_name/source/knowledge_tags`
+等普通字段不传会**按默认值重置**——一次只为 `english_sentences` 做的部分更新
+把真题来源和标签全冲掉了（已补回）。前端表单全量提交所以从没暴露；
+脚本/自动化必须 GET 后全量 PUT，或带上全部普通字段。
+
+另补：小题逐条带 `question_type: 'choice'`，详情面板才会渲染 A-D 选项（否则只显示答案字母）。
