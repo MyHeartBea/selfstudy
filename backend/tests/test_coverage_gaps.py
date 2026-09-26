@@ -231,5 +231,84 @@ class WeeklyReportCacheTest(unittest.TestCase):
         self.assertNotIn("weekly_report_2020-01-01", keys)
 
 
+class SingleDeleteSnapshotTest(unittest.TestCase):
+    """单题删除打 before-delete 快照（与批量删除对称）；404 不烧快照名额。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    def _create_mistake(self):
+        r = client.post(
+            "/api/mistakes",
+            json={
+                "subject_id": 3,
+                "question_type": "choice",
+                "question": "单删快照测试题",
+                "correct_answer": "A",
+                "difficulty": 3,
+                "difficulty_points": "测试难点",
+                "analysis": "解析",
+            },
+        )
+        assert r.status_code == 200, r.text
+        return r.json()["data"]["id"]
+
+    def test_delete_creates_snapshot_and_404_does_not(self):
+        mid = self._create_mistake()
+        before = len(list(settings.BACKUP_DIR.glob("*before-delete*.db")))
+        r = client.delete(f"/api/mistakes/{mid}")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("删除成功", r.json()["message"])
+        after = list(settings.BACKUP_DIR.glob("*before-delete*.db"))
+        self.assertEqual(len(after), before + 1)
+
+        # 404：不存在也不该烧快照名额
+        before2 = len(list(settings.BACKUP_DIR.glob("*before-delete*.db")))
+        self.assertEqual(client.delete("/api/mistakes/999999").status_code, 404)
+        self.assertEqual(len(list(settings.BACKUP_DIR.glob("*before-delete*.db"))), before2)
+
+
+class ImageResolutionLimitTest(unittest.TestCase):
+    """分辨率上限：正常小图放行，超总像素数拒绝（防绕过前端直灌的畸形大图）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import PIL  # noqa: F401
+        except ImportError as exc:
+            raise unittest.SkipTest("Pillow 未安装（CI 环境）") from exc
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    def _png_bytes(self, w, h):
+        import io
+
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h), (200, 30, 30)).save(buf, "PNG")
+        return buf.getvalue()
+
+    def test_normal_image_passes_and_huge_is_rejected(self):
+        from unittest.mock import patch
+
+        from app.services import mistake_service
+
+        ok_img = self._png_bytes(120, 90)
+        self.assertTrue(mistake_service._save_image_data(ok_img).startswith("images/"))
+
+        huge = self._png_bytes(300, 300)
+        with patch.object(mistake_service, "IMAGE_MAX_PIXELS", 100):
+            with self.assertRaises(ValueError) as ctx:
+                mistake_service._save_image_data(huge)
+            self.assertIn("分辨率过大", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

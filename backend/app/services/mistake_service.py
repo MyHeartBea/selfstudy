@@ -96,6 +96,10 @@ LIST_COLUMNS = (
 IMAGE_DIR: Path = PROJECT_ROOT / "data" / "images"
 IMAGE_MAX_BYTES = 8 * 1024 * 1024  # 单张图片 base64 解码后上限 8MB
 IMAGE_MAX_COUNT = 5
+# 解码后总像素上限：前端上传前已把长边压到 2000，正常图到不了这个量级；
+# 这道门防的是"绕过前端直灌的畸形大图"——识图通道会把大图放大 token 消耗，
+# Pillow 解码也是内存炸弹的常见载体。
+IMAGE_MAX_PIXELS = 30_000_000
 
 
 def _images_dir() -> Path:
@@ -136,7 +140,12 @@ def _verify_decodable(data: bytes) -> None:
         return
     try:
         img = Image.open(io.BytesIO(data))
+        width, height = img.size
+        if width * height > IMAGE_MAX_PIXELS:
+            raise ValueError(f"图片分辨率过大（{width}x{height}），请压缩后再上传")
         img.verify()
+    except ValueError:
+        raise
     except Exception as exc:
         raise ValueError("图片文件已损坏或不是真实图片") from exc
 

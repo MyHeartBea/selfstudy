@@ -391,12 +391,30 @@ def update_source_type(mistake_id: int, body: SourceTypeUpdate):
 
 @router.delete("/{mistake_id}")
 def delete_mistake(mistake_id: int):
-    """删除指定错题。"""
+    """删除指定错题。删除前打一份 `before-delete` 快照（与批量删除对称）。
+
+    曾纠结过"高频单删会烧光 20 份快照轮换名额"——现在有每日定时备份兜底，
+    这笔账算得过来了（2026-09-26 用户拍板做对称）。快照创建失败照样删除，
+    但 message 必须说明没有反悔点，不许静默假装可回滚。
+    """
+    conn = get_connection()
+    try:
+        exists = conn.execute("SELECT 1 FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
+    finally:
+        conn.close()
+    if not exists:
+        return error(404, "错题不存在")
+    snap = snapshot_database("before-delete")
     conn = get_connection()
     try:
         if not mistake_service.delete_mistake(conn, mistake_id):
             return error(404, "错题不存在")
-        return ok({"id": mistake_id}, "错题删除成功")
+        if snap:
+            return ok({"id": mistake_id}, "错题删除成功")
+        return ok(
+            {"id": mistake_id},
+            "错题删除成功，但删除前快照创建失败——本次删除没有快照反悔点",
+        )
     except Exception as exc:
         return server_error(exc)
     finally:
