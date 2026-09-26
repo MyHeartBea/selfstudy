@@ -91,4 +91,66 @@ describe('useResourceList', () => {
     expect(loadError.value).toBe(true)
     expect(loading.value).toBe(false)
   })
+
+  it('接管分页：fetcher 收到 page/pageSize/signal，改 page 再 load 带新页码', async () => {
+    const seen = []
+    const { page, load } = useResourceList(
+      async (ctx) => {
+        seen.push(ctx)
+        return { items: [], total: 0 }
+      },
+      { pageSize: 15 },
+    )
+    await load()
+    page.value = 3
+    await load()
+    expect(seen[0]).toMatchObject({ page: 1, pageSize: 15 })
+    expect(seen[1]).toMatchObject({ page: 3, pageSize: 15 })
+    expect(seen[0].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('新 load 顶掉旧 load：旧请求被 abort，取消不算失败、不覆盖新结果', async () => {
+    const gates = []
+    const { load, loadError, items, loading } = useResourceList((ctx) => {
+      gates.push(ctx)
+      return new Promise((resolve, reject) => {
+        ctx.signal.addEventListener('abort', () => {
+          const err = new Error('canceled')
+          err.code = 'ERR_CANCELED'
+          reject(err)
+        })
+        setTimeout(() => resolve({ items: [{ id: 'second' }], total: 1 }), 0)
+      })
+    })
+
+    const first = load()
+    const second = load() // 第二次加载顶掉第一次
+    await first
+    await second
+    expect(gates[0].signal.aborted).toBe(true)
+    expect(loadError.value).toBe(false)
+    expect(items.value).toEqual([{ id: 'second' }])
+    expect(loading.value).toBe(false)
+  })
+
+  it('被取消的一方不算失败：先成功后顶掉，结果不被清空', async () => {
+    const gates = []
+    const { load, loadError, items } = useResourceList((ctx) => {
+      gates.push(ctx)
+      return new Promise((resolve, reject) => {
+        ctx.signal.addEventListener('abort', () => {
+          const err = new Error('canceled')
+          err.code = 'ERR_CANCELED'
+          reject(err)
+        })
+        resolve({ items: [{ id: 'kept' }], total: 1 })
+      })
+    })
+
+    await load()
+    expect(items.value).toEqual([{ id: 'kept' }])
+    load() // 顶掉已成功的这次：旧 fetcher 的 promise 不会 reject（没挂监听前已 resolve）
+    expect(loadError.value).toBe(false)
+    expect(items.value).toEqual([{ id: 'kept' }]) // 新结果回来前，旧结果不许被偷偷清掉
+  })
 })

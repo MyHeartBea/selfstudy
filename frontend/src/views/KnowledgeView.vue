@@ -30,8 +30,6 @@ import Icon from '../ui/Icon.vue'
 
 const router = useRouter()
 const route = useRoute()
-const page = ref(1)
-const pageSize = ref(9)
 const filters = reactive({
   subjectId: null,
   subSubjectId: null,
@@ -53,18 +51,23 @@ const {
   total,
   loading,
   loadError,
+  page,
+  pageSize,
   load: fetchList,
-} = useResourceList(async () => {
-  const params = {
-    page: page.value,
-    page_size: pageSize.value,
-  }
-  if (filters.subjectId) params.subject_id = filters.subjectId
-  if (filters.subSubjectId) params.sub_subject_id = filters.subSubjectId
-  if (filters.tag) params.tag = filters.tag
-  const res = await request.get('/knowledge', { params })
-  return res.data.data
-})
+} = useResourceList(
+  async ({ page, pageSize, signal }) => {
+    const params = {
+      page,
+      page_size: pageSize,
+    }
+    if (filters.subjectId) params.subject_id = filters.subjectId
+    if (filters.subSubjectId) params.sub_subject_id = filters.subSubjectId
+    if (filters.tag) params.tag = filters.tag
+    const res = await request.get('/knowledge', { params, signal })
+    return res.data.data
+  },
+  { pageSize: 9 },
+)
 
 async function loadKnowledge() {
   await fetchList()

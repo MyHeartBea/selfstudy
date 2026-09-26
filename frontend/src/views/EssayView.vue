@@ -22,8 +22,6 @@ import { ESSAY_KINDS, essayKindMeta } from '../composables/essayKinds'
 
 const route = useRoute()
 
-const page = ref(1)
-const pageSize = ref(15)
 const kind = ref('')
 // 命令面板跳回来时带 ?search=（后端按题干/正文 LIKE 过滤）
 const search = ref(route.query.search ? String(route.query.search) : '')
@@ -37,19 +35,25 @@ const {
   total,
   loading,
   loadError,
+  page,
+  pageSize,
   load: loadList,
-} = useResourceList(async () => {
-  const res = await request.get('/essays', {
-    params: {
-      page: page.value,
-      page_size: pageSize.value,
-      kind: kind.value || undefined,
-      search: search.value.trim() || undefined,
-    },
-    silent: true,
-  })
-  return res.data.data
-})
+} = useResourceList(
+  async ({ page, pageSize, signal }) => {
+    const res = await request.get('/essays', {
+      params: {
+        page,
+        page_size: pageSize,
+        kind: kind.value || undefined,
+        search: search.value.trim() || undefined,
+      },
+      silent: true,
+      signal,
+    })
+    return res.data.data
+  },
+  { pageSize: 15 },
+)
 
 const kindOptions = computed(() => [{ value: '', label: '全部类型' }, ...ESSAY_KINDS])
 
