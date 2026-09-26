@@ -32,8 +32,8 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（327 个）
-cd frontend && npm test                                  # Vitest 144 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（356 个）
+cd frontend && npm test                                  # Vitest 158 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
 cd frontend && npm run test:e2e                          # Playwright 51 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
 
 # 静态检查（CI 会跑；本地 pip install ruff pre-commit / npm i 即可）
@@ -77,12 +77,13 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 >   keydown 挂记录器 + 包一层 addEventListener 记注册时机，dispatch 后查 `defaultPrevented` 就能分辨
 >   "监听没挂"还是"挂了没跑"。
 
-> **CI 与本地不等价，别再被"本地全绿"骗一次**：CI 是 **Python 3.11**（本地 3.12）、
+> **CI 与本地不等价，别再被"本地全绿"骗一次**：CI 是 **Python 3.12**（2026-09-26 起
+> 与 ruff target 对齐，此前是 3.11）、
 > **没有 `backend/.env`**、依赖只有 `fastapi uvicorn pydantic httpx coverage ruff`
 > —— **没有 Pillow / pypdf / pypdfium2 / python-docx / winsdk**，用到它们的地方必须
 > 自己 `skipIf`/`try-import` 兜底。要复现 CI：
 > `git clone D:\km-v2 <临时目录> && git checkout <sha>`，删掉 `backend/.env`，
-> 用 Python 3.11 venv 装上面那串依赖，再跑 `coverage run -m unittest discover -s tests`。
+> 用 Python 3.12 venv 装上面那串依赖，再跑 `coverage run -m unittest discover -s tests`。
 > **翻车过一次**：假渲染页返回 `bytes` 而非 PIL 对象，`bytes.save()` 的 AttributeError
 > 被 `_pdf_ocr_pages` 里宽泛的 `except Exception: continue` 静默吞掉，
 > 本地（有 Pillow）全绿、CI 报"返回空串"，排查了很久。**给渲染/IO 路径写假件时，
@@ -93,8 +94,8 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 > Prettier（`.prettierrc.json`）；钩子脚本在 `scripts/`（`check_secrets.py` / `preflight_check.py` /
 > `frontend_lint.mjs`，用 Node 包装避免 Windows 上找不到 `bash`）。
 > **改完前端必须跑 `npm run build`**：Vue 模板编译错误只有 build 抓得到（lint 和单测都会放过，
-> 曾因此把两处多语句内联 `@click` 改坏）。CI 覆盖率门槛 55%，**按 CI 口径**（`coverage run -m unittest
-> discover -s tests`，含 tests 目录）当前约 73%；加 `--source=app` 会是约 59%，两个口径别混着报。
+> 曾因此把两处多语句内联 `@click` 改坏）。CI 覆盖率门槛 70%，**按 CI 口径**（`coverage run -m unittest
+> discover -s tests`，含 tests 目录）当前约 79%；加 `--source=app` 会是约 59%，两个口径别混着报。
 
 ## 3. 提交与数据规范（务必遵守）
 - 每次完成代码 / 数据 / 文档修改并**验证通过**后：`git add -A && git commit -m "简短说明" && git push`
@@ -378,6 +379,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 327、前端 Vitest 144、E2E 53**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 73%（门槛 55%）。
+- 测试基线：**后端 356、前端 Vitest 158、E2E 53**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 79%（门槛 70%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

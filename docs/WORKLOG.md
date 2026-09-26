@@ -985,3 +985,72 @@ AGENTS 第 5 节第 5 条同步改掉旧表述（「词汇只在智能录入显�
 
 **验证**：Vitest 147 / build / E2E 53 / ruff 全绿；生产实测浮钮可见（截图）、
 详情页勾选列表已消失（sections 3，无猜词节）。测试改为断言 readonly **不显示**勾选列表。
+
+## 2026-09-26 · 全栈 P0/P1/P2 优化清扫（八批连做，用户拍板"全做"）
+
+针对全面体检报告的代码级问题清单，按 P0→P1→P2 分七批落地（每批独立提交、
+全量测试绿后过 pre-commit）。**文档欠账（architecture/README/NEW_SESSION）与功能拓展
+（错因归因/模考升级/弱项组卷等）本批刻意不动**，按用户指示留待后续。
+
+**P0·后端（cf4d196）**：
+- **LIKE 转义统一**：错题（approach/search）、知识点（tag）、公式、生词（4 字段）、
+  练习（practice search）共 6 处手写 `f"%{q}%"` 全部改走 `search_service.like_pattern` +
+  `ESCAPE '\\'` —— AGENTS 第 3 节"全站唯一口径"此前只是纸面规定，搜 `50%` 静默命中一切
+  含 5 的内容。`tests/test_like_escape.py` 每实体一枚用例钉住。
+- token 校验改 `secrets.compare_digest`（防逐位探测）；`/api/health` 在**未配置 token**
+  时不再返回 `python`/`host`（零配置=全网可读，环境信息属侦察情报）。
+
+**P1·后端（b1c77be）**：
+- **重启恢复真题导入队列**：`recover_stuck_papers()` 在 lifespan 里把卡在
+  pending/extracting/structuring 的卷重新入队（队列是进程内 Queue，进程死了队列就没了）；
+  error 卷不自动重烧（烧 AI 额度要显式 /retry）。
+- **日志轮转**：`_setup_logging()` 把应用+uvicorn 全部日志收进
+  `data/logs/backend.log`（2MB×3），uvicorn.* 的 console handler 摘掉——
+  err.log 从此只剩崩溃现场，不再被 access 日志无限撑大。
+- **每日定时备份**：`maybe_daily_backup()`（间隔 24h，label=daily）+ 30 分钟轮询线程；
+  启动备份只覆盖重启那一刻，长跑进程从此有常态备份线。
+- **分页收敛**：新增 `app/pagination.py::resolve_pagination`，5 端点接入；
+  **响应形状全保**（裸数组/分页对象双信封不变），essays 信封补 `page/page_size`（加字段），
+  papers 新增可选 `page` 参数（不传=裸数组，前端零改动）。
+- `.env.example` 补全全部运行参数；requirements 给 winsdk 加 `sys_platform` 标记
+  （Linux 上 `pip install -r` 不再整体失败）；CI Python 3.11→3.12（对齐 ruff target）。
+
+**P1.5·测试稳定性（5ef3f39，被新测试暴露的既有地雷）**：
+- `sqlite3.OperationalError: disk locked / no such table` 的真因：**导入工作线程在出队时
+  才解析 `settings.DB_PATH`**，测试换库后线程串到别的临时库上读写；coverage 变慢放大窗口。
+  修法：**队列条目改为 `(paper_id, db_path)`，入队时钉住自己所属的库**，
+  `get_connection(db_path)` 支持显式路径——条目自包含，串库在结构上不可能。
+- `_setup_logging` 重复调用时关掉旧文件 handler（ResourceWarning）；
+  测试套件规矩重申：**每个测试类自建临时库**（borrowing 上一个类的 DB_PATH 会在
+  临时目录被清后炸出假红）。
+
+**P2·后端（5ef3f39）**：测试盲区补齐——公式库全套 CRUD、dashboard 聚合、
+vocab_filter 收录规则（钉住"宁可漏判不误杀"三条取舍）、周报缓存链路
+（空周不调 AI/命中不重烧/force=1 重烧并清旧日期）共 14 用例；
+CI 覆盖率门槛 55→70（CI 口径实测 79%）。**评估后不动的**：app_meta KV 过载
+（迁移+churn 大于收益）、metrics 内存态（单机可接受）、AI 长调用占线程
+（单用户串行，uvicorn 40 线程够）、FTS5（维持用户已定的 P2）。
+
+**P0+P1+P2·前端（abca69d / 1eb0f78 / 7a8ac37 / 950f57f）**：
+- **404 兜底**：路由表加 `:pathMatch(.*)*` + `NotFoundView.vue`（印章"误"+回到统计/
+  返回上一页）；此前未知路径渲染成空白外壳。`routerOrder` 测试加 resolve 断言。
+- **请求取消**：request.js 对 `ERR_CANCELED` 静默（不 toast）；命令面板与
+  useMistakeFilters 接 AbortController——连打只留最后一发（seq+abort 双保险），
+  关面板掐在途搜索；被取消的一方不算失败、不清结果、不动新请求的 loading。
+- **useResourceList 升级为可选分页外壳**：第二参 `{pageSize}` 接管 page/pageSize
+  （与 UiPagination 的 v-model 直接对接），fetcher 收 `{page,pageSize,signal}`；
+  **四个既有消费者（Essay/Formula/Knowledge/Vocab）免费获得竞态保护**；
+  Essay/Knowledge 迁移到新签名删本地 refs。竞态语义三条写进测试。
+- **视图级单测**：VocabView/MistakeListView（此前 2500 行零覆盖）——列表真渲染 +
+  loadError 走 UiLoadError 可重试（后者钉住 AGENTS 6.5"解构漏 loadError"事故）。
+- **DesignView 画廊补深浅切换与 420px 窄屏形态预览**（就地双主题审计，
+  补齐"画廊只有浅色桌面态"）；`npm run lint/lint:fix` 脚本入 package.json；
+  `npm run analyze` 产出 bundle-report（rollup-plugin-visualizer）。
+
+**评估后不做的**：巨型视图拆分（StatsView 1997 行里 1100+ 行是共享 bento CSS，
+三段 media query 交叉引用 `.b-hero/.b-tile`，拆分=重新切样式作用域而非搬移，
+值得带双主题截图验收单独做一批）；列表 keep-alive（onActivated 刷数据与骨架屏闪烁
+的取舍需要产品决策）；katex chunk 维持现状（255KB 是懒加载整库，只在数学/精读页按需拉）。
+
+**验证**：后端 328→**356**（coverage 79%）、前端 Vitest 144→**158**、build/analyze、
+ruff/eslint/prettier/pre-commit 全绿；每批独立提交（cf4d196→950f57f 共 7 个）。
