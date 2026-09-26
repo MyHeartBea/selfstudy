@@ -30,6 +30,15 @@ from app.services.search_service import like_pattern
 
 SOURCE_TYPES = {"real_exam", "mock", "other"}
 
+# 错因归因四类：复习答错后用户手动标记；空串 = 未归因/清除。
+# 这是错题本里唯一"机器判不出来、必须人承认"的一维——统计页的错因杠杆榜靠它。
+ERROR_REASONS = {
+    "knowledge": "知识盲区",
+    "read": "审题失误",
+    "calc": "计算失误",
+    "careless": "粗心大意",
+}
+
 # PUT 的"附加内容"键：客户端**压根没带这个键**时按库里原值回填，而不是覆盖成空。
 # 语义仍然保持全量覆盖——显式提交 `"passage_text": ""` 就是真的要清空；
 # 只有不带键（老客户端、只含基础字段的表单）才不动。
@@ -505,6 +514,9 @@ def list_mistakes(
         params.append(filters["question_type"])
     if filters.get("starred"):
         conditions.append("starred = 1")
+    if filters.get("error_reason"):
+        conditions.append("error_reason = ?")
+        params.append(filters["error_reason"])
 
     sort_map = {
         "created_desc": "created_at DESC, id DESC",
@@ -538,6 +550,17 @@ def list_mistakes(
         }
     rows = conn.execute(sql, params).fetchall()
     return [mistake_to_dict(row) for row in rows]
+
+
+def set_error_reason(conn: sqlite3.Connection, mistake_id: int, reason: str) -> Optional[dict]:
+    """标记/清除错因。reason 必须是 ERROR_REASONS 的键，空串 = 清除归因。"""
+    row = conn.execute("SELECT id FROM mistakes WHERE id = ?", (mistake_id,)).fetchone()
+    if row is None:
+        return None
+    value = (reason or "").strip()
+    conn.execute("UPDATE mistakes SET error_reason = ? WHERE id = ?", (value, mistake_id))
+    conn.commit()
+    return {"id": mistake_id, "error_reason": value}
 
 
 def get_mistake_detail(conn: sqlite3.Connection, mistake_id: int) -> Optional[dict]:

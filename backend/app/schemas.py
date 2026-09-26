@@ -169,6 +169,12 @@ class SourceTypeUpdate(BaseModel):
     source_name: str = ""
 
 
+class ErrorReasonUpdate(BaseModel):
+    """错因归因：reason 必须是 mistake_service.ERROR_REASONS 的键，空串 = 清除。"""
+
+    reason: str = Field(default="", max_length=20)
+
+
 class StarRequest(BaseModel):
     """收藏标星：不传 starred 时为切换（toggle）。"""
 

@@ -10,6 +10,7 @@ import { computed, onActivated, onMounted, onUnmounted, ref, toRef, watch, nextT
 import { useRouter, useRoute } from 'vue-router'
 
 import request from '../api/request'
+import { errorReasonLabel } from '../utils/errorReasons'
 import {
   baseData,
   questionTypeFilterOptions,
@@ -57,6 +58,7 @@ function readFiltersFromQuery() {
     approach: q.approach ? String(q.approach) : '',
     search: q.search ? String(q.search) : '',
     starred: q.starred ? 1 : 0,
+    errorReason: q.error_reason ? String(q.error_reason) : '',
     sort: q.sort ? String(q.sort) : 'created_desc',
     page: q.page ? num(q.page) || 1 : 1,
   }
@@ -150,6 +152,11 @@ const activeFilterChips = computed(() => {
       f.starred = false
       searchMistakes()
     })
+  if (f.errorReason)
+    push('errorReason', `错因 ${errorReasonLabel(f.errorReason)}`, () => {
+      f.errorReason = ''
+      searchMistakes()
+    })
   return chips
 })
 
@@ -165,6 +172,7 @@ Object.assign(filters, {
   approach: init.approach,
   search: init.search,
   starred: !!init.starred,
+  errorReason: init.errorReason,
 })
 sortBy.value = init.sort
 page.value = init.page

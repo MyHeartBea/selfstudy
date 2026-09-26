@@ -348,6 +348,8 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         # SM-2 简化版自适应调度（v6）
         "ease_factor": "REAL DEFAULT 2.5",
         "last_interval": "INTEGER DEFAULT 0",
+        # 错因归因（复习答错后手动标记；空 = 未归因）
+        "error_reason": "TEXT DEFAULT ''",
     }
     for column, ddl in additions.items():
         if column not in existing_columns:

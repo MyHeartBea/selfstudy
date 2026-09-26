@@ -4,6 +4,7 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 
 import { useRouter } from 'vue-router'
 
 import request from '../api/request'
+import { errorReasonLabel } from '../utils/errorReasons'
 import { toast } from '../ui/toast'
 import { sourceTypeColor, subjectColor } from '../composables/useBaseData'
 import { useCountUp } from '../utils/useCountUp'
@@ -147,6 +148,14 @@ const subjectMax = computed(() => Math.max(1, ...stats.value.by_subject.map((s) 
 const weakMax = computed(() =>
   Math.max(1, ...(reviewStats.value.weakest_tags || []).map((w) => w.wrong_count)),
 )
+
+// —— 错因杠杆榜：哪类错因贡献的丢分最多，先把杠杆压在哪 ——
+const errorReasons = computed(() => reviewStats.value.error_reasons || [])
+const erMax = computed(() => Math.max(1, ...errorReasons.value.map((r) => r.wrong_count)))
+
+function goErrorReason(reason) {
+  router.push({ path: '/mistakes', query: { error_reason: reason } })
+}
 
 // —— 复习负荷预报：未来 30 天到期分布 + 逾期 ——
 const forecast = ref({ overdue: 0, items: [] })
@@ -779,6 +788,32 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <UiEmpty v-else text="暂无题目来源数据" icon="tag" />
+      </GlassCard>
+
+      <GlassCard>
+        <h3 class="panel-title" data-reveal-lines>错因杠杆榜</h3>
+        <div v-if="errorReasons.length">
+          <button
+            v-for="row in errorReasons"
+            :key="row.reason"
+            type="button"
+            class="ers-row"
+            @click="goErrorReason(row.reason)"
+          >
+            <span class="s-name">{{ errorReasonLabel(row.reason) }}</span>
+            <span class="src-track"
+              ><i :style="{ width: percentOf(row.wrong_count, erMax) + '%' }"></i
+            ></span>
+            <span class="s-nums num km-num"
+              >错 {{ row.wrong_count }} · {{ row.mistake_count }} 题</span
+            >
+          </button>
+          <p class="cap ers-hint">点一条去错题列表看这类错因的具体题目</p>
+        </div>
+        <UiEmpty v-else text="还没有错因归因" icon="target" />
+        <p v-if="!errorReasons.length" class="cap ers-hint">
+          复习答错后点「这道题为什么错？」的格子标记一次，这里就会长出来。
+        </p>
       </GlassCard>
     </div>
 
@@ -1580,6 +1615,31 @@ onBeforeUnmount(() => {
 }
 .src-row {
   grid-template-columns: 150px 1fr 64px;
+}
+/* 错因杠杆榜行：与来源分布同构，但整行是按钮（点击去错题列表） */
+button.ers-row {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 10px;
+  font-size: inherit;
+}
+button.ers-row:hover .s-name {
+  color: var(--accent-ink);
+}
+button.ers-row .s-nums {
+  white-space: nowrap;
+}
+.ers-hint {
+  margin: 6px 0 0;
 }
 .subj-row {
   grid-template-columns: 150px 1fr minmax(300px, auto);

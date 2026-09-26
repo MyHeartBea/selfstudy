@@ -676,6 +676,24 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
             }
         )
 
+    # 错因杠杆榜：按"累计答错次数"排序——谁贡献的丢分多谁在前。
+    # error_reason 是复习答错后用户手动标的（mistake_service.ERROR_REASONS），
+    # 机器判不出"为什么错"，这是错题本里唯一必须人承认的一维。
+    error_reason_rows = conn.execute(
+        """
+        SELECT m.error_reason AS reason,
+               COUNT(*) AS mistake_count,
+               COALESCE(SUM((
+                   SELECT COUNT(*) FROM review_records r
+                   WHERE r.mistake_id = m.id AND r.result = 'wrong'
+               )), 0) AS wrong_count
+        FROM mistakes m
+        WHERE m.error_reason != ''
+        GROUP BY m.error_reason
+        ORDER BY wrong_count DESC, mistake_count DESC
+        """
+    ).fetchall()
+
     return {
         "due_today": due,
         "reviewed_today": reviewed_today,
@@ -688,6 +706,7 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
         "weakest_tags": weakest_tags,
         "last_7_days": [dict(row) for row in last_7_rows],
         "by_subject": by_subject_rows,
+        "error_reasons": [dict(row) for row in error_reason_rows],
     }
 
 

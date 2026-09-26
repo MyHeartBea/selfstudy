@@ -9,6 +9,7 @@ from app.metrics import mask_secret
 from app.responses import error, ok, server_error
 from app.schemas import (
     BatchMistakeRequest,
+    ErrorReasonUpdate,
     GradeRequest,
     JudgeRequest,
     MistakeCreate,
@@ -35,6 +36,7 @@ def list_mistakes(
     source_type: Optional[str] = Query(None),
     source_year: Optional[str] = Query(None),
     starred: Optional[bool] = Query(None),
+    error_reason: Optional[str] = Query(None),
     sort: str = Query("created_desc"),
     page: Optional[int] = Query(None, ge=1),
     page_size: Optional[int] = Query(None, ge=1, le=1000),
@@ -59,6 +61,7 @@ def list_mistakes(
                 "source_type": source_type,
                 "source_year": source_year,
                 "starred": starred,
+                "error_reason": error_reason,
                 "sort": sort,
             },
             page=page,
@@ -306,6 +309,24 @@ def resume_mistake(mistake_id: int):
         )
         conn.commit()
         return ok({"id": mistake_id, "review_paused": False}, "已恢复复习")
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.patch("/{mistake_id}/error-reason")
+def patch_error_reason(mistake_id: int, body: ErrorReasonUpdate):
+    """标记/清除错因（复习答错后手动归因）。reason 传空串 = 清除。"""
+    reason = (body.reason or "").strip()
+    if reason and reason not in mistake_service.ERROR_REASONS:
+        return error(400, "未知的错因类型")
+    conn = get_connection()
+    try:
+        result = mistake_service.set_error_reason(conn, mistake_id, reason)
+        if result is None:
+            return error(404, "错题不存在")
+        return ok(result, "已标记错因" if reason else "已清除错因")
     except Exception as exc:
         return server_error(exc)
     finally:

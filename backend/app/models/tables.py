@@ -44,6 +44,8 @@ CREATE TABLE IF NOT EXISTS mistakes (
     review_paused INTEGER DEFAULT 0,
     -- 收藏标星：只影响筛选展示，不参与复习调度
     starred INTEGER DEFAULT 0,
+    -- 错因归因（用户在复习答错后手动标记；空 = 未归因）
+    error_reason TEXT DEFAULT '',
     -- SM-2 简化版自适应调度（v6）：难度系数与上次间隔天数
     ease_factor REAL DEFAULT 2.5,
     last_interval INTEGER DEFAULT 0,

@@ -5,6 +5,7 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
 import ChoiceAnswer from '../components/ChoiceAnswer.vue'
+import ErrorReasonChips from '../components/ErrorReasonChips.vue'
 import FillAnswer from '../components/FillAnswer.vue'
 import SolutionAnswer from '../components/SolutionAnswer.vue'
 import MathText from '../components/MathText.vue'
@@ -123,6 +124,8 @@ const submitting = ref(false)
 const done = ref(false)
 const reviewSaved = ref(false)
 const resultCount = ref({ correct: 0, wrong: 0 })
+// 本题答错已保存：答对/下一题时归零，驱动「错因归因」chips 的显隐
+const wrongSaved = ref(false)
 
 const current = computed(() => queue.value[index.value] || null)
 
@@ -211,6 +214,7 @@ watch(
     judgeResult.value = null
     gradeResult.value = null
     reviewSaved.value = false
+    wrongSaved.value = false
     done.value = false
     loadQueue()
   },
@@ -643,6 +647,7 @@ async function submitReview(result, advance = true) {
         if (anchor) confetti.burstAtElement(anchor, { count: 18, power: 6 })
       } else {
         resultCount.value.wrong += 1
+        wrongSaved.value = true
       }
       reviewSaved.value = true
     } catch (err) {
@@ -662,6 +667,7 @@ async function submitReview(result, advance = true) {
     judgeResult.value = null
     gradeResult.value = null
     reviewSaved.value = false
+    wrongSaved.value = false
     if (index.value >= queue.value.length) {
       done.value = true
       // 全部完成：双侧礼花庆祝
@@ -1220,6 +1226,9 @@ onBeforeRouteLeave(async () => {
                   </template>
                 </div>
               </template>
+
+              <!-- 答错归因：非模考流程、本题已按"错"保存时出现（组件内自隐于其他状态） -->
+              <ErrorReasonChips :mistake-id="current?.id" :visible="wrongSaved && !isMock" />
 
               <div class="kbd-hints">
                 <template v-if="isMock"
