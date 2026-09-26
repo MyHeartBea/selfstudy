@@ -224,7 +224,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 6. **多图全存**：长题多张截图**全部**保存到 `images`；错题列表卡片**只显示第 1 张**，点进详情显示全部。
 7. **表格 / 图**：`RichText` 支持 Markdown 表格 + 十六进制等宽 `hex-dump`；AI 只会识别图不会重绘，正确表格 / 拓扑图看**原图**。
 8. **生词本**：`vocab_items` 有 `kind`（word / phrase）+「全部 / 单词 / 短语」筛选 +「词语」标签；点词查义 `/api/ai/sense`（**结果按词缓存进 `app_meta`**，key=`sense_<小写词>`，TTL 90 天 + 500 条上限双清理，命中响应带 `cached:true`，查不到释义的不缓存）；导入 `/vocab/import-english`（去重）。**点词弹窗有「加入生词本」**（AI 没提取到的词也能加，查义失败时释义留空），readonly 详情里同样可用；**加入成功后原文里该词要立刻变红**（`EnglishAnalysisPanel` 的 `addedWords` 本地集合，别只入库不动视图——用户实测反馈过"加了还是浅色"）。**AI 提取的重点短语在原文里整体成一个可点 token**（`tokenRe` 正则长短语优先、词间 `\s+`，短语直接用已提取释义**不调 AI**，入生词本 kind=phrase）；**划词查短语**（2026-09-26，用户反馈 turns out 只能逐词点）：在原文里圈选 2~8 个英文词 → 选区上方浮出「查短语」按钮 → 整段走 `/ai/sense` 查整体释义（`normalizePhraseSelection` 剔除 `__6__` 空位与非字母；单词划选不出按钮，点词已有入口），入生词本 kind=phrase。`/api/ai/sense` 的 `word` 参数 max_length=120、`_WORD_PROMPT` 明确"多词短语要解释整体含义"；缓存 key 对短语同样生效。**浮钮必须 `Teleport to="body"` + z-index 1010**：详情弹窗 `.modal-panel` 的 backdrop-filter 会给 `position:fixed` 后代当包含块，不传出去就困在弹窗里被滚动区裁掉（实测"浮钮看不见"的真因）。`tests/englishPanelWords.test.js` 钉住以上全部。
-   **完形填空 / 七选五录入**：AI 提示词（`ai_english` 捕获 + `_parse_english_questions_prompt`）已写明拆题规则——完形**每空一题**（题干=所在句、空位 `____`）、七选五 A-G 七个整句选项填 `option_a~g`；`mistakes` 表已有 `option_e/f/g` 列（迁移同 `starred` 模式），前端 ChoiceAnswer/DetailMeta/PrintView/复习页/模考卷面都只在 E-G **非空时渲染**。真题库 `exam_questions` 与判卷仍是 A-D（七选五走智能录入路径，不进整卷模考）。
+   **完形填空 / 七选五录入**：AI 提示词（`ai_english` 捕获 + `_parse_english_questions_prompt`）已写明拆题规则——完形**每空一题**（题干=所在句、空位 `____`）、七选五 A-G 七个整句选项填 `option_a~g`；`mistakes` 表已有 `option_e/f/g` 列（迁移同 `starred` 模式），前端 ChoiceAnswer/DetailMeta/PrintView/复习页/模考卷面都只在 E-G **非空时渲染**。**真题库 2026-09-26 起同样支持 A-G**（`exam_questions` 有 option_e/f/g；拆题提示词对英语七选五输出七选项；答案匹配/人工改答/AI 兜底均 A-G）——七选五现在能进整卷模考与转错题。
 9. **多图 = 一次分析**：`/ai/knowledge-from-image` 接受 `{images:[...]}`（≥2 张按 3 张一批、按序提文字后合并），**只产出一条知识点草稿**——不要把「粘一张分析一张」改回来。`AiOcrRequest` 的 `image_base64` 与 `images` 至少给一个。
 10. **卡片点击**：知识点/公式卡片必须**整卡可点**打开详情。做法是给卡片本体加 `role="button" tabindex="0"` + `@click`（键盘 Enter/Space 同效），卡片内的显式控件（操作按钮、关联标签）各自加 `@click.stop`，装饰元素（色脊/水印）加 `pointer-events:none`。
    **不要用「铺满卡片的透明点击层（.k-hit/.f-hit）」**：一旦卡内子元素为了定位而带上 `position:relative; z-index`，它们就会盖住点击层，导致「只有某条窄缝可点、点标题/摘要都没反应」（已翻车过一次，用户实测点不动）。
@@ -379,6 +379,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 356、前端 Vitest 158、E2E 53**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 79%（门槛 70%）。
+- 测试基线：**后端 364、前端 Vitest 161、E2E 53**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 79%（门槛 70%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

@@ -1054,3 +1054,62 @@ CI 覆盖率门槛 55→70（CI 口径实测 79%）。**评估后不动的**：a
 
 **验证**：后端 328→**356**（coverage 79%）、前端 Vitest 144→**158**、build/analyze、
 ruff/eslint/prettier/pre-commit 全绿；每批独立提交（cf4d196→950f57f 共 7 个）。
+
+## 2026-09-26 · 功能拓展大扫尾（八批连做，用户拍板"全做"）
+
+按清单把功能拓展与快确认项全部落地（登录页与移动端按用户指示排除）。
+
+**批一·前端性能（aab8ef3）**：
+- dashboard 聚合带上 `forecast` + `mocks`（review_service 收编 forecast 实现，
+  /reviews/forecast 与聚合共用 `forecast_items`）——统计页进页面少 2 个往返；
+- **列表页 keep-alive**（include 六个列表视图）：返回不重拉、滚动位置保留；
+  数据新鲜度由各视图 `onActivated` 静默刷新负责（`useResourceList`/`useMistakeFilters`
+  新增 `load({ background })`：不挂 loading 不闪骨架屏、不清勾选、失败不清旧数据）；
+  PapersView 轮询 `onDeactivated` 停 / `onActivated` 续。首次激活由 mounted 负责取数。
+
+**批三·快确认项（776c191 + 数据操作）**：
+- 单题删除打 `before-delete` 快照（与批量对称；先查存在再打快照，404 不烧名额；
+  快照失败 message 明示"无反悔点"）；
+- 图片上传分辨率上限 30MP（`IMAGE_MAX_PIXELS`，防绕过前端直灌的畸形大图；
+  前端压图正常路径无感）；
+- **孤儿图清理执行完毕**：123 个文件先归档到
+  `data/backups/orphan_images_20260926_222710.zip`（1.0MB，可逆）再 `--apply`，
+  复验 orphan_total=0。
+
+**批四·功能拓展（920e5be→73f6c0f 六个提交）**：
+- **⑭错因归因链路**：`mistakes.error_reason` 列（DDL+迁移）+ `ERROR_REASONS` 四类
+  （知识盲区/审题失误/计算失误/粗心大意）+ `PATCH /api/mistakes/{id}/error-reason`；
+  复习答错保存后出现归因 chips（`ErrorReasonChips` 组件，再点一次=清除，换题归零）；
+  统计页新增「错因杠杆榜」（按累计答错排序，点击直通错题列表）；
+  列表筛选支持 `error_reason`（URL 同步 + 可移除 chips）。
+- **⑮作文进步曲线**：`GET /essays/trend`（全量得分率时间正序，**必须声明在
+  /{essay_id} 之前**否则 int 参数吃掉 "trend"）+ EssayView 面积图卡（最近 20 篇）。
+- **⑯弱项组卷**：practice 新增 `mode=weak`（错得最多的前 5 个知识点，到期优先，
+  其余筛选照常叠加）+ 统计页薄弱卡「组卷冲刺：5 类弱项 20 题」入口 + ReviewView 接入。
+- **⑰公式挖空默写**：背诵卡正面把公式段遮成 KaTeX 下划线空位（`utils/formulaCloze`，
+  长度按原段等比、纯文本保留），footer 开关，翻面对答案。
+- **⑱图片目录打包备份**：`POST /api/snapshots/images`（zip 进 BACKUP_DIR，缩略图
+  不打包，保留 5 份自动轮换）+ 快照页「备份图片目录」按钮——数据库快照不含图片
+  的那句"删了找不回"从此有解。
+- **⑲AI 举一反三**：`POST /api/ai/variant`（`ai_service.generate_variant`，同考点变式，
+  **保持推理开启**——关推理出题会编造，与逐题解析同理）+ 详情弹窗入口与变式面板
+  （考点/题干/选项/答案/解析 + 一键存入错题本，沿用原题科目标签）。
+- **⑳真题库 E-G**：`exam_questions` 加 option_e/f/g（DDL+迁移）；拆题提示词对英语
+  七选五输出七选项；答案匹配三处正则、人工改答、AI 兜底提示全部放宽到 A-G；
+  转错题与模考卷面透传 E-G；PapersView 详情渲染 E-G。**七选五现在能进整卷模考**。
+- **㉑模考升级**：答题卡面板（题号总览、已答实心、当前框线、点格跳题，footer 入口
+  带已答计数）+ 卷面纸感（卷头"客观题卷面"姓名条 + 淡横格线答题纸意象，
+  深浅主题自适应）。
+
+**批二·工程收尾（c41d31d）**：VocabView 迁移 useResourceList 分页签名
+（FormulaView 本就是裸数组客户端过滤，无分页不迁移）；requirements 核心依赖锁定
+到实测版本（fastapi 0.135.1 / uvicorn 0.41 / pydantic 2.12.5 / httpx 0.28.1 /
+pillow 12.3 / python-docx 1.2 / pypdf 6.17，升级先本机验证再改版本号）。
+
+**评估后不动的**：SQLite 连接复用（要包装 close 语义，风险大于 0.3ms 收益）；
+巨型视图拆分与 exam_paper_service/ai_service 大文件拆分（施工图已勘测写在本节
+上一条目与体检报告——纯重构零行为变化，值得带双主题截图验收独立批次做，
+不在 14 个提交的功能批次尾部仓促动刀）。
+
+**验证**：后端 356→**364**、前端 Vitest 158→**161**、build、ruff/eslint/prettier/
+pre-commit 全绿；孤儿图复验 0 残留；E2E 与双主题截图见收尾批次。

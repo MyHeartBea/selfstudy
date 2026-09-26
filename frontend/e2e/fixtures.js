@@ -452,6 +452,17 @@ function resolver(path, method, overrides) {
   if (path === '/api/sprint/plan') return sprintPlan
   // 作文档案：列表 {items,total}，详情 = brief + essay_text + result
   if (path === '/api/essays') return { items: essayRows, total: essayRows.length }
+  // 进步曲线：全量得分率时间正序（EssayView 挂载即取，必须打桩否则 unstubbed 404 假红）
+  if (path === '/api/essays/trend') {
+    return essayRows.map((r) => ({
+      id: r.id,
+      kind: r.kind,
+      score: r.score,
+      max_score: r.max_score,
+      created_at: r.created_at,
+      pct: Math.round((r.score / (r.max_score || 1)) * 100),
+    }))
+  }
   if (/^\/api\/essays\/\d+$/.test(path)) {
     return { ...essayRows[0], essay_text: essayResult.raw_transcript, result: essayResult }
   }
