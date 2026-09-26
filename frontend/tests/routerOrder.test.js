@@ -37,4 +37,8 @@ describe('NAV_ORDER 必须与真实路由名一致', () => {
     expect(navIndexOf('no-such-route')).toBe(NAV_ORDER.length)
     expect(navIndexOf('stats')).toBe(0)
   })
+
+  it('未知路径落到 404 兜底路由（没有 catch-all 时未知路径渲染成空白外壳）', () => {
+    expect(router.resolve('/no/such/page').name).toBe('not-found')
+  })
 })

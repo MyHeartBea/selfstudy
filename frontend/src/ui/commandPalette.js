@@ -65,10 +65,6 @@ export function openPalette() {
   paletteState.activeIndex = 0
 }
 
-export function closePalette() {
-  paletteState.open = false
-}
-
 export function setScope(scope) {
   paletteState.scope = scope
   paletteState.activeIndex = 0
@@ -123,6 +119,16 @@ export function visibleSections(state = paletteState) {
 
 let searchTimer = null
 let searchSeq = 0
+let searchAbort = null
+
+export function closePalette() {
+  paletteState.open = false
+  // 关面板时掐掉在途搜索：结果已经没人看了，让请求尽快落地
+  if (searchAbort) {
+    searchAbort.abort()
+    searchAbort = null
+  }
+}
 
 export function onPaletteInput(query) {
   paletteState.query = query
@@ -146,11 +152,16 @@ async function runSearch(query, seq = ++searchSeq) {
     paletteState.searching = false
     return
   }
+  // seq 兜住"迟到的旧响应覆盖新结果"，abort 让旧请求真的停下来（省后端算力）
+  if (searchAbort) searchAbort.abort()
+  searchAbort = new AbortController()
+  const signal = searchAbort.signal
   try {
-    const res = await request.get('/search', { params: { q: trimmed }, silent: true })
+    const res = await request.get('/search', { params: { q: trimmed }, silent: true, signal })
     if (seq !== searchSeq) return
     paletteState.groups = res.data.data?.groups || []
   } catch (err) {
+    if (err?.code === 'ERR_CANCELED') return
     // 失败要清结果：留着上一次命中会显示成"这次搜到了"，是假数据
     if (seq === searchSeq) paletteState.groups = []
   } finally {

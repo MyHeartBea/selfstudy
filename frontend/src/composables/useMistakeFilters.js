@@ -63,22 +63,30 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
     return params
   }
 
+  // 在途加载的 AbortController：筛选连点/搜索连打时，新请求顶掉旧请求，
+  // 旧响应即使先回来也（因被 abort）不会把新结果覆盖成旧数据。
+  let loadAbort = null
+
   async function loadMistakes() {
+    if (loadAbort) loadAbort.abort()
+    loadAbort = new AbortController()
+    const signal = loadAbort.signal
     loading.value = true
     loadError.value = false
     if (onBeforeLoad) onBeforeLoad()
     try {
       const params = { ...buildParams(), page: page.value, page_size: pageSize.value }
-      const res = await request.get('/mistakes', { params })
+      const res = await request.get('/mistakes', { params, signal })
       const data = res.data.data || {}
       items.value = data.items || []
       total.value = data.total || 0
       if (data.page) page.value = data.page
     } catch (err) {
-      // 错误提示由请求拦截器统一处理；记录错误态供页面区分"真空/加载失败"
-      loadError.value = true
+      // 错误提示由请求拦截器统一处理；记录错误态供页面区分"真空/加载失败"。
+      // 主动取消不是失败：那是新请求已经顶掉了本次，状态归新请求管。
+      if (err?.code !== 'ERR_CANCELED') loadError.value = true
     } finally {
-      loading.value = false
+      if (!signal.aborted) loading.value = false
     }
   }
 

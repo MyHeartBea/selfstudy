@@ -128,7 +128,10 @@ describe('commandPalette 全站搜索', () => {
     expect(paletteState.searching).toBe(true)
     await vi.advanceTimersByTimeAsync(200)
     await flush()
-    expect(get).toHaveBeenCalledWith('/search', { params: { q: '泰勒' }, silent: true })
+    expect(get).toHaveBeenCalledWith(
+      '/search',
+      expect.objectContaining({ params: { q: '泰勒' }, silent: true, signal: expect.anything() }),
+    )
     expect(paletteState.groups).toHaveLength(3)
     expect(paletteState.searching).toBe(false)
   })

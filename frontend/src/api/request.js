@@ -24,7 +24,9 @@ request.interceptors.response.use(
     // 在 error 上附加 HTTP 状态码，供页面按需分支（如 502 提示 AI 未配置）
     error.status = error.response?.status
     const silent = error.config?.silent === true
-    if (!silent) {
+    // 主动取消（AbortController，如新搜索顶掉旧请求）不是故障，不弹 toast 不算失败
+    const canceled = error.code === 'ERR_CANCELED'
+    if (!silent && !canceled) {
       const message = error.response?.data?.message || error.message || '请求失败'
       toast.error(message)
     }

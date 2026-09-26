@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useMistakeFilters } from '../src/composables/useMistakeFilters'
+
+vi.mock('../src/api/request', () => ({ default: { get: vi.fn() } }))
+
+import request from '../src/api/request'
 
 describe('useMistakeFilters.buildParams', () => {
   it('空筛选时只带排序', () => {
@@ -45,5 +49,37 @@ describe('useMistakeFilters.buildParams', () => {
     expect(totalPages.value).toBe(1)
     total.value = 13
     expect(totalPages.value).toBe(3) // pageSize 默认 6
+  })
+})
+
+describe('useMistakeFilters.loadMistakes 竞态', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('新加载顶掉旧加载：旧请求被 abort，且不算失败、不清新请求的 loading', async () => {
+    const calls = []
+    request.get.mockImplementation((_url, config) => {
+      calls.push(config)
+      // 一直挂到被 abort：abort 后以 ERR_CANCELED 拒绝（与 axios 行为一致）
+      return new Promise((_resolve, reject) => {
+        config.signal.addEventListener('abort', () => {
+          const err = new Error('canceled')
+          err.code = 'ERR_CANCELED'
+          reject(err)
+        })
+      })
+    })
+    const { loadMistakes, loading, loadError } = useMistakeFilters()
+
+    const first = loadMistakes()
+    await Promise.resolve() // 让第一次请求真的发出去
+    loadMistakes() // 第二次加载顶掉第一次
+    expect(calls.length).toBe(2)
+    expect(calls[0].signal.aborted).toBe(true)
+
+    await first // 旧请求以"被取消"收场：不许置 loadError
+    expect(loadError.value).toBe(false)
+    expect(loading.value).toBe(true) // loading 归新请求管，不许被旧请求的 finally 关掉
   })
 })

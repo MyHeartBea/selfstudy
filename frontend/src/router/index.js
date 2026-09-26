@@ -101,6 +101,12 @@ const routes = [
         name: 'design-gallery',
         component: () => import('../views/DesignView.vue'),
       },
+      {
+        // 404 兜底：后端 SPA 回退会把任何未知路径交给前端路由，没有这条就是空白外壳
+        path: ':pathMatch(.*)*',
+        name: 'not-found',
+        component: () => import('../views/NotFoundView.vue'),
+      },
     ],
   },
 ]
@@ -127,6 +133,7 @@ const TITLE_MAP = {
   'data-integrity': '数据体检',
   'data-snapshots': '数据备份与回滚',
   'print-sheet': '打印背诵稿',
+  'not-found': '页面不存在',
 }
 router.afterEach((to) => {
   const title = TITLE_MAP[to.name]
@@ -162,6 +169,7 @@ export const NAV_ORDER = [
   'print-sheet',
   'design-gallery',
   'mistake-edit',
+  'not-found',
 ]
 
 /** 取某个路由在导航顺序里的编号；未知路由排到最后 */
