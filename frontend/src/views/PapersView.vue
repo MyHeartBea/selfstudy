@@ -403,8 +403,12 @@ onUnmounted(stopPolling)
             <span class="pq-no num">{{ q.no }}</span>
             <div class="pq-main">
               <div class="pq-q"><MathText :text="q.question" /></div>
-              <div v-if="q.option_a" class="pq-opts">
-                <span v-for="k in ['a', 'b', 'c', 'd']" :key="k" class="pq-opt">
+              <div v-if="q.option_a || q.option_e" class="pq-opts">
+                <span
+                  v-for="k in ['a', 'b', 'c', 'd', 'e', 'f', 'g'].filter((x) => q['option_' + x])"
+                  :key="k"
+                  class="pq-opt"
+                >
                   <b>{{ k.toUpperCase() }}.</b> <MathText :text="q['option_' + k]" />
                 </span>
               </div>

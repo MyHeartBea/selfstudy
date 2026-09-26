@@ -664,8 +664,8 @@ def set_question_answer(conn, paper_id: int, question_id: int, answer: str):
     q = dict(row)
     if q["question_type"] == "choice":
         answer = answer.upper()
-        if answer and not re.fullmatch(r"[A-D]", answer):
-            return None, "选择题答案只能是 A、B、C、D 或留空"
+        if answer and not re.fullmatch(r"[A-G]", answer):
+            return None, "选择题答案只能是 A 到 G（含七选五的 E/F/G）或留空"
     elif q["question_type"] == "solution":
         return None, "解答题没有标准答案字段"
     else:
@@ -729,6 +729,9 @@ def question_to_mistake(conn, paper_id: int, question_id: int):
         "option_b": q["option_b"] or "",
         "option_c": q["option_c"] or "",
         "option_d": q["option_d"] or "",
+        "option_e": q.get("option_e") or "",
+        "option_f": q.get("option_f") or "",
+        "option_g": q.get("option_g") or "",
         "correct_answer": q["correct_answer"] or "",
         "analysis": q["analysis"] or f"来自真题《{paper['title']}》，解析待整理。",
         "difficulty_points": q["section"] or f"真题 · {paper['title']}",
@@ -839,9 +842,13 @@ def _structure_prompt(subject: str, year: str, chunk: str) -> str:
         '"passage": "该题组共用原文（完形填空的文章、阅读理解的全文；只在该题组第一题填写，其他题留空串），无原文则空串", '
         '"question": "题干（选择题为问题句；完形填空为空格所在句；翻译/写作为题目要求全文）", '
         '"option_a": "A 选项", "option_b": "B 选项", "option_c": "C 选项", "option_d": "D 选项", '
+        '"option_e": "E 选项（仅英语七选五才有，没有就填空串）", '
+        '"option_f": "F 选项（同上）", "option_g": "G 选项（同上）", '
         '"analysis": "解析（若文本中带有）", "page": 0, "has_diagram": false}]}\n'
         "规则：\n"
         "1. type 判断：四选项的选 choice；英译汉/翻译与写作选 solution；其余选 fill。\n"
+        "1b. 英语七选五（题干为挖空句、选项给 A-G 七个整句）选 choice，"
+        "并把全部七句选项按原文照抄填进 option_a ~ option_g；非七选五的 E/F/G 一律留空串。\n"
         "2. 只整理试题，跳过考生须知、条形码说明、`[[PAGE:n]]` 页码标记等一切噪声。\n"
         "3. choice 必须带四个选项；选项文本保持原样。**任何数学公式/上下标一律用 `\\(...\\)` 包裹**（如 `\\(2^{8}\\)`、`\\(x^{2}\\)`、`\\(O(n)\\)`），禁止裸写 `^`/`_`。\n"
         "4. correct_answer 一律留空串（答案由系统从答案文件另行匹配）。\n"
@@ -855,12 +862,12 @@ def _structure_prompt(subject: str, year: str, chunk: str) -> str:
 
 
 def _answer_letter(segment: str) -> str:
-    """从一段答案文本里取选择题答案字母（A-D），取不到返回空串。"""
+    """从一段答案文本里取选择题答案字母（A-G，含七选五），取不到返回空串。"""
     seg = segment[:60]
     for pat in (
-        r"^\s*[（(]\s*([A-Da-d])\s*[)）]",  # (A) / （A）
-        r"^\s*([A-Da-d])\s*[.、．)）]",  # A. / A、
-        r"^\s*([A-Da-d])(?![A-Za-z])",  # 裸 A
+        r"^\s*[（(]\s*([A-Ga-g])\s*[)）]",  # (A) / （A）
+        r"^\s*([A-Ga-g])\s*[.、．)）]",  # A. / A、
+        r"^\s*([A-Ga-g])(?![A-Za-z])",  # 裸 A
     ):
         m = re.match(pat, seg)
         if m:
@@ -930,7 +937,7 @@ def _normalize_answer_text(text: str) -> str:
         # 阈值取 2：只有两组（如 "(1)C. (2)B."）的小速查段同样要能拆出来；
         # 原实现要求 >=3，导致这类短速查行完全抽不到答案。
         pairs = re.findall(
-            r"[（(]?\s*(\d{1,2})\s*[)）.、．:：]\s*[（(]?\s*([A-Da-d])\s*[)）.、．]?",
+            r"[（(]?\s*(\d{1,2})\s*[)）.、．:：]\s*[（(]?\s*([A-Ga-g])\s*[)）.、．]?",
             stripped,
         )
         if len(pairs) >= 2 and len(pairs) >= stripped.count("\n") + 2:
@@ -969,7 +976,7 @@ def _answer_pairs_from_text(text: str, expected: int = 1) -> dict:
     """
     normalized = _normalize_answer_text(text or "")
     pairs: dict = {}
-    for m in re.finditer(r"^\s*(\d{1,3})\s*[:：]\s*([A-Da-d])\b", normalized, re.M):
+    for m in re.finditer(r"^\s*(\d{1,3})\s*[:：]\s*([A-Ga-g])\b", normalized, re.M):
         pairs.setdefault(str(int(m.group(1))), m.group(2).upper())
     if expected > 0 and len(pairs) < expected:
         return {}
@@ -981,12 +988,13 @@ def _answers_prompt(subject: str, year: str, nos: List[str], answer_text: str) -
         f"以下是{subject} {year} 年真题的答案材料。\n"
         "材料可能已经过预处理，形如 `题号:答案`（如 `3:C`）；也可能格式凌乱。\n\n"
         "任务：为下面列出的每个题号给出正确答案，输出严格 JSON："
-        '{"answers": {"题号": "A/B/C/D"}}\n\n'
+        '{"answers": {"题号": "A/B/C/D/E/F/G"}}\n\n'
         "**准确优先，宁缺勿错**（重要）：\n"
         "1. 逐条核对材料里的题号，只填你能在材料中找到明确依据的题；\n"
         "2. 材料里找不到的题号**必须省略**，绝对不要靠推理、经验或“看起来像”来猜；\n"
         "3. 材料里若出现题号重复或互相矛盾，以第一次出现为准，仍不确定就省略；\n"
-        "4. value 只填单个大写字母 A/B/C/D，不要带括号、句点或中文解释。\n\n"
+        "4. value 只填单个大写字母 A-G（英语七选五可能是 E/F/G），"
+        "不要带括号、句点或中文解释。\n\n"
         f"需要匹配的题号：{json.dumps(nos, ensure_ascii=False)}\n\n"
         f"答案材料：\n{answer_text[:12000]}"
     )
@@ -1243,6 +1251,9 @@ def _run_import(paper_id: int, db_path=None) -> None:
                         "option_b": str(q.get("option_b") or ""),
                         "option_c": str(q.get("option_c") or ""),
                         "option_d": str(q.get("option_d") or ""),
+                        "option_e": str(q.get("option_e") or ""),
+                        "option_f": str(q.get("option_f") or ""),
+                        "option_g": str(q.get("option_g") or ""),
                         "correct_answer": "",
                         "analysis": str(q.get("analysis") or ""),
                         "page_idx": q_page,
@@ -1347,7 +1358,7 @@ def _run_import(paper_id: int, db_path=None) -> None:
                     for q in questions:
                         if q["type"] == "choice" and q["no"] in answers:
                             ans = str(answers[q["no"]] or "").strip().upper()
-                            if re.fullmatch(r"[A-D]", ans):
+                            if re.fullmatch(r"[A-G]", ans):
                                 q["correct_answer"] = ans
                 except (AiRequestError, Exception):
                     pass  # 答案匹配失败不阻塞入库，答案可后续补
@@ -1371,9 +1382,9 @@ def _run_import(paper_id: int, db_path=None) -> None:
         for q in questions:
             conn.execute(
                 "INSERT INTO exam_questions (paper_id, no, section, question_type, passage, "
-                "question, option_a, option_b, option_c, option_d, correct_answer, analysis, "
-                "page_idx, diagram_image) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "question, option_a, option_b, option_c, option_d, option_e, option_f, option_g, "
+                "correct_answer, analysis, page_idx, diagram_image) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     paper_id,
                     q["no"],
@@ -1385,6 +1396,9 @@ def _run_import(paper_id: int, db_path=None) -> None:
                     q["option_b"],
                     q["option_c"],
                     q["option_d"],
+                    q.get("option_e", ""),
+                    q.get("option_f", ""),
+                    q.get("option_g", ""),
                     q["correct_answer"],
                     q["analysis"],
                     q.get("page_idx", 0),

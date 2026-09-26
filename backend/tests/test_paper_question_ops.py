@@ -55,9 +55,13 @@ class SetAnswerTest(QuestionOpsTestBase):
         q, err = eps.set_question_answer(self.conn, self.paper_id, self._qid("1"), "b")
         self.assertIsNone(err)
         self.assertEqual(q["correct_answer"], "B")
+        # E 是七选五的合法选项（2026-09-26 起真题库支持 A-G）；超出范围的 H 仍要拒
         q, err = eps.set_question_answer(self.conn, self.paper_id, self._qid("1"), "E")
+        self.assertIsNone(err)
+        self.assertEqual(q["correct_answer"], "E")
+        q, err = eps.set_question_answer(self.conn, self.paper_id, self._qid("1"), "H")
         self.assertIsNone(q)
-        self.assertIn("A、B、C、D", err)
+        self.assertIn("A 到 G", err)
 
     def test_choice_clears_with_empty(self):
         eps.set_question_answer(self.conn, self.paper_id, self._qid("1"), "A")

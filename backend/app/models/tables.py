@@ -175,6 +175,9 @@ CREATE TABLE IF NOT EXISTS exam_questions (
     option_b TEXT DEFAULT '',
     option_c TEXT DEFAULT '',
     option_d TEXT DEFAULT '',
+    option_e TEXT DEFAULT '',
+    option_f TEXT DEFAULT '',
+    option_g TEXT DEFAULT '',
     correct_answer TEXT DEFAULT '',
     analysis TEXT DEFAULT '',
     knowledge_tags TEXT DEFAULT ''

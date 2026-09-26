@@ -567,6 +567,10 @@ def migrate_database(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE exam_questions ADD COLUMN page_idx INTEGER DEFAULT 0")
     if "diagram_image" not in _eq_cols:
         conn.execute("ALTER TABLE exam_questions ADD COLUMN diagram_image TEXT DEFAULT ''")
+    # E-G 选项：英语七选五的 E/F/G 进真题库（与 mistakes 表的七选五链路对齐）
+    for column in ("option_e", "option_f", "option_g"):
+        if column not in _eq_cols:
+            conn.execute(f"ALTER TABLE exam_questions ADD COLUMN {column} TEXT DEFAULT ''")
 
     _set_meta(conn, "migration_version", str(MIGRATION_VERSION))
 
