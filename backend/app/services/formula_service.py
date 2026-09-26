@@ -3,6 +3,8 @@
 import sqlite3
 from typing import List, Optional
 
+from app.services.search_service import like_pattern
+
 
 def list_formulas(
     conn: sqlite3.Connection,
@@ -16,8 +18,9 @@ def list_formulas(
         conditions.append("category = ?")
         params.append(category)
     if search:
-        conditions.append("(title LIKE ? OR content LIKE ?)")
-        params.extend([f"%{search}%", f"%{search}%"])
+        conditions.append("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
+        pattern = like_pattern(search)
+        params.extend([pattern, pattern])
     sql = (
         "SELECT * FROM formula_items WHERE "
         + " AND ".join(conditions)

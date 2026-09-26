@@ -3,6 +3,8 @@
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from app.services.search_service import like_pattern
+
 # 注意：不能在模块顶层 `from app.database import mistake_to_dict`——
 # database.py 反过来要 import 本模块的 canonical_tags，会形成循环导入。
 # 这里在使用处局部导入。
@@ -217,8 +219,8 @@ def list_knowledge(
         conditions.append("kb.sub_subject_id = ?")
         params.append(sub_subject_id)
     if tag:
-        conditions.append("kb.tag_name LIKE ?")
-        params.append(f"%{tag}%")
+        conditions.append("kb.tag_name LIKE ? ESCAPE '\\'")
+        params.append(like_pattern(tag))
     if conditions:
         where_sql = " WHERE " + " AND ".join(conditions)
     else:

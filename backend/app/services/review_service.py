@@ -7,6 +7,7 @@ from typing import List, Optional
 from app.config import settings
 from app.database import local_day_bounds_utc, mistake_tag_condition, mistake_to_dict
 from app.services.answer_service import judge_fill, judge_letters
+from app.services.search_service import like_pattern
 
 INTERVALS = [1, 3, 7, 15, 30]  # v5 旧固定阶梯：仅迁移回填/兼容保留
 
@@ -352,8 +353,8 @@ def get_practice_mistakes(
         conditions.append(mistake_tag_condition())
         params.append(tag)
     if search:
-        conditions.append("m.question LIKE ?")
-        params.append(f"%{search}%")
+        conditions.append("m.question LIKE ? ESCAPE '\\'")
+        params.append(like_pattern(search))
     if source_type:
         conditions.append("m.source_type = ?")
         params.append(source_type)

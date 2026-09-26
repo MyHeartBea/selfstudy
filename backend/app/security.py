@@ -4,6 +4,7 @@
 所有 /api 请求必须携带 token，防止误对外暴露时被刷 AI 额度或导出数据。
 """
 
+import secrets
 import threading
 import time
 from collections import defaultdict, deque
@@ -49,9 +50,10 @@ def token_ok(
     """未配置 token 时放行（单机零配置）；配置了则要求请求携带一致 token。"""
     if not token_configured():
         return True
-    return (
-        _provided_token(request, x_api_token, authorization) == (settings.API_TOKEN or "").strip()
-    )
+    expected = (settings.API_TOKEN or "").strip().encode("utf-8")
+    provided = _provided_token(request, x_api_token, authorization).encode("utf-8")
+    # compare_digest：普通 == 逐字符比较的耗时可被逐位探测，token 校验必须量常时间
+    return secrets.compare_digest(provided, expected)
 
 
 def verify_api_token(

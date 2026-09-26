@@ -48,8 +48,11 @@ def list_vocab(
     where = []
     params: List[object] = []
     if search:
-        where.append("(word LIKE ? OR meaning LIKE ? OR note LIKE ? OR example LIKE ?)")
-        like = f"%{search}%"
+        where.append(
+            "(word LIKE ? ESCAPE '\\' OR meaning LIKE ? ESCAPE '\\' "
+            "OR note LIKE ? ESCAPE '\\' OR example LIKE ? ESCAPE '\\')"
+        )
+        like = like_pattern(search)
         params.extend([like, like, like, like])
     if mastery is not None:
         where.append("mastery_level = ?")

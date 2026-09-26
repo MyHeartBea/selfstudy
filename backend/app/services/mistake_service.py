@@ -25,6 +25,7 @@ from app.services.knowledge_service import (
     get_related_knowledge,
     knowledge_to_dict,
 )
+from app.services.search_service import like_pattern
 
 SOURCE_TYPES = {"real_exam", "mock", "other"}
 
@@ -478,11 +479,11 @@ def list_mistakes(
             conditions.append(mistake_tag_condition(alias="mistakes"))
             params.append(tag)
     if filters.get("approach"):
-        conditions.append("approach LIKE ?")
-        params.append(f"%{filters['approach']}%")
+        conditions.append("approach LIKE ? ESCAPE '\\'")
+        params.append(like_pattern(filters["approach"]))
     if filters.get("search"):
-        conditions.append("question LIKE ?")
-        params.append(f"%{filters['search']}%")
+        conditions.append("question LIKE ? ESCAPE '\\'")
+        params.append(like_pattern(filters["search"]))
     if filters.get("source_type"):
         conditions.append("source_type = ?")
         params.append(filters["source_type"])

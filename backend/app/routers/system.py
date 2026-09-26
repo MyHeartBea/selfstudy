@@ -12,6 +12,7 @@ from app.config import settings
 from app.database import get_connection, list_snapshots, restore_snapshot, snapshot_database
 from app.responses import error, ok, server_error
 from app.schemas import SnapshotRestore
+from app.security import token_configured
 from app.services import integrity_service, review_service, search_service, stats_service
 from app.services.mistake_service import _images_dir
 
@@ -34,19 +35,21 @@ def health():
         db_ok = False
     finally:
         conn.close()
-    return ok(
-        {
-            "status": "ok" if db_ok else "degraded",
-            "database": db_ok,
-            "version": settings.VERSION,
-            "app": settings.APP_NAME,
-            "python": platform.python_version(),
-            "host": settings.HOST,
-            "reviewDailyLimit": settings.REVIEW_DAILY_LIMIT,
-            "metrics": metrics.snapshot(),
-            "time": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+    payload = {
+        "status": "ok" if db_ok else "degraded",
+        "database": db_ok,
+        "version": settings.VERSION,
+        "app": settings.APP_NAME,
+        "reviewDailyLimit": settings.REVIEW_DAILY_LIMIT,
+        "metrics": metrics.snapshot(),
+        "time": datetime.now(timezone.utc).isoformat(),
+    }
+    if token_configured():
+        # 未配置 token 时 /health 谁都能读，Python 版本与监听地址属环境侦察信息，
+        # 只在配置了 token（此时 /health 本身已在鉴权之后）才返回。
+        payload["python"] = platform.python_version()
+        payload["host"] = settings.HOST
+    return ok(payload)
 
 
 @router.get("/exam-countdown")
