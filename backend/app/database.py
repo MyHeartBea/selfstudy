@@ -17,10 +17,16 @@ from app.services.knowledge_service import canonical_tags
 logger = logging.getLogger("kaoyan")
 
 
-def get_connection() -> sqlite3.Connection:
-    """打开一个新的 SQLite 连接，每个请求独立使用。"""
-    settings.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(settings.DB_PATH, check_same_thread=False)
+def get_connection(db_path: Optional[Path] = None) -> sqlite3.Connection:
+    """打开一个新的 SQLite 连接，每个请求独立使用。
+
+    db_path 显式传入时打开指定库：导入工作线程的队列条目在入队时钉住自己所属的库，
+    出队时（可能已是几分钟后）不再读全局 settings.DB_PATH —— 否则测试换库、或未来
+    任何"库路径中途变更"都会让线程串到别的库上读写（实测造成跨测试 disk locked）。
+    """
+    path = Path(db_path) if db_path is not None else settings.DB_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")

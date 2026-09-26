@@ -35,6 +35,9 @@ from app.security import token_ok, token_configured, verify_api_token
 from app.services.exam_paper_service import recover_stuck_papers
 
 
+_log_file_handler: RotatingFileHandler | None = None
+
+
 def _setup_logging() -> None:
     """应用与 uvicorn 日志统一落盘到轮转文件；控制台只留 WARNING 以上。
 
@@ -43,6 +46,7 @@ def _setup_logging() -> None:
     收口（data/logs/backend.log，2MB×3），uvicorn.* 的 console handler 摘掉后，
     err.log 只剩启动崩溃现场，正常输出全部进轮转文件。
     """
+    global _log_file_handler
     log_dir = PROJECT_ROOT / "data" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -60,6 +64,10 @@ def _setup_logging() -> None:
         uv_logger = logging.getLogger(name)
         uv_logger.handlers = [file_handler, console]
         uv_logger.propagate = False
+    # 重复调用（测试里会再 setup）时关掉旧 handler，避免文件句柄泄漏
+    if _log_file_handler is not None and _log_file_handler is not file_handler:
+        _log_file_handler.close()
+    _log_file_handler = file_handler
 
 
 _setup_logging()

@@ -993,14 +993,18 @@ def _answers_prompt(subject: str, year: str, nos: List[str], answer_text: str) -
 
 
 # —— 后台导入流水线：单工作线程串行消费，避免并发 AI 互相踩 ——
-_import_queue: "queue.Queue[int]" = queue.Queue()
+# 队列条目是 (paper_id, db_path)：id 只在"它所属的那份库"里有意义，入队时把库路径
+# 一起钉进去，出队时不再解析全局 settings.DB_PATH（否则库路径中途变更时线程会串库）。
+_import_queue: "queue.Queue[tuple]" = queue.Queue()
 _worker_lock = threading.Lock()
 _worker_started = False
 
 
-def enqueue_import(paper_id: int) -> None:
+def enqueue_import(paper_id: int, db_path=None) -> None:
     global _worker_started
-    _import_queue.put(paper_id)
+    if db_path is None:
+        db_path = settings.DB_PATH
+    _import_queue.put((paper_id, db_path))
     with _worker_lock:
         if not _worker_started:
             _worker_started = True
@@ -1115,11 +1119,11 @@ def _worker_loop() -> None:
     from app.database import get_connection
 
     while True:
-        paper_id = _import_queue.get()
+        paper_id, db_path = _import_queue.get()
         try:
-            _run_import(paper_id)
+            _run_import(paper_id, db_path)
         except Exception as exc:  # 兜底：任何异常都落为 error 状态
-            conn = get_connection()
+            conn = get_connection(db_path)
             try:
                 # status_note 会显示在 /papers 页面上，AI 通道的报错先脱敏
                 _set_status(conn, paper_id, "error", mask_secret(str(exc)))
@@ -1127,10 +1131,10 @@ def _worker_loop() -> None:
                 conn.close()
 
 
-def _run_import(paper_id: int) -> None:
+def _run_import(paper_id: int, db_path=None) -> None:
     from app.database import get_connection
 
-    conn = get_connection()
+    conn = get_connection(db_path)
     try:
         row = conn.execute("SELECT * FROM exam_papers WHERE id = ?", (paper_id,)).fetchone()
         if row is None:
