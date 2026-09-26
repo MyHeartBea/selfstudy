@@ -20,6 +20,7 @@ const emit = defineEmits(['save-question', 'saved'])
 const lookupVisible = ref(false)
 const lookupLoading = ref(false)
 const lookupWord = ref('')
+const lookupKind = ref('word') // word | phrase
 const lookupData = ref(null)
 
 const extractedMap = computed(() => {
@@ -29,6 +30,28 @@ const extractedMap = computed(() => {
   }
   return map
 })
+
+// AI 提取的重点短语：短语整体可点（点击直接用已提取的释义，不调 AI）
+const phraseMap = computed(() => {
+  const map = new Map()
+  for (const p of props.parsed?.english_phrases || []) {
+    const phrase = String(p.phrase || '').trim()
+    if (phrase) map.set(phrase.toLowerCase().replace(/\s+/g, ' '), p)
+  }
+  return map
+})
+
+// 分词正则：短语（长优先，词间允许空白）先于单词匹配，短语整体成为一个 token
+const tokenRe = computed(() => {
+  const alts = [...phraseMap.value.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'))
+  if (!alts.length) return wordRe
+  return new RegExp(`(?<![A-Za-z])(?:${alts.join('|')})(?![A-Za-z])|${wordRe.source}`, 'gi')
+})
+
+// 点词弹窗里「加入生词本」成功的词：立即可视化为已收录（红色）
+const addedWords = reactive(new Set())
 
 // —— 原文分段（按空行/换行分段）——
 const paragraphs = computed(() => {
@@ -84,7 +107,8 @@ function chipColor(i) {
 }
 
 function isExtracted(word) {
-  return extractedMap.value.has(word.toLowerCase())
+  const k = String(word || '').toLowerCase()
+  return extractedMap.value.has(k) || addedWords.has(k)
 }
 
 const wordRe = /[A-Za-z]+(?:['-][A-Za-z]+)*/g
@@ -92,22 +116,39 @@ function tokenize(text) {
   const out = []
   let last = 0
   const s = String(text || '')
-  for (const m of s.matchAll(wordRe)) {
+  for (const m of s.matchAll(tokenRe.value)) {
     const idx = m.index
     if (idx > last) out.push({ type: 'text', value: s.slice(last, idx) })
-    out.push({ type: 'word', value: m[0] })
+    const norm = m[0].toLowerCase().replace(/\s+/g, ' ')
+    out.push({ type: phraseMap.value.has(norm) ? 'phrase' : 'word', value: m[0] })
     last = idx + m[0].length
   }
   if (last < s.length) out.push({ type: 'text', value: s.slice(last) })
   return out
 }
 
-async function openWord(word) {
-  lookupWord.value = word
+async function openWord(text) {
+  const norm = String(text || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+  const phrase = phraseMap.value.get(norm)
   lookupVisible.value = true
   lookupLoading.value = true
+  lookupWord.value = phrase ? phrase.phrase : text
+  lookupKind.value = phrase ? 'phrase' : 'word'
   lookupData.value = null
-  const hit = extractedMap.value.get(word.toLowerCase())
+  if (phrase) {
+    // 短语是 AI 提取过的，直接用已提取释义，不调 AI
+    lookupData.value = {
+      word: phrase.phrase,
+      phonetic: '',
+      meanings: [{ pos: phrase.pos || '', meaning: phrase.meaning || '' }],
+      example: phrase.example || '',
+    }
+    lookupLoading.value = false
+    return
+  }
+  const hit = extractedMap.value.get(norm)
   if (hit) {
     lookupData.value = {
       word: hit.word,
@@ -119,7 +160,7 @@ async function openWord(word) {
     return
   }
   try {
-    const res = await request.get('/ai/sense', { params: { word }, silent: true })
+    const res = await request.get('/ai/sense', { params: { word: text }, silent: true })
     lookupData.value = res.data.data
   } catch (err) {
     lookupData.value = null
@@ -201,6 +242,7 @@ async function addSelected() {
   const items = selectedVocabItems()
   try {
     await importVocabItems(items)
+    for (const it of items) addedWords.add(String(it.word || '').toLowerCase())
     selected.value = []
   } catch (err) {}
 }
@@ -232,9 +274,10 @@ async function addLookupWord() {
         meaning,
         phonetic: d?.phonetic || '',
         example: d?.example || '',
-        kind: 'word',
+        kind: lookupKind.value,
       },
     ])
+    if (lookupKind.value === 'word') addedWords.add(lookupWord.value.toLowerCase())
     lookupVisible.value = false
   } catch (err) {
   } finally {
@@ -388,7 +431,7 @@ async function saveAll() {
     <div class="ep-section">
       <div class="ep-section-head">
         <Icon name="book" :size="15" /><span>原文对照翻译</span
-        ><span class="ep-hint">左英语 · 右翻译（点击单词查看释义）</span>
+        ><span class="ep-hint">左英语 · 右翻译（点击单词/短语查看释义）</span>
       </div>
       <div v-if="bilingual.length" class="ep-bilingual">
         <div class="ep-bi">
@@ -400,7 +443,7 @@ async function saveAll() {
                   v-else
                   type="button"
                   class="ep-word"
-                  :class="{ known: isExtracted(t.value) }"
+                  :class="{ known: t.type === 'phrase' || isExtracted(t.value) }"
                   @click="openWord(t.value)"
                 >
                   {{ t.value }}
@@ -506,7 +549,7 @@ async function saveAll() {
                 v-else
                 type="button"
                 class="ep-word"
-                :class="{ known: isExtracted(t.value) }"
+                :class="{ known: t.type === 'phrase' || isExtracted(t.value) }"
                 @click="openWord(t.value)"
               >
                 {{ t.value }}
@@ -560,7 +603,11 @@ async function saveAll() {
     </div>
 
     <!-- 点词查义弹窗 -->
-    <UiModal v-model="lookupVisible" :title="`词义查询 · ${lookupWord}`" size="sm">
+    <UiModal
+      v-model="lookupVisible"
+      :title="`${lookupKind === 'phrase' ? '短语释义' : '词义查询'} · ${lookupWord}`"
+      size="sm"
+    >
       <div v-if="lookupLoading" class="ep-lookup-loading">
         <span class="spinner"></span><span>正在查询…</span>
       </div>

@@ -890,3 +890,23 @@ Prettier + build；E2E 53。**需重启后端生效**（新增 star/quota/snooze
 **测试**：新增后端 4 颗（normalize E-G / 缓存命中忽略大小写 / 空释义不缓存 / 500 条上限淘汰，
 全库 327）；examScoring 双侧用例表补 E-G。全部门禁：后端 327 全绿 + ruff 双查；
 Vitest 141 + ESLint + Prettier + build；E2E 53。**需重启后端生效**（迁移加列 + 缓存）。
+
+## 2026-09-26 点词两处修复（用户实测反馈）
+
+用户在错题详情（readonly 精读面板）发现两个问题：
+
+### ① 点词弹窗「加入生词本」后原词不变红
+`addLookupWord` 只入库、不动本地状态，`isExtracted` 只看 AI 提取的 `english_words`。
+现在加 `addedWords` 本地集合（reactive Set）：点词弹窗或勾选清单加入成功后立即登记，
+`isExtracted` 一并检查，原词立刻套红色高亮，不用刷新页面。
+
+### ② 短语不能整体点，只能一个词一个词点
+`tokenize` 原来只按单词切分。现在由 `english_phrases` 生成 `tokenRe` 正则
+（长短语优先、词间 `\s+`、前后字母边界 lookaround），短语在原文/句子拆解里
+**整体成一个可点 token** 且直接高亮；点击弹窗直接用已提取释义（`lookupKind='phrase'`），
+**不调 `/ai/sense`**（那是单词接口）；「加入生词本」按 kind=phrase 入库。
+
+**测试**：新增 `tests/englishPanelWords.test.js` 3 颗（短语整体成 token + 高亮、
+加词后立刻变红、点短语零 AI 调用且 kind=phrase），Vitest 141→144。
+ESLint 抓到一次改名残留（`/ai/sense` 还用旧参数名 `word`），已修。
+门禁全绿：ESLint + Prettier + Vitest 144 + build + E2E 53。纯前端改动，无需重启后端。
