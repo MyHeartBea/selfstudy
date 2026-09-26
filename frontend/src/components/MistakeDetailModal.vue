@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import request from '../api/request'
 import DetailMeta from './DetailMeta.vue'
 import EnglishAnalysisPanel from './EnglishAnalysisPanel.vue'
+import MathText from './MathText.vue'
 import RelatedList from './RelatedList.vue'
 import ReviewHistory from './ReviewHistory.vue'
 import { formatTime } from '../composables/useBaseData'
@@ -37,6 +38,10 @@ const sourceUpdating = ref(false)
 const currentId = ref(props.mistakeId)
 const detail = ref(null)
 const reviewHistory = ref([])
+// AI 举一反三：variant 为 null 隐藏面板；换题/关弹窗时清掉
+const variant = ref(null)
+const variantLoading = ref(false)
+const variantSaving = ref(false)
 
 let detailRequestId = 0
 
@@ -49,9 +54,55 @@ watch(
     if (value && currentId.value) {
       loadDetail(currentId.value)
     }
+    // 换题/关闭时清掉上一题的变式，别让张三的变式挂在李四的详情里
+    variant.value = null
   },
   { immediate: true },
 )
+
+async function genVariant() {
+  if (!currentId.value || variantLoading.value) return
+  variantLoading.value = true
+  try {
+    const res = await request.post('/ai/variant', { mistake_id: currentId.value })
+    variant.value = res.data.data
+  } catch (err) {
+    // 拦截器统一弹错（400 未配置 AI / 502 上游失败），这里不用重复提示
+  } finally {
+    variantLoading.value = false
+  }
+}
+
+/** 把变式题存成一条新错题（沿用原题的科目/标签，来源记 other）。 */
+async function saveVariant() {
+  if (!variant.value || !detail.value) return
+  variantSaving.value = true
+  try {
+    await request.post('/mistakes', {
+      subject_id: detail.value.subject_id,
+      sub_subject_id: detail.value.sub_subject_id || null,
+      question_type: detail.value.question_type === 'multi' ? 'choice' : detail.value.question_type,
+      question: variant.value.question,
+      option_a: variant.value.option_a,
+      option_b: variant.value.option_b,
+      option_c: variant.value.option_c,
+      option_d: variant.value.option_d,
+      correct_answer: variant.value.answer,
+      analysis: variant.value.analysis,
+      difficulty: detail.value.difficulty || 3,
+      difficulty_points: variant.value.focus || '变式训练',
+      knowledge_tags: detail.value.knowledge_tags || [],
+      source_type: 'other',
+      source_name: '举一反三',
+    })
+    toast.success('变式题已存入错题本')
+    variant.value = null
+  } catch (err) {
+    // 校验失败(400)/其它错误拦截器统一提示
+  } finally {
+    variantSaving.value = false
+  }
+}
 
 async function loadDetail(id) {
   const requestId = ++detailRequestId
@@ -263,6 +314,17 @@ async function deleteCurrent() {
             <Icon name="play" :size="13" />
             练这道题
           </UiButton>
+          <UiButton
+            size="sm"
+            variant="outline"
+            :loading="variantLoading"
+            :disabled="Boolean(detail.passage_text)"
+            :title="detail.passage_text ? '整篇精读不支持单题变式' : ''"
+            @click="genVariant"
+          >
+            <Icon name="sparkles" :size="13" />
+            举一反三
+          </UiButton>
           <UiButton size="sm" variant="success" :loading="reviewing" @click="markReview(true)"
             >标记掌握</UiButton
           >
@@ -289,6 +351,41 @@ async function deleteCurrent() {
           >
             设为真题
           </UiButton>
+        </div>
+      </div>
+
+      <!-- AI 举一反三结果：变式题 + 独立答案 + 解析，可一键存入错题本 -->
+      <div v-if="variant" class="variant-panel">
+        <div class="vp-head">
+          <h4 class="vp-title">
+            <Icon name="sparkles" :size="14" />
+            举一反三 · 变式题
+          </h4>
+          <span v-if="variant.focus" class="vp-focus">{{ variant.focus }}</span>
+        </div>
+        <div class="vp-question">
+          <MathText :text="variant.question" />
+        </div>
+        <div v-if="variant.option_a" class="vp-options">
+          <div v-for="opt in ['a', 'b', 'c', 'd']" :key="opt" class="vp-option">
+            <template v-if="variant[`option_${opt}`]"
+              ><b>{{ opt.toUpperCase() }}.</b> <MathText :text="variant[`option_${opt}`]"
+            /></template>
+          </div>
+        </div>
+        <div class="vp-answer">
+          <span class="vp-label">参考答案</span>
+          <MathText :text="variant.answer" />
+        </div>
+        <div class="vp-analysis">
+          <span class="vp-label">解析</span>
+          <MathText :text="variant.analysis" />
+        </div>
+        <div class="vp-actions">
+          <UiButton size="sm" variant="primary" :loading="variantSaving" @click="saveVariant">
+            存入错题本
+          </UiButton>
+          <UiButton size="sm" variant="ghost" @click="variant = null">收起</UiButton>
         </div>
       </div>
 
@@ -510,5 +607,76 @@ async function deleteCurrent() {
 }
 .history-details[open] summary {
   border-radius: var(--r-md) var(--r-md) 0 0;
+}
+
+/* AI 举一反三面板：与详情其余区块拉开一档 */
+.variant-panel {
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px dashed var(--accent-ring);
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+}
+.vp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.vp-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--accent-ink);
+}
+.vp-focus {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.vp-question {
+  font-size: 14.5px;
+  line-height: 1.9;
+}
+.vp-options {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 13.5px;
+}
+.vp-option b {
+  margin-right: 6px;
+  color: var(--ink-2);
+}
+.vp-label {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+.vp-answer {
+  display: flex;
+  align-items: baseline;
+  margin-top: 12px;
+  font-weight: 700;
+}
+.vp-analysis {
+  display: flex;
+  align-items: baseline;
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--ink-2);
+}
+.vp-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
 }
 </style>

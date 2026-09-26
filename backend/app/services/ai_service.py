@@ -317,6 +317,50 @@ def analyze_weekly_report(items: List[dict]) -> dict:
     return parsed
 
 
+def generate_variant(mistake: dict) -> dict:
+    """基于一道错题生成"举一反三"的变式题（同一考点、不同情境）。
+
+    这是分析类任务，**保持推理开启**——逐题解析关推理实测会编造原文引用
+    （AGENTS 第 5 节），出题同理：变式的答案必须经过独立推导。
+    """
+    options_block = "\n".join(
+        f"原题选项 {letter}：{mistake.get(f'option_{letter.lower()}', '')}"
+        for letter in "ABCD"
+        if mistake.get(f"option_{letter.lower()}", "")
+    )
+    prompt = (
+        "你是考研命题研究专家。基于下面这道错题，出一道「举一反三」的变式题：\n"
+        "- 考同一个核心知识点/方法，但情境、数字或问法必须改变（不是只改数字的换皮）；\n"
+        "- 难度与原题相当或略高，不超纲；\n"
+        "- 变式题的答案必须经过你独立推导，绝不沿用原题答案；\n"
+        "- 解析先点明与原题的共同考点，再讲这道变式特有的坑。\n\n"
+        f"原题题干：\n{mistake.get('question', '')}\n\n"
+        + (options_block + "\n\n" if options_block else "")
+        + f"原题正确答案：{mistake.get('correct_answer', '')}\n"
+        f"原题解析：\n{(mistake.get('analysis') or '')[:2000]}\n\n"
+        "输出严格 JSON（不要 Markdown）：\n"
+        '{"question": "变式题干（数学表达式用 \\\\(...\\\\) 或 $$...$$ 包裹）", '
+        '"option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...", '
+        '"answer": "A/B/C/D（无选项形式填参考答案文本）", '
+        '"analysis": "解析", "focus": "本变式考查的核心能力（一句话）"}\n'
+        "若原题是解答题/填空题（无选项），四个 option 字段填空字符串，answer 填参考答案文本。\n"
+        "原题的选项与答案只用于你理解考点，严禁只把原题换个数字了事。"
+    )
+    parsed = _chat_json([{"role": "user", "content": prompt}], max_tokens=3000)
+    if not isinstance(parsed, dict) or not str(parsed.get("question", "")).strip():
+        raise AiRequestError("AI 返回的变式题格式异常")
+    return {
+        "question": str(parsed.get("question", "")).strip(),
+        "option_a": str(parsed.get("option_a", "")).strip(),
+        "option_b": str(parsed.get("option_b", "")).strip(),
+        "option_c": str(parsed.get("option_c", "")).strip(),
+        "option_d": str(parsed.get("option_d", "")).strip(),
+        "answer": str(parsed.get("answer", "")).strip(),
+        "analysis": str(parsed.get("analysis", "")).strip(),
+        "focus": str(parsed.get("focus", "")).strip(),
+    }
+
+
 def _parse_prompt(standard_tags: List[str] | None = None) -> str:
     prompt = (
         "你是一个考研错题整理助手。请根据用户提供的题目内容，输出严格的 JSON（不要 Markdown），字段如下：\n"

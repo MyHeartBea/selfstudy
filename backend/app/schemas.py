@@ -175,6 +175,12 @@ class ErrorReasonUpdate(BaseModel):
     reason: str = Field(default="", max_length=20)
 
 
+class VariantRequest(BaseModel):
+    """AI 举一反三：基于哪道错题出变式。"""
+
+    mistake_id: int
+
+
 class StarRequest(BaseModel):
     """收藏标星：不传 starred 时为切换（toggle）。"""
 

@@ -426,5 +426,61 @@ class ImagesSnapshotTest(unittest.TestCase):
         self.assertLessEqual(len(list(settings.BACKUP_DIR.glob("images_backup_*.zip"))), 5)
 
 
+class VariantEndpointTest(unittest.TestCase):
+    """AI 举一反三端点：结果透传、404 不触发 AI、错题不存在不烧额度。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    def _create_mistake(self):
+        conn = get_connection()
+        try:
+            cur = conn.execute(
+                "INSERT INTO mistakes (subject_id, question_type, question, correct_answer, "
+                "difficulty, difficulty_points, analysis) "
+                "VALUES (3,'choice','变式原题',  'A',3,'难点','原题解析')"
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    def test_variant_returns_generated_result(self):
+        from app.services import ai_service as ai_mod
+
+        mid = self._create_mistake()
+        fake = {
+            "question": "变式后的新题干",
+            "option_a": "1",
+            "option_b": "2",
+            "option_c": "3",
+            "option_d": "4",
+            "answer": "B",
+            "analysis": "变式解析",
+            "focus": "同考点不同情境",
+        }
+        with patch.object(ai_mod, "generate_variant", return_value=fake) as gen:
+            r = client.post("/api/ai/variant", json={"mistake_id": mid})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["data"]["question"], "变式后的新题干")
+        self.assertEqual(r.json()["data"]["answer"], "B")
+        gen.assert_called_once()
+
+    def test_variant_404_without_ai_call(self):
+        from app.services import ai_service as ai_mod
+
+        with patch.object(
+            ai_mod,
+            "generate_variant",
+            side_effect=AssertionError("404 时不应调 AI"),
+        ):
+            r = client.post("/api/ai/variant", json={"mistake_id": 999999})
+        self.assertEqual(r.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

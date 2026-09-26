@@ -11,9 +11,9 @@ from app.config import settings
 from app.database import get_connection
 from app.metrics import mask_secret
 from app.responses import error, ok
-from app.schemas import AiAnalyzeRequest, AiEnglishRequest, AiOcrRequest
+from app.schemas import AiAnalyzeRequest, AiEnglishRequest, AiOcrRequest, VariantRequest
 from app.security import ai_rate_limit
-from app.services import ai_service, local_ocr
+from app.services import ai_service, local_ocr, mistake_service
 from app.services.ai_service import AiNotConfigured, AiRequestError
 
 logger = logging.getLogger("kaoyan.ai")
@@ -322,6 +322,28 @@ def english_analysis(body: AiEnglishRequest):
     finally:
         conn.close()
     return ok(parsed, f"英语整篇解析完成{_degrade_note(failed_channels)}")
+
+
+@router.post("/variant", dependencies=[Depends(ai_rate_limit)])
+def generate_variant(body: VariantRequest):
+    """AI 举一反三：基于一道错题出一道同考点的变式题（约 10-30 秒）。
+
+    分析类任务保持推理开启——变式答案必须独立推导，关推理实测会编造（AGENTS 第 5 节）。
+    不缓存：每次生成的变式都该不一样，缓存反而违背功能初衷。
+    """
+    conn = get_connection()
+    try:
+        detail = mistake_service.get_mistake_detail(conn, body.mistake_id)
+        if detail is None:
+            return error(404, "错题不存在")
+    finally:
+        conn.close()
+    try:
+        return ok(ai_service.generate_variant(detail))
+    except AiNotConfigured:
+        return error(400, AI_NOT_CONFIGURED_MESSAGE)
+    except Exception as exc:
+        return error(502, _ai_error_message(exc))
 
 
 @router.post("/weekly-report", dependencies=[Depends(ai_rate_limit)])
