@@ -5,6 +5,8 @@ import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
 import RichText from '../components/RichText.vue'
+import MathText from '../components/MathText.vue'
+import { clozeFormula } from '../utils/formulaCloze'
 import { markdownToPlain } from '../utils/markdown'
 import { formatTime } from '../composables/useBaseData'
 import { useResourceList } from '../composables/useResourceList'
@@ -44,6 +46,9 @@ const dialogVisible = ref(false)
 const detailVisible = ref(false)
 const detailItem = ref(null)
 const memorizeVisible = ref(false)
+// 挖空默写：开的时候卡片正面把公式段遮成横线，逼你先回忆再翻面
+const clozeMode = ref(false)
+
 const saving = ref(false)
 const editingId = ref(null)
 const form = reactive({
@@ -353,6 +358,10 @@ onActivated(() => {
                 >{{ reciteQueue[0].category }}</span
               >
               <h3 class="memorize-title serif">{{ reciteQueue[0].title }}</h3>
+              <!-- 挖空默写：正面把公式段遮成横线，先默写再翻面对答案 -->
+              <div v-if="clozeMode" class="recite-cloze">
+                <MathText :text="clozeFormula(reciteQueue[0].content)" />
+              </div>
               <span class="recite-hint">空格翻面 · 右方向键 记住 / 左方向键 待会再来</span>
             </template>
             <template #back>
@@ -370,6 +379,9 @@ onActivated(() => {
       </div>
       <template #footer>
         <UiButton variant="ghost" @click="memorizeVisible = false">退出</UiButton>
+        <UiButton :variant="clozeMode ? 'primary' : 'outline'" @click="clozeMode = !clozeMode">
+          {{ clozeMode ? '挖空：开' : '挖空：关' }}
+        </UiButton>
         <template v-if="reciteQueue.length">
           <UiButton variant="outline" @click="flyRecite(false)">没记住，待会再来</UiButton>
           <UiButton v-if="reciteRevealed" variant="primary" @click="flyRecite(true)"
@@ -691,5 +703,13 @@ onActivated(() => {
   font-size: 12.5px;
   font-weight: 700;
   color: var(--ink-2);
+}
+/* 挖空默写框：虚线框暗示"这里缺一块，你来补" */
+.recite-cloze {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  text-align: left;
 }
 </style>

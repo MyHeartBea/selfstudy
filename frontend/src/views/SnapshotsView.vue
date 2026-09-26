@@ -71,6 +71,20 @@ async function makeSnapshot() {
   }
 }
 
+async function makeImagesSnapshot() {
+  busy.value = true
+  failed.value = ''
+  try {
+    const res = await request.post('/snapshots/images', null, { silent: true })
+    toast.success(res.data.message || '图片目录已备份')
+    await load()
+  } catch (err) {
+    failed.value = err.response?.data?.message || '图片目录备份失败'
+  } finally {
+    busy.value = false
+  }
+}
+
 async function restore(row) {
   const typed = await confirmDialog({
     title: '整库回滚确认',
@@ -138,6 +152,10 @@ onMounted(load)
         <UiButton variant="primary" :disabled="busy || loading" @click="makeSnapshot">
           <Icon name="download" :size="14" />
           立刻备份一次
+        </UiButton>
+        <UiButton variant="outline" :disabled="busy || loading" @click="makeImagesSnapshot">
+          <Icon name="image" :size="14" />
+          备份图片目录
         </UiButton>
       </div>
     </header>

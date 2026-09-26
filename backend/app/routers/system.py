@@ -9,7 +9,13 @@ from fastapi import APIRouter, Query
 
 from app import metrics
 from app.config import settings
-from app.database import get_connection, list_snapshots, restore_snapshot, snapshot_database
+from app.database import (
+    get_connection,
+    list_snapshots,
+    restore_snapshot,
+    snapshot_database,
+    snapshot_images,
+)
 from app.responses import error, ok, server_error
 from app.schemas import SnapshotRestore
 from app.security import token_configured
@@ -137,6 +143,20 @@ def create_snapshot(label: str = Query("manual", max_length=40)):
     if not name:
         return error(500, "快照创建失败")
     return ok({"name": name}, "快照已创建")
+
+
+@router.post("/snapshots/images")
+def create_images_snapshot():
+    """把图片目录打包备份（数据库快照不含图片，这是图片唯一的"后悔药"）。
+
+    缩略图可再生不打包；保留最近 5 份，旧的自动清理。
+    """
+    name = snapshot_images()
+    if name is None:
+        return error(500, "图片目录备份失败（详见后端日志）")
+    if name == "":
+        return ok({"skipped": True}, "图片目录为空，未生成备份")
+    return ok({"name": name}, f"图片目录已备份为 {name}")
 
 
 @router.post("/snapshots/restore")

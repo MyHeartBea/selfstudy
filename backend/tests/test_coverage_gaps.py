@@ -393,5 +393,38 @@ class WeakPracticeTest(unittest.TestCase):
         self.assertEqual(r.json()["data"], [])
 
 
+class ImagesSnapshotTest(unittest.TestCase):
+    """图片目录打包备份：zip 生成、缩略图不打包、超份数自动轮换。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    def test_zip_created_and_rotated(self):
+        import zipfile
+
+        from app.database import snapshot_images
+
+        img_dir = settings.DB_PATH.parent / "images"
+        img_dir.mkdir(parents=True, exist_ok=True)
+        (img_dir / "a.png").write_bytes(b"x")
+        (img_dir / "_thumbs").mkdir()
+        (img_dir / "_thumbs" / "t.webp").write_bytes(b"y")
+
+        name = snapshot_images()
+        self.assertTrue(name and name.startswith("images_backup_"))
+        with zipfile.ZipFile(settings.BACKUP_DIR / name) as zf:
+            names = zf.namelist()
+        self.assertIn("a.png", names)
+        self.assertNotIn("_thumbs/t.webp", names)  # 缩略图可再生，不打包
+
+        for _ in range(6):
+            snapshot_images()
+        self.assertLessEqual(len(list(settings.BACKUP_DIR.glob("images_backup_*.zip"))), 5)
+
+
 if __name__ == "__main__":
     unittest.main()

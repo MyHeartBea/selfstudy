@@ -168,6 +168,43 @@ def maybe_daily_backup(min_interval_hours: float = DAILY_BACKUP_INTERVAL_HOURS) 
     return snapshot_database(DAILY_BACKUP_LABEL)
 
 
+# 图片目录打包备份：数据库快照**不含图片**（删了找不回的那句声明），图片的
+# "后悔药"走这里——把 data/images 打包成 zip 存进 BACKUP_DIR（缩略图可再生，不打包）。
+IMAGE_SNAPSHOT_MAX = 5
+
+
+def snapshot_images() -> Optional[str]:
+    """把图片目录打包成 zip 存入 BACKUP_DIR，保留最近 IMAGE_SNAPSHOT_MAX 份。
+
+    返回 zip 文件名；图片目录不存在/为空返回空串；失败记 ERROR 返回 None。
+    """
+    import zipfile
+
+    images_dir = settings.DB_PATH.parent / "images"
+    if not images_dir.is_dir() or not any(images_dir.iterdir()):
+        return ""
+    try:
+        settings.BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name = f"images_backup_{stamp}.zip"
+        dest = settings.BACKUP_DIR / name
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(images_dir.rglob("*")):
+                if not path.is_file() or "_thumbs" in path.parts:
+                    continue
+                zf.write(path, path.relative_to(images_dir))
+        olds = sorted(
+            settings.BACKUP_DIR.glob("images_backup_*.zip"),
+            key=lambda p: p.stat().st_mtime,
+        )
+        for old in olds[:-IMAGE_SNAPSHOT_MAX]:
+            old.unlink(missing_ok=True)
+        return name
+    except Exception:
+        logger.exception("图片目录快照创建失败")
+        return None
+
+
 # 快照文件名由本模块自己生成，回滚时按这个名字反向校验 —— 一个能整库覆盖当前数据的
 # 入口如果接受任意字符串，就等于把 BACKUP_DIR 变成了"读哪个文件都行"的口子。
 SNAPSHOT_NAME_RE = re.compile(r"^kaoyan_mistakes_\d{8}_\d{6}(?:_[A-Za-z0-9_\-]{1,40})?\.db$")
