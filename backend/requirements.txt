@@ -1,24 +1,24 @@
-# FastAPI 核心
-fastapi>=0.110.0
-uvicorn[standard]>=0.29.0
-
-# 数据校验（FastAPI 自带 Pydantic）
-pydantic>=2.5.0
+# 2026-09-26 起核心依赖锁定到实测版本（本机生产环境跑通的组合）。
+# 升级时先在本机 venv 验证 + 跑全量测试，再改这里的版本号。
+# CI 只装跑测试必需的子集（fastapi/uvicorn/pydantic/httpx），不受 winsdk 等可选依赖影响。
+fastapi==0.135.1
+uvicorn[standard]==0.41.0
+pydantic==2.12.5
+httpx==0.28.1
 
 # 本地 Windows OCR（截图粘贴后先转文字，再交给 AI 解析）。
 # 仅 Windows 安装：加平台标记后，Linux/CI 上 `pip install -r requirements.txt` 不再整体失败
 winsdk>=1.0.0b10; sys_platform == "win32"
 
 # 图片预处理（本地 OCR 多档增强：灰度/对比度/放大）
-Pillow>=10.0.0
+pillow==12.3.0
 
 # 真题库：Word/PDF 文本提取
-python-docx>=1.1.0
-pypdf>=4.0.0
+python-docx==1.2.0
+pypdf==6.17.0
 
 # 测试：用标准库 unittest（python -m unittest discover -s tests），不依赖第三方测试框架。
-# httpx 是 FastAPI TestClient 的依赖。
-httpx>=0.27.0
+# httpx 是 FastAPI TestClient 的依赖（版本随上面一起锁定）。
 
-# 可选开发工具（CI 只装上面这些；本地需要 lint/格式化/提交钩子时再装）：
-#   pip install ruff pre-commit
+# 可选开发工具（不锁定，按需安装）：
+#   pip install ruff pre-commit coverage

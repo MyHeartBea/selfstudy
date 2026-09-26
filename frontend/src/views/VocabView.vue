@@ -33,8 +33,6 @@ const nDue = useCountUp(computed(() => stats.value.due))
 const nMastered = useCountUp(computed(() => stats.value.mastered))
 
 // —— 词表 ——
-const page = ref(1)
-const pageSize = ref(15)
 const filters = reactive({
   // 命令面板跳回来时带 ?search=，得真的把它当筛选初始值（否则落在整本词表上）
   search: route.query.search ? String(route.query.search) : '',
@@ -48,15 +46,20 @@ const {
   total,
   loading,
   loadError,
+  page,
+  pageSize,
   load: loadList,
-} = useResourceList(async () => {
-  const params = { page: page.value, page_size: pageSize.value, sort: filters.sort }
-  if (filters.search.trim()) params.search = filters.search.trim()
-  if (filters.mastery !== null) params.mastery = filters.mastery
-  if (filters.kind) params.kind = filters.kind
-  const res = await request.get('/vocab', { params })
-  return res.data.data
-})
+} = useResourceList(
+  async ({ page, pageSize, signal }) => {
+    const params = { page, page_size: pageSize, sort: filters.sort }
+    if (filters.search.trim()) params.search = filters.search.trim()
+    if (filters.mastery !== null) params.mastery = filters.mastery
+    if (filters.kind) params.kind = filters.kind
+    const res = await request.get('/vocab', { params, signal })
+    return res.data.data
+  },
+  { pageSize: 15 },
+)
 
 // —— 生词详情（整卡可点打开）——
 const detailVisible = ref(false)
