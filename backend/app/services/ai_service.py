@@ -735,23 +735,23 @@ def _analyze_standard_content(
 
 
 _WORD_PROMPT = (
-    "你是考研英语词汇助手。请用中文解释英语单词，输出严格的 JSON（不要 Markdown）：\n"
-    '{"word": "原词", "phonetic": "音标（如 /əˈbændən/）", '
+    "你是考研英语词汇助手。请用中文解释英语单词或短语，输出严格的 JSON（不要 Markdown）：\n"
+    '{"word": "原词/短语", "phonetic": "音标（如 /əˈbændən/，短语可为空）", '
     '"meanings": [{"pos": "词性（动词/名词/形容词/副词/动名词/介词/连词等）", "meaning": "该词性下的中文释义"}], '
-    '"example": "一个含该词的例句（尽量贴考研语境）"}\n'
+    '"example": "一个含该词/短语的例句（尽量贴考研语境）"}\n'
     "要求：meanings 完整列出所有常见词性与义项（含动词/名词/形容词/动名词等），"
-    "不要只给一个意思；释义准确通俗。"
+    "不要只给一个意思；**多词短语要解释整体含义**（如 turns out=结果是，不是逐词拼凑）；释义准确通俗。"
 )
 
 
 def lookup_word(word: str, timeout: int | None = None) -> dict:
-    """点词查义：用 AI 解释任意英语单词，返回多词性释义（供点击未收录单词时调用）。"""
+    """点词/划词查义：用 AI 解释任意英语单词或短语（供点击/圈选未收录内容时调用）。"""
     word = (word or "").strip()
     parsed = _extract_json(
         _chat(
             [
                 {"role": "system", "content": _WORD_PROMPT},
-                {"role": "user", "content": f"请解释单词：{word}"},
+                {"role": "user", "content": f"请解释单词或短语：{word}"},
             ],
             timeout=timeout,
         )

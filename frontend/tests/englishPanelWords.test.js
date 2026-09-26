@@ -126,5 +126,62 @@ describe('EnglishAnalysisPanel 点词/点短语', () => {
     expect(post.mock.calls[0][0]).toBe('/vocab/import-english')
     expect(post.mock.calls[0][1].items).toHaveLength(1)
     expect(post.mock.calls[0][1].items[0].kind).toBe('phrase')
+    wrapper.unmount()
+  })
+
+  it('划选两个词浮出「查短语」，整段查义且入生词本 kind=phrase', async () => {
+    // 真实反馈：原文里 turns out 这类未提取短语只能逐词点，看不到整体释义
+    vi.spyOn(window, 'getSelection').mockReturnValue({
+      toString: () => 'turned out',
+      rangeCount: 1,
+      getRangeAt: () => ({
+        getBoundingClientRect: () => ({ left: 10, top: 100, width: 60, height: 20 }),
+      }),
+    })
+    const wrapper = mount(EnglishAnalysisPanel, {
+      props: { parsed: PARSED, readonly: true },
+      attachTo: document.body,
+    })
+    await wrapper.find('.english-panel').trigger('mouseup')
+    const btn = wrapper.find('.ep-sel-lookup')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain('turned out')
+    await btn.trigger('click')
+    await flushPromises()
+    expect(get).toHaveBeenCalledTimes(1)
+    expect(get.mock.calls[0][1].params.word).toBe('turned out')
+    expect(document.body.textContent).toContain('短语释义')
+    const addBtn = [...document.body.querySelectorAll('.modal-foot button')].find((b) =>
+      b.textContent.includes('加入生词本'),
+    )
+    expect(addBtn).toBeTruthy()
+    await addBtn.click()
+    await flushPromises()
+    expect(post.mock.calls[0][1].items[0].kind).toBe('phrase')
+    wrapper.unmount()
+    vi.restoreAllMocks()
+  })
+
+  it('划选把空位 __6__ 剔除；单词划选不出浮钮（点词已有入口）', async () => {
+    const wrapper = mount(EnglishAnalysisPanel, {
+      props: { parsed: PARSED, readonly: true },
+      attachTo: document.body,
+    })
+    const stubSel = (text) =>
+      vi.spyOn(window, 'getSelection').mockReturnValue({
+        toString: () => text,
+        rangeCount: 1,
+        getRangeAt: () => ({
+          getBoundingClientRect: () => ({ left: 10, top: 100, width: 60, height: 20 }),
+        }),
+      })
+    stubSel('in terms __6__ of')
+    await wrapper.find('.english-panel').trigger('mouseup')
+    expect(wrapper.find('.ep-sel-lookup').text()).toContain('in terms of')
+    vi.restoreAllMocks()
+    stubSel('exam')
+    await wrapper.find('.english-panel').trigger('mouseup')
+    expect(wrapper.find('.ep-sel-lookup').exists()).toBe(false)
+    wrapper.unmount()
   })
 })

@@ -112,6 +112,45 @@ function isExtracted(word) {
 }
 
 const wordRe = /[A-Za-z]+(?:['-][A-Za-z]+)*/g
+
+// —— 划词查短语：原文里圈选一段（如 turns out），浮出「查短语」按钮后整段查释义 ——
+function normalizePhraseSelection(text) {
+  const words = String(text || '')
+    .replace(/_{2,}\d*_{2,}/g, ' ') // 完形空位 __6__ 不算词
+    .replace(/[^A-Za-z'\-\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((w) => /[A-Za-z]/.test(w))
+  // 单词直接点词就行；超过 8 个词多半是误选整句
+  if (words.length < 2 || words.length > 8) return ''
+  return words.join(' ')
+}
+const selBtn = ref(false)
+const selBtnPos = ref({ x: 0, y: 0 })
+const selPhrase = ref('')
+function onPanelMouseup(e) {
+  if (e.target.closest && e.target.closest('.ep-sel-lookup')) return
+  if (lookupVisible.value) {
+    selBtn.value = false
+    return
+  }
+  const sel = typeof window !== 'undefined' ? window.getSelection() : null
+  const phrase = normalizePhraseSelection(sel ? sel.toString() : '')
+  if (!phrase || !sel || sel.rangeCount === 0) {
+    selBtn.value = false
+    return
+  }
+  const rect = sel.getRangeAt(0).getBoundingClientRect()
+  selPhrase.value = phrase
+  selBtnPos.value = { x: rect.left + rect.width / 2, y: Math.max(8, rect.top - 40) }
+  selBtn.value = true
+}
+function lookupSelection() {
+  const phrase = selPhrase.value
+  selBtn.value = false
+  if (phrase) openWord(phrase)
+}
+
 function tokenize(text) {
   const out = []
   let last = 0
@@ -135,7 +174,8 @@ async function openWord(text) {
   lookupVisible.value = true
   lookupLoading.value = true
   lookupWord.value = phrase ? phrase.phrase : text
-  lookupKind.value = phrase ? 'phrase' : 'word'
+  // 划选的多个词按短语查（AI 提取过的短语直接用已提取释义）
+  lookupKind.value = phrase || norm.includes(' ') ? 'phrase' : 'word'
   lookupData.value = null
   if (phrase) {
     // 短语是 AI 提取过的，直接用已提取释义，不调 AI
@@ -426,12 +466,23 @@ async function saveAll() {
 </script>
 
 <template>
-  <div class="english-panel">
+  <div class="english-panel" @mouseup="onPanelMouseup">
+    <!-- 划词查短语浮钮（fixed 定位，跟随圈选位置） -->
+    <button
+      v-if="selBtn"
+      type="button"
+      class="ep-sel-lookup"
+      :style="{ left: selBtnPos.x + 'px', top: selBtnPos.y + 'px' }"
+      @mousedown.prevent
+      @click="lookupSelection"
+    >
+      <Icon name="search" :size="12" />查短语「{{ selPhrase }}」
+    </button>
     <!-- ① 原文对照翻译（左英文 · 右翻译） -->
     <div class="ep-section">
       <div class="ep-section-head">
         <Icon name="book" :size="15" /><span>原文对照翻译</span
-        ><span class="ep-hint">左英语 · 右翻译（点击单词/短语查看释义）</span>
+        ><span class="ep-hint">点击单词查释义 · 划选一段可查短语</span>
       </div>
       <div v-if="bilingual.length" class="ep-bilingual">
         <div class="ep-bi">
@@ -731,6 +782,28 @@ async function saveAll() {
 .ep-word.known {
   border-bottom-color: var(--accent);
   color: var(--accent-ink);
+}
+
+/* 划词查短语浮钮：fixed 跟随圈选位置，transform 居中到选区中点上方 */
+.ep-sel-lookup {
+  position: fixed;
+  z-index: 90;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 320px;
+  padding: 5px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-ink);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: var(--shadow-2);
+  cursor: pointer;
 }
 
 .ep-translation {

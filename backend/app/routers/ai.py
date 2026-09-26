@@ -456,8 +456,8 @@ def _write_sense_cache(conn, cache_key: str, data: dict) -> None:
 
 
 @router.get("/sense", dependencies=[Depends(ai_rate_limit)])
-def word_sense(word: str = Query(..., min_length=1, max_length=60)):
-    """点词查义：用 AI 解释任意英语单词，返回多词性释义（同词 90 天内直接走缓存）。"""
+def word_sense(word: str = Query(..., min_length=1, max_length=120)):
+    """点词/划词查义：用 AI 解释任意英语单词或短语（同词 90 天内直接走缓存）。"""
     cache_key = _sense_cache_key(word)
     conn = get_connection()
     try:

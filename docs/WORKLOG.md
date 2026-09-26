@@ -952,3 +952,22 @@ PUT 进 id 189：english_sentences 升级为 **26 句逐句拆解**（翻译+句
 出现 29 项（16 词+13 短语），勾「look down on」→ toast「已加入生词本：新增 1 条」。
 
 AGENTS 第 5 节第 5 条同步改掉旧表述（「词汇只在智能录入显示」已不成立）。
+
+## 2026-09-26 · 划词查短语（用户回炉：要能在详情页看任意短语）
+
+**真实诉求澄清**：上一批开放的勾选列表不是用户要的。用户要的是——在详情页原文里遇到
+**未提取的短语**（如 turns out）时能**看整段释义**，而不是只能逐词点 turns、点 out。
+
+**方案 = 划词查短语**：
+- 前端 `EnglishAnalysisPanel`：面板根节点监听 `mouseup`，圈选 2~8 个英文词时在选区上方
+  浮出「查短语『xxx』」按钮（fixed 定位居中于选区，`@mousedown.prevent` 防点击清掉选区）。
+  `normalizePhraseSelection` 剔除完形空位 `__6__` 与非字母字符；单词划选不出按钮（点词已有入口）。
+  点击浮钮 → 弹窗按短语查义（`lookupKind='phrase'`，标题「短语释义」）→ 可入生词本 kind=phrase。
+- 后端 `/api/ai/sense`：`word` 参数 max_length 60→120；`_WORD_PROMPT`/`lookup_word` 改为
+  「单词或短语」，明确**多词短语解释整体含义**（turns out=结果是，不是逐词拼凑）。
+  缓存 key（sense_<小写>）对短语同样生效，同一短语 90 天内零 AI。
+
+**验证**：后端 328（新增 test_phrase_lookup_passthrough：短语原样透传 + 113 字符超旧上限可用）
+/ 前端 Vitest 145→147（划选出钮+整段查义+kind=phrase；空位剔除；单词划选不出钮）/ build / E2E 53
+全绿。生产 8000 实测：圈选原文 "turns out" → 浮钮「查短语『turns out』」出现（未点查询，
+不花真实 AI）。**后端改了 ai.py/ai_service.py，需重启后端生效**。

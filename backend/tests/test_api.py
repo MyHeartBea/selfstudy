@@ -347,6 +347,32 @@ class TestSenseCache(unittest.TestCase):
                 self.assertFalse(r.json()["data"].get("cached"))
         self.assertEqual(calls["n"], 2)
 
+    def test_phrase_lookup_passthrough(self):
+        """划词查短语：多词短语原样传给 lookup_word，且超过旧 60 字上限的也能查。"""
+        from unittest.mock import patch
+
+        from app.services import ai_service
+
+        seen = {}
+
+        def fake_lookup(word, timeout=None):
+            seen["word"] = word
+            return {
+                "word": word,
+                "phonetic": "",
+                "meanings": [{"pos": "动词", "meaning": "结果是；证明是"}],
+                "example": "it turned out to be true",
+            }
+
+        with patch.object(ai_service, "lookup_word", side_effect=fake_lookup):
+            r = self.client.get("/api/ai/sense", params={"word": "turns out"})
+            self.assertEqual(r.status_code, 200, r.text)
+            self.assertEqual(r.json()["data"]["word"], "turns out")
+            self.assertEqual(seen["word"], "turns out")
+            long_phrase = "a " + "very " * 20 + "long phrase"  # 113 字符，超过旧 60 上限
+            r2 = self.client.get("/api/ai/sense", params={"word": long_phrase})
+            self.assertEqual(r2.status_code, 200, r2.text)
+
     def test_cache_cleanup_cap(self):
         import json as _json
         import time as _time
