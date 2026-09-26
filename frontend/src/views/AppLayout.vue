@@ -454,7 +454,16 @@ onUnmounted(() => {
         在本环境已被证明可靠（开机动画即如此）。
       -->
       <div ref="deckInner" class="deck-inner">
-        <router-view />
+        <!-- KeepAlive 只缓存六个列表页：返回时不重拉、滚动位置保留；
+             数据新鲜度由各列表页的 onActivated 静默刷新负责（background load，
+             不闪骨架屏）。录入/复习/编辑这类会改数据的页面刻意不缓存。 -->
+        <router-view v-slot="{ Component }">
+          <KeepAlive
+            include="MistakeListView,VocabView,KnowledgeView,FormulaView,EssayView,PapersView"
+          >
+            <component :is="Component" />
+          </KeepAlive>
+        </router-view>
       </div>
     </main>
 

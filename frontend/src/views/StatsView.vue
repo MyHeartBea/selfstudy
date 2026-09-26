@@ -261,11 +261,15 @@ const subjectMerged = computed(() => {
 async function loadStats() {
   loading.value = true
   let failed = false
+  let merged = false
   try {
-    // 优先走聚合接口，回退到两个独立接口
+    // 优先走聚合接口（forecast/mocks 2026-09-26 起随包带回，进页面少两个往返）
     const res = await request.get('/dashboard', { silent: true })
     stats.value = res.data.data.stats
     reviewStats.value = res.data.data.reviews
+    merged = true
+    if (res.data.data.forecast) forecast.value = res.data.data.forecast
+    if (res.data.data.mocks) mocks.value = res.data.data.mocks
   } catch (err) {
     try {
       // 回退请求必须 silent：不静默时拦截器会给每个失败的请求各弹一条 toast
@@ -289,6 +293,7 @@ async function loadStats() {
       setTimeout(() => (donutGrown.value = true), 150)
     })
   }
+  return merged
 }
 
 function practiceTag(tag) {
@@ -317,9 +322,13 @@ onMounted(() => {
     })
     enterObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] })
   }
-  loadStats()
-  loadForecast()
-  loadMocks()
+  loadStats().then((merged) => {
+    // 聚合没带回 forecast/mocks（旧后端）时才单独兜底拉取
+    if (!merged) {
+      loadForecast()
+      loadMocks()
+    }
+  })
 })
 onBeforeUnmount(() => {
   if (enterObserver) enterObserver.disconnect()

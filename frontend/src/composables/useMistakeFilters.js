@@ -67,13 +67,15 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
   // 旧响应即使先回来也（因被 abort）不会把新结果覆盖成旧数据。
   let loadAbort = null
 
-  async function loadMistakes() {
+  async function loadMistakes({ background = false } = {}) {
     if (loadAbort) loadAbort.abort()
     loadAbort = new AbortController()
     const signal = loadAbort.signal
-    loading.value = true
+    // background = keep-alive 返回本页时的静默刷新：不挂 loading、不跑 onBeforeLoad
+    //（后台刷新悄悄清掉勾选状态是搞偷袭），失败也不清旧数据
+    if (!background) loading.value = true
     loadError.value = false
-    if (onBeforeLoad) onBeforeLoad()
+    if (onBeforeLoad && !background) onBeforeLoad()
     try {
       const params = { ...buildParams(), page: page.value, page_size: pageSize.value }
       const res = await request.get('/mistakes', { params, signal })
@@ -86,7 +88,7 @@ export function useMistakeFilters({ onBeforeLoad } = {}) {
       // 主动取消不是失败：那是新请求已经顶掉了本次，状态归新请求管。
       if (err?.code !== 'ERR_CANCELED') loadError.value = true
     } finally {
-      if (!signal.aborted) loading.value = false
+      if (!signal.aborted && !background) loading.value = false
     }
   }
 

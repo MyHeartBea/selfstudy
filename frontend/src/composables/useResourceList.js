@@ -38,11 +38,13 @@ export function useResourceList(fetcher, { pageSize: initialPageSize = 20 } = {}
   const pageSize = ref(initialPageSize)
   let abort = null
 
-  async function load() {
+  async function load({ background = false } = {}) {
     if (abort) abort.abort()
     abort = new AbortController()
     const signal = abort.signal
-    loading.value = true
+    // background = keep-alive 返回本页时的静默刷新：不挂 loading（骨架屏会把
+    // 保留的滚动位置和可见列表冲掉），失败也不清旧数据（旧数据好过空白）
+    if (!background) loading.value = true
     loadError.value = false
     try {
       const data = await fetcher({ page: page.value, pageSize: pageSize.value, signal })
@@ -58,12 +60,14 @@ export function useResourceList(fetcher, { pageSize: initialPageSize = 20 } = {}
       // toast 由 axios 拦截器统一弹，这里只记状态位给 UiLoadError。
       // 主动取消（新 load 顶掉旧的）不是失败：结果归新请求管，别清也别报错。
       if (err?.code !== 'ERR_CANCELED') {
-        items.value = []
-        total.value = 0
         loadError.value = true
+        if (!background) {
+          items.value = []
+          total.value = 0
+        }
       }
     } finally {
-      if (!signal.aborted) loading.value = false
+      if (!signal.aborted && !background) loading.value = false
     }
   }
 

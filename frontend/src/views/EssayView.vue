@@ -1,6 +1,6 @@
 <script setup>
 /** 作文档案：AI 批改过的英语作文历史（分数趋势 + 逐句改错回看）。 */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import request from '../api/request'
@@ -111,6 +111,12 @@ async function removeOne(row) {
 }
 
 onMounted(loadList)
+// keep-alive 返回本页：静默刷新，首次激活不刷（mounted 刚拉过）
+let evActivated = false
+onActivated(() => {
+  if (evActivated) loadList({ background: true })
+  evActivated = true
+})
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
 })

@@ -6,7 +6,7 @@
  * - 筛选条件同步到 URL（刷新/分享不丢）
  * - 批量操作 / 导入导出 / 详情弹窗
  */
-import { computed, onMounted, onUnmounted, ref, toRef, watch, nextTick } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, ref, toRef, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 import request from '../api/request'
@@ -312,6 +312,12 @@ async function exportAnki() {
 }
 
 onMounted(loadMistakes)
+// keep-alive 返回本页：静默刷新（不挂 loading、不清勾选），首次激活不刷（mounted 刚拉过）
+let mlActivated = false
+onActivated(() => {
+  if (mlActivated) loadMistakes({ background: true })
+  mlActivated = true
+})
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)
   if (syncTimer) clearTimeout(syncTimer)

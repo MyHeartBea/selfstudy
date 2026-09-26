@@ -3,7 +3,7 @@
  * 真题库：扫描历年真题文件夹 -> AI 拆题入库 -> 整卷模考。
  * 流水线状态轮询；题目浏览器支持查看题干/选项/答案/解析。
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -271,6 +271,14 @@ function stopPolling() {
 onMounted(() => {
   loadPapers()
   scan()
+})
+// keep-alive：本页有导入流水线轮询，人离开时必须停、回来时重新拉一次
+// （loadPapers 内部发现还在导入会自己把轮询续上）
+onDeactivated(stopPolling)
+let pvActivated = false
+onActivated(() => {
+  if (pvActivated) loadPapers()
+  pvActivated = true
 })
 onUnmounted(stopPolling)
 </script>

@@ -1,6 +1,6 @@
 <script setup>
 /** 知识点库：筛选 + 分页表格 + 编辑/创建弹窗 + AI 总结 + 一键练习 */
-import { onMounted, reactive, ref, toRef, watch } from 'vue'
+import { onActivated, onMounted, reactive, ref, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -69,8 +69,8 @@ const {
   { pageSize: 9 },
 )
 
-async function loadKnowledge() {
-  await fetchList()
+async function loadKnowledge({ background = false } = {}) {
+  await fetchList({ background })
   // 详情弹窗打开时，列表刷新后同步最新内容（如刚做完 AI 总结）
   if (!detailItem.value) return
   const fresh = items.value.find((it) => it.id === detailItem.value.id)
@@ -208,6 +208,13 @@ onMounted(() => {
     filters.tag = String(queryTag)
   }
   loadKnowledge()
+})
+
+// keep-alive 返回本页：静默刷新，首次激活不刷（mounted 刚拉过）
+let kvActivated = false
+onActivated(() => {
+  if (kvActivated) loadKnowledge({ background: true })
+  kvActivated = true
 })
 
 // 标签直达（错题详情弹窗「查看知识点」= /knowledge?tag=x）：

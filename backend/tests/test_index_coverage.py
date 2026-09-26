@@ -11,7 +11,7 @@ from datetime import date, timedelta
 
 from app.database import migrate_database
 from app.models.tables import TABLES_DDL
-from app.routers.reviews import _forecast_bounds as forecast_bounds
+from app.services.review_service import _forecast_bounds as forecast_bounds
 
 NEW_INDEXES = (
     "idx_solution_grades_mistake",

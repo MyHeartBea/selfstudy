@@ -689,3 +689,50 @@ def get_review_stats(conn: sqlite3.Connection) -> dict:
         "last_7_days": [dict(row) for row in last_7_rows],
         "by_subject": by_subject_rows,
     }
+
+
+def _forecast_bounds(days: int) -> tuple:
+    """把「按天比较」翻译成定宽字符串的「按范围比较」，让 `idx_mistakes_next_review_at` 用得上。
+
+    原来两句都写成 `date(next_review_at) < date('now','localtime')`：列被套进函数里，
+    SQLite 拿不到索引，只能整表 SCAN。`next_review_at` 是 ISO 文本（'%Y-%m-%d %H:%M:%S'，
+    见 review_service 的写入），日期前缀定宽，所以**日期串本身**就是干净的边界：
+      date(x) >= D  ⟺  x >= 'D'      （x 以 D 开头时 x >= D；date(x) < D 时 x < D）
+      date(x) <= D  ⟺  x < 'D+1天'
+    逐行结果与改前一致（只有日期的 '2026-09-20'、带 T 的写法同样成立；NULL 两边都不命中）。
+    """
+    today = datetime.now().astimezone().date()
+    return (today.isoformat(), (today + timedelta(days=days + 1)).isoformat())
+
+
+def forecast_items(conn: sqlite3.Connection, days: int = 30) -> dict:
+    """未来 N 天复习负荷分布：{overdue, items:[{day, count}]}（day=YYYY-MM-DD，含今日）。
+
+    /api/dashboard 聚合与 /reviews/forecast 端点共用这一份实现，别再各写一份。
+    """
+    lo, hi = _forecast_bounds(days)
+    overdue = conn.execute(
+        "SELECT COUNT(*) AS c FROM mistakes WHERE review_paused = 0 AND next_review_at < ?",
+        (lo,),
+    ).fetchone()["c"]
+    # GROUP BY day 用别名：day 是 date(next_review_at)，SQLite 允许按输出列分组
+    rows = conn.execute(
+        """
+        SELECT date(next_review_at) AS day, COUNT(*) AS count
+        FROM mistakes
+        WHERE review_paused = 0 AND next_review_at >= ? AND next_review_at < ?
+        GROUP BY day
+        ORDER BY day
+        """,
+        (lo, hi),
+    ).fetchall()
+    return {"overdue": overdue, "items": [dict(row) for row in rows]}
+
+
+def recent_mocks(conn: sqlite3.Connection, limit: int = 12) -> list:
+    """模考成绩存档（按时间倒序），统计页画分数趋势用。"""
+    rows = conn.execute(
+        "SELECT * FROM mock_records ORDER BY created_at DESC, id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [dict(row) for row in rows]

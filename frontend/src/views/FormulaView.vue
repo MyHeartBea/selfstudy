@@ -1,6 +1,6 @@
 <script setup>
 /** 公式背诵库：分类/搜索 + 卡片网格 + 详情/编辑 + 背诵模式 */
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -239,6 +239,12 @@ async function remove(item) {
 }
 
 onMounted(loadFormulas)
+// keep-alive 返回本页：静默刷新，首次激活不刷（mounted 刚拉过）
+let fvActivated = false
+onActivated(() => {
+  if (fvActivated) loadFormulas({ background: true })
+  fvActivated = true
+})
 </script>
 
 <template>

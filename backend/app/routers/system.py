@@ -60,13 +60,19 @@ def exam_countdown():
 
 @router.get("/dashboard")
 def dashboard():
-    """仪表盘聚合：一次请求返回错题统计 + 复习统计，减少首屏往返。"""
+    """仪表盘聚合：一次请求返回错题统计 + 复习统计 + 负荷预报 + 模考存档。
+
+    forecast/mocks 是 2026-09-26 并进来的：统计页此前进一次页面要发十几个请求，
+    这两项收进聚合后再砍两个往返；字段是**加法**，旧前端不读也不受影响。
+    """
     conn = get_connection()
     try:
         return ok(
             {
                 "stats": stats_service.get_stats(conn),
                 "reviews": review_service.get_review_stats(conn),
+                "forecast": review_service.forecast_items(conn, 30),
+                "mocks": review_service.recent_mocks(conn, 12),
             }
         )
     except Exception as exc:
