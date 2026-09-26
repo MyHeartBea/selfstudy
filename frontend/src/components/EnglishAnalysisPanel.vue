@@ -567,8 +567,8 @@ async function saveAll() {
       </div>
     </div>
 
-    <!-- ⑤ 猜词 & 重点短语（仅智能录入时显示，详情不再展示） -->
-    <div v-if="!readonly && vocabOptions.length" class="ep-section">
+    <!-- ⑤ 猜词 & 重点短语（智能录入与详情都要能勾选入生词本） -->
+    <div v-if="vocabOptions.length" class="ep-section">
       <div class="ep-section-head">
         <Icon name="tag" :size="15" /><span>猜词 &amp; 重点短语</span>
         <button type="button" class="ep-select-all" @click="toggleAll">

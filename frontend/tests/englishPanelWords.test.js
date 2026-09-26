@@ -105,4 +105,26 @@ describe('EnglishAnalysisPanel 点词/点短语', () => {
     await flushPromises()
     expect(post.mock.calls[0][1].items[0].kind).toBe('phrase')
   })
+
+  it('详情（readonly）也显示勾选列表，能勾短语加入生词本', async () => {
+    // 真实反馈：详情页过去没有勾选入口，用户无法自主选择短语
+    const wrapper = mount(EnglishAnalysisPanel, {
+      props: { parsed: PARSED, readonly: true },
+    })
+    const section = wrapper.findAll('.ep-section').find((s) => s.text().includes('猜词'))
+    expect(section).toBeTruthy()
+    expect(section.text()).toContain('look forward to')
+    expect(section.text()).toContain('glance')
+    const phraseRow = section
+      .findAll('label.ep-vocab-item')
+      .find((l) => l.text().includes('look forward to'))
+    await phraseRow.find('input[type=checkbox]').setValue()
+    const addBtn = section.findAll('button').find((b) => b.text().includes('加入生词本'))
+    await addBtn.trigger('click')
+    await flushPromises()
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(post.mock.calls[0][0]).toBe('/vocab/import-english')
+    expect(post.mock.calls[0][1].items).toHaveLength(1)
+    expect(post.mock.calls[0][1].items[0].kind).toBe('phrase')
+  })
 })

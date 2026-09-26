@@ -219,7 +219,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
      `/api/health` 的 `ai.by_model` 现在有 `prompt_avg` / `cache_hit_avg` / `cache_hit_pct`
      （`CacheHitMetricsTest` 钉住口径）。**真正的成本大头是输出（推理），不是输入**：
      同一轮实测输入共 2812 token，而两步分析调用就产出 4560 + 3663 = 8223 个推理 token。
-5. **英语整篇 = 一条错题**：存一条错题（含 `english_questions` 全部题目，每题带 `wrong` 标记；错的题自动打「答题失误」标签 + 思路前缀）；详情用 `EnglishAnalysisPanel`（readonly）展示整篇；词汇只在智能录入显示，保存后只在生词本。
+5. **英语整篇 = 一条错题**：存一条错题（含 `english_questions` 全部题目，每题带 `wrong` 标记；错的题自动打「答题失误」标签 + 思路前缀）；详情用 `EnglishAnalysisPanel`（readonly）展示整篇；词汇/短语勾选入生词本的列表**智能录入与详情都显示**（2026-09-26 起不再只在录入页，用户要在详情里自主勾短语）。
 6. **多图全存**：长题多张截图**全部**保存到 `images`；错题列表卡片**只显示第 1 张**，点进详情显示全部。
 7. **表格 / 图**：`RichText` 支持 Markdown 表格 + 十六进制等宽 `hex-dump`；AI 只会识别图不会重绘，正确表格 / 拓扑图看**原图**。
 8. **生词本**：`vocab_items` 有 `kind`（word / phrase）+「全部 / 单词 / 短语」筛选 +「词语」标签；点词查义 `/api/ai/sense`（**结果按词缓存进 `app_meta`**，key=`sense_<小写词>`，TTL 90 天 + 500 条上限双清理，命中响应带 `cached:true`，查不到释义的不缓存）；导入 `/vocab/import-english`（去重）。**点词弹窗有「加入生词本」**（AI 没提取到的词也能加，查义失败时释义留空），readonly 详情里同样可用；**加入成功后原文里该词要立刻变红**（`EnglishAnalysisPanel` 的 `addedWords` 本地集合，别只入库不动视图——用户实测反馈过"加了还是浅色"）。**AI 提取的重点短语在原文里整体成一个可点 token**（`tokenRe` 正则长短语优先、词间 `\s+`，短语直接用已提取释义**不调 AI**，入生词本 kind=phrase）；`tests/englishPanelWords.test.js` 钉住这两条。
