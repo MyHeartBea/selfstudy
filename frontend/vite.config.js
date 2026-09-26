@@ -1,9 +1,23 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 // 研错本前端：开发端口 5174，接口代理到本机 8000 的后端（生产模式后端直接挂载 dist）
-export default defineConfig({
-  plugins: [vue()],
+// `npm run analyze`（vite build --mode analyze）时额外产出 dist/bundle-report.html
+// —— bundle 组成此前从没可视化过，katex chunk 是否可按需没人验证过。
+export default defineConfig(({ mode }) => ({
+  plugins: [
+    vue(),
+    ...(mode === 'analyze'
+      ? [
+          visualizer({
+            filename: 'dist/bundle-report.html',
+            template: 'sunburst',
+            gzipSize: true,
+          }),
+        ]
+      : []),
+  ],
   // 组件层（DOM）测试需要浏览器环境：给卡片点击、弹窗等交互做回归
   test: {
     environment: 'happy-dom',
@@ -38,4 +52,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))

@@ -37,6 +37,15 @@ const pageSize = ref(10)
 const demoTotal = 83
 const demoPages = computed(() => Math.max(1, Math.ceil(demoTotal / pageSize.value)))
 
+// 画廊预览模式：深色切换派发全局事件（真正的换肤在 AppLayout）；窄屏预览把内容
+// 收进一个 420px 的宽度框。画廊此前只有浅色桌面态，改基件时深色/窄屏形态全靠
+// 脑补 —— 双主题审计（AGENTS 6.5 硬规则 4）现在可以就地完成。
+const narrowMode = ref(false)
+
+function toggleTheme() {
+  window.dispatchEvent(new CustomEvent('km:toggle-theme'))
+}
+
 const palette = [
   ['--bg', '纸面'],
   ['--surface', '卡面'],
@@ -135,276 +144,296 @@ onBeforeUnmount(() => {
       <p class="sub">
         宣纸 · 松烟墨 · 朱砂印 · 洒金 —— 令牌与基件的一站式打磨场（双主题切换见右上角）
       </p>
+      <div class="design-toolbar">
+        <UiButton variant="outline" size="sm" @click="toggleTheme">
+          <Icon name="sun" :size="14" /> 切换深浅主题
+        </UiButton>
+        <UiButton
+          :variant="narrowMode ? 'primary' : 'outline'"
+          size="sm"
+          @click="narrowMode = !narrowMode"
+        >
+          窄屏形态（420px）
+        </UiButton>
+      </div>
     </header>
 
-    <!-- 色板 -->
-    <section class="sec">
-      <h2>色板</h2>
-      <div class="swatches">
-        <div v-for="[v, name] in palette" :key="v" class="swatch">
-          <div class="chip" :style="{ background: `var(${v})` }"></div>
-          <b>{{ name }}</b
-          ><code>{{ v }}</code>
+    <div class="design-frame" :class="{ narrow: narrowMode }">
+      <!-- 色板 -->
+      <section class="sec">
+        <h2>色板</h2>
+        <div class="swatches">
+          <div v-for="[v, name] in palette" :key="v" class="swatch">
+            <div class="chip" :style="{ background: `var(${v})` }"></div>
+            <b>{{ name }}</b
+            ><code>{{ v }}</code>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- 字阶 -->
-    <section class="sec">
-      <h2>字阶 · 显示字体为本地子集思源宋体</h2>
-      <div class="type-spec">
-        <div v-for="[token, size, weight, text] in fontSpec" :key="token" class="type-row">
-          <code>{{ token }} {{ size }}/{{ weight }}</code>
-          <p :style="{ fontSize: `var(${token})`, fontWeight: weight }" class="spec-display">
-            {{ text }}
+      <!-- 字阶 -->
+      <section class="sec">
+        <h2>字阶 · 显示字体为本地子集思源宋体</h2>
+        <div class="type-spec">
+          <div v-for="[token, size, weight, text] in fontSpec" :key="token" class="type-row">
+            <code>{{ token }} {{ size }}/{{ weight }}</code>
+            <p :style="{ fontSize: `var(${token})`, fontWeight: weight }" class="spec-display">
+              {{ text }}
+            </p>
+          </div>
+          <p class="body-spec">
+            正文 15px/1.7：间隔重复 1/3/7/15/30 天；选择题填
+            A/B/C/D，数字答案带容差判分。数字使用等宽排版 <span class="num">0123456789</span>。
           </p>
         </div>
-        <p class="body-spec">
-          正文 15px/1.7：间隔重复 1/3/7/15/30 天；选择题填
-          A/B/C/D，数字答案带容差判分。数字使用等宽排版 <span class="num">0123456789</span>。
+      </section>
+
+      <!-- 动效 -->
+      <section class="sec">
+        <h2>动效 · 页首墨迹揭示</h2>
+        <div class="view-hero demo-hero">
+          <div class="view-hero-copy">
+            <div class="view-kicker">Ink Reveal</div>
+            <h2 :key="revealKey">今日待复习 107</h2>
+            <p class="view-desc">
+              换页时页首四段按 --stagger-2 级联，大标题以 clip-path 自左向右展开。
+            </p>
+          </div>
+          <div class="header-actions">
+            <UiButton size="sm" variant="outline" @click="revealKey++">重播揭示</UiButton>
+          </div>
+        </div>
+        <p class="cap">
+          全站动效锚点：页首四段级联（本样例，换页时自动播放）· 统计页大数字墨晕显影 ·
+          复习完成页「内容聚拢、落章收束」+ 题干汉字文字雨 · 点击纸面墨滴洇开 · Dock
+          磁吸与光标悬锋。全部引用 --dur / --stagger / --ease 令牌， prefers-reduced-motion 下由
+          base.css 全局规则压停直接落末帧，打印快照强制末帧。
         </p>
-      </div>
-    </section>
+      </section>
 
-    <!-- 动效 -->
-    <section class="sec">
-      <h2>动效 · 页首墨迹揭示</h2>
-      <div class="view-hero demo-hero">
-        <div class="view-hero-copy">
-          <div class="view-kicker">Ink Reveal</div>
-          <h2 :key="revealKey">今日待复习 107</h2>
-          <p class="view-desc">
-            换页时页首四段按 --stagger-2 级联，大标题以 clip-path 自左向右展开。
-          </p>
+      <!-- 性能自检 -->
+      <section class="sec">
+        <h2>性能 · 动效自检</h2>
+        <div class="fps-card">
+          <b class="num km-num fps-val">{{ fps || '--' }}</b>
+          <span class="fps-unit">FPS</span>
+          <span class="cap">帧耗时 {{ frameMs }}ms · {{ fpsVerdict }}（验收线 ≥55）</span>
         </div>
-        <div class="header-actions">
-          <UiButton size="sm" variant="outline" @click="revealKey++">重播揭示</UiButton>
+      </section>
+
+      <!-- 玻璃卡与骑缝 -->
+      <section class="sec">
+        <h2>玻璃卡 GlassCard · 渐变描边 + 流光 + 骑缝徽章</h2>
+        <div class="gcard-row">
+          <GlassCard class="demo-card">
+            <h3>悬停看流光</h3>
+            <p class="cap">渐变描边 + 玻璃拟态，背后透出氛围层光晕</p>
+          </GlassCard>
+          <GlassCard class="demo-card">
+            <template #badge><StageBadge text="骑缝徽章" /></template>
+            <h3>骑缝防裁切</h3>
+            <p class="cap">徽章挂在 #badge 插槽（外层 overflow:visible），不会被卡片圆角裁掉</p>
+          </GlassCard>
         </div>
-      </div>
-      <p class="cap">
-        全站动效锚点：页首四段级联（本样例，换页时自动播放）· 统计页大数字墨晕显影 ·
-        复习完成页「内容聚拢、落章收束」+ 题干汉字文字雨 · 点击纸面墨滴洇开 · Dock
-        磁吸与光标悬锋。全部引用 --dur / --stagger / --ease 令牌， prefers-reduced-motion 下由
-        base.css 全局规则压停直接落末帧，打印快照强制末帧。
-      </p>
-    </section>
+      </section>
 
-    <!-- 性能自检 -->
-    <section class="sec">
-      <h2>性能 · 动效自检</h2>
-      <div class="fps-card">
-        <b class="num km-num fps-val">{{ fps || '--' }}</b>
-        <span class="fps-unit">FPS</span>
-        <span class="cap">帧耗时 {{ frameMs }}ms · {{ fpsVerdict }}（验收线 ≥55）</span>
-      </div>
-    </section>
+      <!-- 按钮 -->
+      <section class="sec">
+        <h2>按钮 UiButton</h2>
+        <div class="row">
+          <UiButton variant="primary" @click="toast.success('印章主按钮 · 涟漪')">主按钮</UiButton>
+          <UiButton variant="outline">描边</UiButton>
+          <UiButton variant="ghost">幽灵</UiButton>
+          <UiButton variant="subtle">次要</UiButton>
+          <UiButton variant="danger" @click="askConfirm">危险 · 确认弹窗</UiButton>
+          <UiButton variant="success">成功</UiButton>
+          <UiButton variant="primary" loading>加载中</UiButton>
+          <UiButton variant="outline" disabled>禁用</UiButton>
+          <UiButton variant="primary" size="sm">小号</UiButton>
+          <UiButton variant="primary" size="lg">大号</UiButton>
+        </div>
+      </section>
 
-    <!-- 玻璃卡与骑缝 -->
-    <section class="sec">
-      <h2>玻璃卡 GlassCard · 渐变描边 + 流光 + 骑缝徽章</h2>
-      <div class="gcard-row">
-        <GlassCard class="demo-card">
-          <h3>悬停看流光</h3>
-          <p class="cap">渐变描边 + 玻璃拟态，背后透出氛围层光晕</p>
-        </GlassCard>
-        <GlassCard class="demo-card">
-          <template #badge><StageBadge text="骑缝徽章" /></template>
-          <h3>骑缝防裁切</h3>
-          <p class="cap">徽章挂在 #badge 插槽（外层 overflow:visible），不会被卡片圆角裁掉</p>
-        </GlassCard>
-      </div>
-    </section>
+      <!-- 表单控件 -->
+      <section class="sec">
+        <h2>表单控件</h2>
+        <div class="row">
+          <UiTabs
+            v-model="tab"
+            :tabs="[
+              { name: 'week', label: '周' },
+              { name: 'month', label: '月' },
+              { name: 'all', label: '全部' },
+            ]"
+          />
+          <UiSelect
+            v-model="subject"
+            :options="[
+              { label: '高等数学', value: 'math' },
+              { label: '英语阅读', value: 'en' },
+              { label: '计算机网络', value: 'net' },
+            ]"
+          />
+          <UiDropdown
+            label="批量操作"
+            :items="[
+              { label: '标记已掌握', command: 'mark', icon: 'check' },
+              { label: '导出 JSON', command: 'export', icon: 'download' },
+            ]"
+            @command="(c) => toast.info('命令：' + c)"
+          />
+          <UiCheckbox v-model="checked" label="仅看未掌握" />
+          <UiStars v-model="stars" />
+          <span class="ro-stars"><UiStars :model-value="4.5" readonly /> 只读半星</span>
+        </div>
+      </section>
 
-    <!-- 按钮 -->
-    <section class="sec">
-      <h2>按钮 UiButton</h2>
-      <div class="row">
-        <UiButton variant="primary" @click="toast.success('印章主按钮 · 涟漪')">主按钮</UiButton>
-        <UiButton variant="outline">描边</UiButton>
-        <UiButton variant="ghost">幽灵</UiButton>
-        <UiButton variant="subtle">次要</UiButton>
-        <UiButton variant="danger" @click="askConfirm">危险 · 确认弹窗</UiButton>
-        <UiButton variant="success">成功</UiButton>
-        <UiButton variant="primary" loading>加载中</UiButton>
-        <UiButton variant="outline" disabled>禁用</UiButton>
-        <UiButton variant="primary" size="sm">小号</UiButton>
-        <UiButton variant="primary" size="lg">大号</UiButton>
-      </div>
-    </section>
+      <!-- 反馈 -->
+      <section class="sec">
+        <h2>反馈 · Toast / 弹窗 / 骨架 / 空态</h2>
+        <div class="row">
+          <UiButton variant="outline" size="sm" @click="toast.success('保存成功')"
+            >成功 Toast</UiButton
+          >
+          <UiButton variant="outline" size="sm" @click="toast.error('网络开小差了')"
+            >错误 Toast</UiButton
+          >
+          <UiButton variant="outline" size="sm" @click="modalOpen = true">玻璃弹窗</UiButton>
+        </div>
+        <div class="skeleton-row">
+          <Skeleton variant="text" :count="2" />
+          <Skeleton variant="rect" :width="220" :height="88" :radius="14" />
+          <Skeleton variant="circle" :height="48" />
+        </div>
+        <div class="empty-box">
+          <UiEmpty text="还没有错题，去智能录入晒一道吧">
+            <UiButton variant="primary" size="sm">去录入</UiButton>
+          </UiEmpty>
+        </div>
+      </section>
 
-    <!-- 表单控件 -->
-    <section class="sec">
-      <h2>表单控件</h2>
-      <div class="row">
-        <UiTabs
-          v-model="tab"
-          :tabs="[
-            { name: 'week', label: '周' },
-            { name: 'month', label: '月' },
-            { name: 'all', label: '全部' },
-          ]"
-        />
-        <UiSelect
-          v-model="subject"
-          :options="[
-            { label: '高等数学', value: 'math' },
-            { label: '英语阅读', value: 'en' },
-            { label: '计算机网络', value: 'net' },
-          ]"
-        />
-        <UiDropdown
-          label="批量操作"
-          :items="[
-            { label: '标记已掌握', command: 'mark', icon: 'check' },
-            { label: '导出 JSON', command: 'export', icon: 'download' },
-          ]"
-          @command="(c) => toast.info('命令：' + c)"
-        />
-        <UiCheckbox v-model="checked" label="仅看未掌握" />
-        <UiStars v-model="stars" />
-        <span class="ro-stars"><UiStars :model-value="4.5" readonly /> 只读半星</span>
-      </div>
-    </section>
-
-    <!-- 反馈 -->
-    <section class="sec">
-      <h2>反馈 · Toast / 弹窗 / 骨架 / 空态</h2>
-      <div class="row">
-        <UiButton variant="outline" size="sm" @click="toast.success('保存成功')"
-          >成功 Toast</UiButton
-        >
-        <UiButton variant="outline" size="sm" @click="toast.error('网络开小差了')"
-          >错误 Toast</UiButton
-        >
-        <UiButton variant="outline" size="sm" @click="modalOpen = true">玻璃弹窗</UiButton>
-      </div>
-      <div class="skeleton-row">
-        <Skeleton variant="text" :count="2" />
-        <Skeleton variant="rect" :width="220" :height="88" :radius="14" />
-        <Skeleton variant="circle" :height="48" />
-      </div>
-      <div class="empty-box">
-        <UiEmpty text="还没有错题，去智能录入晒一道吧">
-          <UiButton variant="primary" size="sm">去录入</UiButton>
-        </UiEmpty>
-      </div>
-    </section>
-
-    <!-- 数据展示 -->
-    <section class="sec">
-      <h2>数据展示 · 瓷砖 / 进度环 / 面积图 / 条形 / 热力图</h2>
-      <div class="data-grid">
-        <GlassCard class="span2">
-          <div class="chart-head">
-            <div>
-              <h3>复习趋势</h3>
-              <p class="cap">近 7 天完成与正确（SVG 描边生长）</p>
+      <!-- 数据展示 -->
+      <section class="sec">
+        <h2>数据展示 · 瓷砖 / 进度环 / 面积图 / 条形 / 热力图</h2>
+        <div class="data-grid">
+          <GlassCard class="span2">
+            <div class="chart-head">
+              <div>
+                <h3>复习趋势</h3>
+                <p class="cap">近 7 天完成与正确（SVG 描边生长）</p>
+              </div>
             </div>
-          </div>
-          <AreaChart :labels="trendLabels" :series="trendSeries" :height="200" />
-        </GlassCard>
-        <GlassCard>
-          <h3>今日进度</h3>
-          <div class="ring-center-demo">
-            <RingProgress :percentage="62">
-              <div><b class="num">5/8</b><span>今日已完成</span></div>
-            </RingProgress>
-          </div>
-        </GlassCard>
-        <GlassCard class="span2">
-          <h3>瓷砖指标 MetricTile</h3>
-          <div class="tiles">
-            <MetricTile icon="layers" :value="83" label="累计错题 · 本周 +6" tone="accent" />
-            <MetricTile
-              icon="check"
-              value="75.2"
-              unit="%"
-              label="总正确率 · 105 次复习"
-              tone="green"
-            />
-            <MetricTile icon="flame" :value="5" unit="天" label="连续复习 · 最长 11 天" tone="gold">
-              <template #spark>
-                <svg width="70" height="30" viewBox="0 0 70 30">
-                  <polyline
-                    points="2,24 13,18 24,21 35,10 46,14 57,7 68,4"
-                    fill="none"
-                    stroke="var(--gold)"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                </svg>
-              </template>
-            </MetricTile>
-            <MetricTile icon="trending" :value="12" label="今日待复习" tone="teal" />
-          </div>
-        </GlassCard>
-        <GlassCard>
-          <h3>掌握度 BarRow</h3>
-          <div class="bars">
-            <BarRow label="0 级" :percentage="52" :value="24" />
-            <BarRow label="1 级" :percentage="100" :value="46" />
-            <BarRow label="2 级" :percentage="28" :value="13" color="var(--teal)" />
-          </div>
-          <div class="progress-demo">
-            <UiProgress :percentage="66" />
-            <span class="cap">UiProgress 66%</span>
-          </div>
-        </GlassCard>
-        <GlassCard class="span2">
-          <h3>复习热力图 Heatmap</h3>
-          <p class="cap">近 126 天 · 墨色深浅 = 复习量 · 级联入场</p>
-          <Heatmap :data="heatData" :max-weeks="18" />
-        </GlassCard>
-        <GlassCard>
-          <h3>分页与标签</h3>
-          <div class="stack">
-            <div class="row wrap">
-              <UiTag>标签</UiTag>
-              <UiTag color="var(--accent)" soft>朱砂</UiTag>
-              <UiTag color="var(--teal)" soft>黛青</UiTag>
-              <UiTag color="var(--gold)" soft>洒金</UiTag>
-              <UiTag size="sm">小号</UiTag>
+            <AreaChart :labels="trendLabels" :series="trendSeries" :height="200" />
+          </GlassCard>
+          <GlassCard>
+            <h3>今日进度</h3>
+            <div class="ring-center-demo">
+              <RingProgress :percentage="62">
+                <div><b class="num">5/8</b><span>今日已完成</span></div>
+              </RingProgress>
             </div>
-            <UiPagination
-              v-model:page="page"
-              v-model:page-size="pageSize"
-              :total="demoTotal"
-              @change="() => {}"
-            />
-            <span class="cap">
-              当前第 {{ page }} / {{ demoPages }} 页 · 每页 {{ pageSize }} 条
-            </span>
+          </GlassCard>
+          <GlassCard class="span2">
+            <h3>瓷砖指标 MetricTile</h3>
+            <div class="tiles">
+              <MetricTile icon="layers" :value="83" label="累计错题 · 本周 +6" tone="accent" />
+              <MetricTile
+                icon="check"
+                value="75.2"
+                unit="%"
+                label="总正确率 · 105 次复习"
+                tone="green"
+              />
+              <MetricTile
+                icon="flame"
+                :value="5"
+                unit="天"
+                label="连续复习 · 最长 11 天"
+                tone="gold"
+              >
+                <template #spark>
+                  <svg width="70" height="30" viewBox="0 0 70 30">
+                    <polyline
+                      points="2,24 13,18 24,21 35,10 46,14 57,7 68,4"
+                      fill="none"
+                      stroke="var(--gold)"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </template>
+              </MetricTile>
+              <MetricTile icon="trending" :value="12" label="今日待复习" tone="teal" />
+            </div>
+          </GlassCard>
+          <GlassCard>
+            <h3>掌握度 BarRow</h3>
+            <div class="bars">
+              <BarRow label="0 级" :percentage="52" :value="24" />
+              <BarRow label="1 级" :percentage="100" :value="46" />
+              <BarRow label="2 级" :percentage="28" :value="13" color="var(--teal)" />
+            </div>
+            <div class="progress-demo">
+              <UiProgress :percentage="66" />
+              <span class="cap">UiProgress 66%</span>
+            </div>
+          </GlassCard>
+          <GlassCard class="span2">
+            <h3>复习热力图 Heatmap</h3>
+            <p class="cap">近 126 天 · 墨色深浅 = 复习量 · 级联入场</p>
+            <Heatmap :data="heatData" :max-weeks="18" />
+          </GlassCard>
+          <GlassCard>
+            <h3>分页与标签</h3>
+            <div class="stack">
+              <div class="row wrap">
+                <UiTag>标签</UiTag>
+                <UiTag color="var(--accent)" soft>朱砂</UiTag>
+                <UiTag color="var(--teal)" soft>黛青</UiTag>
+                <UiTag color="var(--gold)" soft>洒金</UiTag>
+                <UiTag size="sm">小号</UiTag>
+              </div>
+              <UiPagination
+                v-model:page="page"
+                v-model:page-size="pageSize"
+                :total="demoTotal"
+                @change="() => {}"
+              />
+              <span class="cap">
+                当前第 {{ page }} / {{ demoPages }} 页 · 每页 {{ pageSize }} 条
+              </span>
+            </div>
+          </GlassCard>
+        </div>
+      </section>
+
+      <!-- 动效 -->
+      <section class="sec">
+        <h2>动效曲线</h2>
+        <div class="motion-row">
+          <div class="m-demo">
+            <div class="m-ball spring"></div>
+            <code>--spring</code>
           </div>
-        </GlassCard>
-      </div>
-    </section>
-
-    <!-- 动效 -->
-    <section class="sec">
-      <h2>动效曲线</h2>
-      <div class="motion-row">
-        <div class="m-demo">
-          <div class="m-ball spring"></div>
-          <code>--spring</code>
+          <div class="m-demo">
+            <div class="m-ball ease"></div>
+            <code>--ease</code>
+          </div>
+          <span class="cap"
+            >图标速览：<Icon name="sparkles" :size="15" /> <Icon name="flame" :size="15" />
+            <Icon name="trending" :size="15" /> <Icon name="zap" :size="15"
+          /></span>
         </div>
-        <div class="m-demo">
-          <div class="m-ball ease"></div>
-          <code>--ease</code>
-        </div>
-        <span class="cap"
-          >图标速览：<Icon name="sparkles" :size="15" /> <Icon name="flame" :size="15" />
-          <Icon name="trending" :size="15" /> <Icon name="zap" :size="15"
-        /></span>
-      </div>
-    </section>
+      </section>
 
-    <UiModal v-model="modalOpen" title="弹窗 · 玻璃质感" size="sm">
-      <p style="line-height: 1.8">宽弹窗、玻璃拟态、弹性入场、Esc 关闭。</p>
-      <template #footer
-        ><UiButton variant="ghost" size="sm" @click="modalOpen = false">关闭</UiButton></template
-      >
-    </UiModal>
+      <UiModal v-model="modalOpen" title="弹窗 · 玻璃质感" size="sm">
+        <p style="line-height: 1.8">宽弹窗、玻璃拟态、弹性入场、Esc 关闭。</p>
+        <template #footer
+          ><UiButton variant="ghost" size="sm" @click="modalOpen = false">关闭</UiButton></template
+        >
+      </UiModal>
+    </div>
   </div>
 </template>
 
@@ -674,5 +703,25 @@ h1 {
   .span2 {
     grid-column: span 1;
   }
+}
+
+/* 画廊预览工具条：就地切深色 / 窄屏形态，不用再去别处改 localStorage */
+.design-toolbar {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+/* 窄屏形态：420px 定宽框（手机竖屏的常见逻辑宽度），带一圈虚线边界 */
+.design-frame {
+  display: block;
+}
+.design-frame.narrow {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 8px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
 }
 </style>

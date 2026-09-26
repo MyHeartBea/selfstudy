@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "lint": "node ../scripts/frontend_lint.mjs check",
-    "lint:fix": "node ../scripts/frontend_lint.mjs format"
+    "lint:fix": "node ../scripts/frontend_lint.mjs format",
+    "analyze": "vite build --mode analyze"
   },
   "dependencies": {
     "@fontsource/noto-serif-sc": "^5.3.0",
@@ -38,6 +39,7 @@
     "globals": "^17.12.0",
     "happy-dom": "^20.14.3",
     "prettier": "^3.9.6",
+    "rollup-plugin-visualizer": "^7.1.1",
     "vite": "^5.4.0",
     "vitest": "^2.1.9"
   }
