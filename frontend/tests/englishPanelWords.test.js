@@ -106,27 +106,17 @@ describe('EnglishAnalysisPanel 点词/点短语', () => {
     expect(post.mock.calls[0][1].items[0].kind).toBe('phrase')
   })
 
-  it('详情（readonly）也显示勾选列表，能勾短语加入生词本', async () => {
-    // 真实反馈：详情页过去没有勾选入口，用户无法自主选择短语
-    const wrapper = mount(EnglishAnalysisPanel, {
+  it('详情（readonly）不显示勾选列表（用户要求删掉），录入页仍显示', async () => {
+    const ro = mount(EnglishAnalysisPanel, {
       props: { parsed: PARSED, readonly: true },
     })
-    const section = wrapper.findAll('.ep-section').find((s) => s.text().includes('猜词'))
+    expect(ro.findAll('.ep-section').some((s) => s.text().includes('猜词'))).toBe(false)
+    ro.unmount()
+    const edit = mount(EnglishAnalysisPanel, { props: { parsed: PARSED } })
+    const section = edit.findAll('.ep-section').find((s) => s.text().includes('猜词'))
     expect(section).toBeTruthy()
     expect(section.text()).toContain('look forward to')
-    expect(section.text()).toContain('glance')
-    const phraseRow = section
-      .findAll('label.ep-vocab-item')
-      .find((l) => l.text().includes('look forward to'))
-    await phraseRow.find('input[type=checkbox]').setValue()
-    const addBtn = section.findAll('button').find((b) => b.text().includes('加入生词本'))
-    await addBtn.trigger('click')
-    await flushPromises()
-    expect(post).toHaveBeenCalledTimes(1)
-    expect(post.mock.calls[0][0]).toBe('/vocab/import-english')
-    expect(post.mock.calls[0][1].items).toHaveLength(1)
-    expect(post.mock.calls[0][1].items[0].kind).toBe('phrase')
-    wrapper.unmount()
+    edit.unmount()
   })
 
   it('划选两个词浮出「查短语」，整段查义且入生词本 kind=phrase', async () => {
@@ -143,10 +133,11 @@ describe('EnglishAnalysisPanel 点词/点短语', () => {
       attachTo: document.body,
     })
     await wrapper.find('.english-panel').trigger('mouseup')
-    const btn = wrapper.find('.ep-sel-lookup')
-    expect(btn.exists()).toBe(true)
-    expect(btn.text()).toContain('turned out')
-    await btn.trigger('click')
+    // 浮钮 Teleport 到 body（弹窗毛玻璃会困住 fixed，见组件注释）
+    const btn = document.body.querySelector('.ep-sel-lookup')
+    expect(btn).toBeTruthy()
+    expect(btn.textContent).toContain('turned out')
+    btn.click()
     await flushPromises()
     expect(get).toHaveBeenCalledTimes(1)
     expect(get.mock.calls[0][1].params.word).toBe('turned out')
@@ -177,11 +168,11 @@ describe('EnglishAnalysisPanel 点词/点短语', () => {
       })
     stubSel('in terms __6__ of')
     await wrapper.find('.english-panel').trigger('mouseup')
-    expect(wrapper.find('.ep-sel-lookup').text()).toContain('in terms of')
+    expect(document.body.querySelector('.ep-sel-lookup').textContent).toContain('in terms of')
     vi.restoreAllMocks()
     stubSel('exam')
     await wrapper.find('.english-panel').trigger('mouseup')
-    expect(wrapper.find('.ep-sel-lookup').exists()).toBe(false)
+    expect(document.body.querySelector('.ep-sel-lookup')).toBeNull()
     wrapper.unmount()
   })
 })

@@ -467,17 +467,20 @@ async function saveAll() {
 
 <template>
   <div class="english-panel" @mouseup="onPanelMouseup">
-    <!-- 划词查短语浮钮（fixed 定位，跟随圈选位置） -->
-    <button
-      v-if="selBtn"
-      type="button"
-      class="ep-sel-lookup"
-      :style="{ left: selBtnPos.x + 'px', top: selBtnPos.y + 'px' }"
-      @mousedown.prevent
-      @click="lookupSelection"
-    >
-      <Icon name="search" :size="12" />查短语「{{ selPhrase }}」
-    </button>
+    <!-- 划词查短语浮钮：必须 Teleport 到 body —— 详情弹窗的毛玻璃(backdrop-filter)
+         会给 fixed 后代当包含块，困在弹窗里还会被滚动区裁掉（实测看不见） -->
+    <Teleport to="body">
+      <button
+        v-if="selBtn"
+        type="button"
+        class="ep-sel-lookup"
+        :style="{ left: selBtnPos.x + 'px', top: selBtnPos.y + 'px' }"
+        @mousedown.prevent
+        @click="lookupSelection"
+      >
+        <Icon name="search" :size="12" />查短语「{{ selPhrase }}」
+      </button>
+    </Teleport>
     <!-- ① 原文对照翻译（左英文 · 右翻译） -->
     <div class="ep-section">
       <div class="ep-section-head">
@@ -618,8 +621,8 @@ async function saveAll() {
       </div>
     </div>
 
-    <!-- ⑤ 猜词 & 重点短语（智能录入与详情都要能勾选入生词本） -->
-    <div v-if="vocabOptions.length" class="ep-section">
+    <!-- ⑤ 猜词 & 重点短语（仅智能录入时显示；详情页用户要求不放勾选列表） -->
+    <div v-if="!readonly && vocabOptions.length" class="ep-section">
       <div class="ep-section-head">
         <Icon name="tag" :size="15" /><span>猜词 &amp; 重点短语</span>
         <button type="button" class="ep-select-all" @click="toggleAll">
@@ -784,10 +787,10 @@ async function saveAll() {
   color: var(--accent-ink);
 }
 
-/* 划词查短语浮钮：fixed 跟随圈选位置，transform 居中到选区中点上方 */
+/* 划词查短语浮钮：Teleport 到 body，fixed 跟随圈选位置（z-index 要压过详情弹窗的 1000） */
 .ep-sel-lookup {
   position: fixed;
-  z-index: 90;
+  z-index: 1010;
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
