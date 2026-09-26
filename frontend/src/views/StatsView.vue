@@ -312,6 +312,11 @@ function practiceTag(tag) {
   })
 }
 
+function practiceWeakSet() {
+  // 弱项组卷：错得最多的前 5 类知识点抽成 20 题小卷，到期优先
+  router.push({ path: '/review', query: { mode: 'weak', count: 20 } })
+}
+
 /* ── 进入状态：进入动画（BootCalibration）结束时给 body 加 .ready，
    本页据此把根元素的 .entered 打开，页面动效才播放。
    不直接用 `body.ready` 选择器承接：scoped CSS 与全局类的组合太脆（实测踩过）。 */
@@ -557,6 +562,16 @@ onBeforeUnmount(() => {
           @click="practiceTag(reviewStats.weakest_tags[0].tag_name)"
         >
           直通薄弱练习
+        </UiButton>
+        <UiButton
+          v-if="reviewStats.weakest_tags.length"
+          variant="primary"
+          block
+          size="sm"
+          class="weak-more"
+          @click="practiceWeakSet"
+        >
+          组卷冲刺：5 类弱项 20 题
         </UiButton>
       </GlassCard>
 

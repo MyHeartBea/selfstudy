@@ -325,13 +325,28 @@ def get_practice_mistakes(
     source_year: Optional[str] = None,
     mistake_id: Optional[int] = None,
 ) -> List[dict]:
-    """按记忆曲线、错误时间或随机方式抽取错题进行自主练习。"""
+    """按记忆曲线、错误时间、随机或弱项组卷方式抽取错题进行自主练习。"""
     if mode in ("real_exam", "mock"):
         # 真题专项与真题模考同源：只取真题，其余条件照常生效
         mode = "curve"
         source_type = source_type or "real_exam"
     conditions = ["COALESCE(m.review_paused, 0) = 0"]
     params = []
+    if mode == "weak":
+        # 弱项组卷：从累计答错最多的前 5 个知识点里抽题（排序走默认的到期优先）。
+        # 其他筛选条件（科目/题型等）照常叠加，方便"只刷数学的弱项"这类组合。
+        weak_rows = conn.execute(
+            "SELECT t.tag FROM mistake_tag_map t JOIN mistakes m ON m.id = t.mistake_id "
+            "WHERE m.wrong_count > 0 GROUP BY t.tag ORDER BY SUM(m.wrong_count) DESC LIMIT 5"
+        ).fetchall()
+        tags = [r["tag"] for r in weak_rows]
+        if not tags:
+            return []
+        placeholders = ", ".join("?" for _ in tags)
+        conditions.append(
+            f"m.id IN (SELECT mistake_id FROM mistake_tag_map WHERE tag IN ({placeholders}))"
+        )
+        params.extend(tags)
     if mistake_id is not None:
         # 单题直练（详情页「练这道题」入口）
         conditions.append("m.id = ?")

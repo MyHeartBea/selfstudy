@@ -152,7 +152,7 @@ const rainChars = computed(() => {
 
 const practiceMode = computed(() => String(route.query.mode || ''))
 const isPractice = computed(() =>
-  ['curve', 'wrong_time', 'random', 'real_exam', 'mock'].includes(practiceMode.value),
+  ['curve', 'wrong_time', 'random', 'real_exam', 'mock', 'weak'].includes(practiceMode.value),
 )
 const practiceTitle = computed(
   () =>
@@ -162,6 +162,7 @@ const practiceTitle = computed(
       random: '随机抽题',
       real_exam: '真题专项',
       mock: '真题模考',
+      weak: '弱项组卷',
     })[practiceMode.value] || '',
 )
 const emptyText = computed(() =>

@@ -310,5 +310,88 @@ class ImageResolutionLimitTest(unittest.TestCase):
             self.assertIn("分辨率过大", str(ctx.exception))
 
 
+class EssayTrendTest(unittest.TestCase):
+    """/essays/trend：全量时间正序 + 得分率换算正确。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+        conn = get_connection()
+        try:
+            conn.execute(
+                "INSERT INTO essay_records (kind, prompt_text, essay_text, score, max_score) "
+                "VALUES ('e2_long','趋势甲','essay a',8,10)"
+            )
+            conn.execute(
+                "INSERT INTO essay_records (kind, prompt_text, essay_text, score, max_score) "
+                "VALUES ('e1_short','趋势乙','essay b',9,15)"
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_trend_is_time_ascending_with_pct(self):
+        r = client.get("/api/essays/trend")
+        self.assertEqual(r.status_code, 200)
+        data = r.json()["data"]
+        self.assertGreaterEqual(len(data), 2)
+        ids = [row["id"] for row in data]
+        self.assertEqual(ids, sorted(ids))  # 时间正序
+        for row in data:
+            self.assertEqual(row["pct"], round((row["score"] or 0) / (row["max_score"] or 1) * 100))
+        target = next(r for r in data if r["kind"] == "e2_long" and r["score"] == 8)
+        self.assertEqual(target["pct"], 80)
+
+
+class WeakPracticeTest(unittest.TestCase):
+    """弱项组卷：从错得最多的知识点里抽题；没有错题时返回空。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    def _add_mistake(self, question, tags, wrong_count=0):
+        conn = get_connection()
+        try:
+            cur = conn.execute(
+                "INSERT INTO mistakes (subject_id, question_type, question, correct_answer, "
+                "difficulty, difficulty_points, analysis, wrong_count) "
+                "VALUES (3,'choice',?,'A',3,'难点','解析',?)",
+                (question, wrong_count),
+            )
+            mid = cur.lastrowid
+            for tag in tags:
+                conn.execute(
+                    "INSERT INTO mistake_tag_map (mistake_id, tag) VALUES (?, ?)", (mid, tag)
+                )
+            conn.commit()
+            return mid
+        finally:
+            conn.close()
+
+    def test_weak_mode_selects_from_top_wrong_tags(self):
+        self._add_mistake("泰勒展开题", ["泰勒公式"], wrong_count=5)
+        self._add_mistake("级数题", ["级数"], wrong_count=3)
+        self._add_mistake("无错题", ["没错过"])
+        r = client.get("/api/reviews/practice", params={"mode": "weak", "count": 10})
+        self.assertEqual(r.status_code, 200)
+        questions = {i["question"] for i in r.json()["data"]}
+        self.assertIn("泰勒展开题", questions)
+        self.assertIn("级数题", questions)
+        self.assertNotIn("无错题", questions)
+
+    def test_weak_mode_empty_when_no_wrong(self):
+        self._add_mistake("只对不错的题", ["稳定发挥"], wrong_count=0)
+        r = client.get("/api/reviews/practice", params={"mode": "weak", "count": 10})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["data"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

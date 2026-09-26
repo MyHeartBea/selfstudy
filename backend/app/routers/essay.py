@@ -198,6 +198,36 @@ def list_essays(
         conn.close()
 
 
+@router.get("/trend")
+def essays_trend():
+    """全部批改记录的得分率时间序列（时间正序）：作文进步曲线用。
+
+    列表页的分页趋势条只反映当前页；这里一次给全量（单用户量级百条以内，
+    全量返回比前端拼分页简单可靠）。**必须声明在 /{essay_id} 之前**，
+    否则 "trend" 会先撞进 int 路径参数返回 422。
+    """
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id, kind, score, max_score, created_at FROM essay_records ORDER BY id ASC"
+        ).fetchall()
+        return ok(
+            [
+                {
+                    "id": r["id"],
+                    "kind": r["kind"],
+                    "score": r["score"],
+                    "max_score": r["max_score"],
+                    "created_at": r["created_at"],
+                    "pct": round((r["score"] or 0) / (r["max_score"] or 1) * 100),
+                }
+                for r in rows
+            ]
+        )
+    finally:
+        conn.close()
+
+
 @router.get("/{essay_id}")
 def get_essay(essay_id: int):
     conn = get_connection()

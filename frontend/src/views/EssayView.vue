@@ -10,6 +10,8 @@ import { formatTime } from '../composables/useBaseData'
 import { useResourceList } from '../composables/useResourceList'
 import EssayGradeResult from '../components/EssayGradeResult.vue'
 import UiButton from '../ui/UiButton.vue'
+import AreaChart from '../ui/AreaChart.vue'
+import GlassCard from '../ui/GlassCard.vue'
 import UiSelect from '../ui/UiSelect.vue'
 import UiTag from '../ui/UiTag.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
@@ -56,6 +58,26 @@ const {
 )
 
 const kindOptions = computed(() => [{ value: '', label: '全部类型' }, ...ESSAY_KINDS])
+
+// —— 进步曲线：全部批改记录按时间正序（/essays/trend），取最近 20 篇画面积图 ——
+// 列表页的分页趋势条只反映当前页，看趋势要看全量
+const trendAll = ref([])
+const curve = computed(() => {
+  const list = trendAll.value.slice(-20)
+  return {
+    labels: list.map((r) => String(r.created_at || '').slice(5, 10)),
+    series: [{ name: '得分率%', color: 'var(--accent)', values: list.map((r) => r.pct || 0) }],
+  }
+})
+
+async function loadTrend() {
+  try {
+    const res = await request.get('/essays/trend', { silent: true })
+    trendAll.value = res.data.data || []
+  } catch (err) {
+    // 静默失败：曲线是锦上添花，列表数据不受影响
+  }
+}
 
 // 分数趋势条：按时间正序，高度 = 得分率
 const trend = computed(() =>
@@ -110,11 +132,17 @@ async function removeOne(row) {
   }
 }
 
-onMounted(loadList)
+onMounted(() => {
+  loadList()
+  loadTrend()
+})
 // keep-alive 返回本页：静默刷新，首次激活不刷（mounted 刚拉过）
 let evActivated = false
 onActivated(() => {
-  if (evActivated) loadList({ background: true })
+  if (evActivated) {
+    loadList({ background: true })
+    loadTrend()
+  }
   evActivated = true
 })
 onUnmounted(() => {
@@ -143,6 +171,14 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+
+    <GlassCard v-if="curve.labels.length >= 2" class="ea-curve">
+      <div class="panel-head">
+        <h3 class="panel-title">进步曲线</h3>
+        <span class="cap">最近 {{ curve.labels.length }} 篇得分率（全部批改记录按时间正序）</span>
+      </div>
+      <AreaChart :labels="curve.labels" :series="curve.series" :height="160" />
+    </GlassCard>
 
     <div class="list-toolbar">
       <div class="ea-search">
@@ -406,5 +442,10 @@ onUnmounted(() => {
   word-break: break-word;
   color: var(--ink-2);
   font-family: inherit;
+}
+
+/* 进步曲线卡：与列表区拉开一档 */
+.ea-curve {
+  margin-bottom: 16px;
 }
 </style>

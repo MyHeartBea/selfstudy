@@ -199,7 +199,7 @@ def delete_mock(mock_id: int):
 
 @router.get("/reviews/practice")
 def get_practice_reviews(
-    mode: str = Query("curve", pattern="^(curve|wrong_time|random|real_exam|mock)$"),
+    mode: str = Query("curve", pattern="^(curve|wrong_time|random|real_exam|mock|weak)$"),
     count: int = Query(10, ge=1, le=100),
     subject_id: Optional[int] = Query(None),
     sub_subject_id: Optional[int] = Query(None),
