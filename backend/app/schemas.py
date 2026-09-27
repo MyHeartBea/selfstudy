@@ -6,38 +6,56 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class MistakeCreate(BaseModel):
-    subject_id: int
+    """错题创建/更新。
+
+    **DB 可空列的字段一律 Optional**：导出 JSON 里历史数据的 NULL 列是 null，
+    严格 str 会让整批导入 422（一个字段卡死 5000 条）。None 由
+    build_mistake_fields 的 `or ""` 兜成空串；缺答/空解析等业务校验在服务层按行报错。
+    """
+
+    subject_id: Optional[int] = None
     sub_subject_id: Optional[int] = None
     question_type: str = "choice"
     question: str = Field(min_length=1)
-    option_a: str = ""
-    option_b: str = ""
-    option_c: str = ""
-    option_d: str = ""
-    option_e: str = ""
-    option_f: str = ""
-    option_g: str = ""
-    correct_answer: str = ""
-    answer_aliases: List[str] = []
-    analysis: str = ""
-    difficulty: int = Field(ge=1, le=5)
-    difficulty_points: str = ""
-    knowledge_tags: List[str] = []
-    approach: str = ""
-    source: str = ""
+    option_a: Optional[str] = ""
+    option_b: Optional[str] = ""
+    option_c: Optional[str] = ""
+    option_d: Optional[str] = ""
+    option_e: Optional[str] = ""
+    option_f: Optional[str] = ""
+    option_g: Optional[str] = ""
+    correct_answer: Optional[str] = ""
+    answer_aliases: Optional[List[str]] = []
+    analysis: Optional[str] = ""
+    difficulty: Optional[int] = Field(default=None, ge=1, le=5)
+    difficulty_points: Optional[str] = ""
+    knowledge_tags: Optional[List[str]] = []
+    approach: Optional[str] = ""
+    source: Optional[str] = ""
     source_type: str = "other"
-    source_year: str = ""
-    source_name: str = ""
+    source_year: Optional[str] = ""
+    source_name: Optional[str] = ""
     # 错因归因（ATTACHMENT_KEYS 成员：PUT 不带键=保留库里原值，防止编辑表单洗掉归因）
-    error_reason: str = ""
+    error_reason: Optional[str] = ""
+    # 复习调度字段（同为 ATTACHMENT_KEYS 成员）：导出→导入往返保真，
+    # 常规表单不携带 → 编辑时按库保留；显式传入（导入）则原样落库
+    review_count: Optional[int] = 0
+    wrong_count: Optional[int] = 0
+    mastery_level: Optional[int] = 0
+    last_reviewed_at: Optional[str] = None
+    next_review_at: Optional[str] = None
+    review_paused: Optional[bool] = False
+    starred: Optional[bool] = False
+    ease_factor: Optional[float] = 2.5
+    last_interval: Optional[int] = 0
     # 题干配图：元素为 data URL（新上传）或已保存的相对路径（编辑时保留）
     images: List[str] = Field(default_factory=list, max_length=5)
     # 英语整篇精读（可选）：解析后挂在错题上的附加内容
-    passage_text: str = ""
-    passage_translation: str = ""
-    english_sentences: List[dict] = Field(default_factory=list)
-    english_phrases: List[dict] = Field(default_factory=list)
-    english_words: List[dict] = Field(default_factory=list)
+    passage_text: Optional[str] = ""
+    passage_translation: Optional[str] = ""
+    english_sentences: Optional[List[dict]] = Field(default_factory=list)
+    english_phrases: Optional[List[dict]] = Field(default_factory=list)
+    english_words: Optional[List[dict]] = Field(default_factory=list)
     english_questions: List[dict] = Field(default_factory=list)
 
 

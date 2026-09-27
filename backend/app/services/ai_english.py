@@ -456,9 +456,10 @@ def analyze_english(
     # ② 词汇与题目清单：两件事互不依赖，**真正并发**执行。
     #    注意不能写成 `executor.submit(fn).result()` —— 那等于"提交后立刻阻塞等结果"，
     #    第二个任务要等第一个跑完才提交，实际完全串行（原实现即如此，与注释不符）。
-    _executor = _svc()._ANALYSIS_EXECUTOR
-    future_vocab = _executor.submit(_vocab_task)
-    future_titles = _executor.submit(_titles_task)
+    # submit_analysis = 有界排队版提交（排队超限直接报错，不让无界队列拖垮内存）
+    _submit = _svc().submit_analysis
+    future_vocab = _submit(_vocab_task)
+    future_titles = _submit(_titles_task)
     vocab = future_vocab.result()
     questions_items = future_titles.result()
 
@@ -505,7 +506,7 @@ def analyze_english(
             return q
 
     # 逐题并发：同样先全部提交、再统一收集，才是真并发
-    _q_futures = [_executor.submit(_qa_task, q) for q in todo]
+    _q_futures = [_submit(_qa_task, q) for q in todo]
     full_questions = [f.result() for f in _q_futures]
 
     if not full_questions:

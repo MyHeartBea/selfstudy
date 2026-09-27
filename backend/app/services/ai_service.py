@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import socket
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -29,6 +30,31 @@ class AiRequestError(Exception):
 # 串行版完全一致，质量不减，只是把互不依赖的调用改为并发以缩短墙钟时间；
 # _chat 每次调用自建 opener、无共享可变状态，线程安全。
 _ANALYSIS_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="km-analysis")
+
+# 并发任务排队上限：4 个工作线程 + 有界等待队列。极端情况下（脚本连发整篇录入）
+# 无界队列会让内存与 AI 并发额度一起被拖垮；超限直接报错，前端按 AI 失败提示稍后再试。
+_ANALYSIS_MAX_PENDING = 64
+_analysis_pending = 0
+_analysis_pending_lock = threading.Lock()
+
+
+def submit_analysis(fn, *args):
+    """提交一个解析并发任务（排队超限抛 AiRequestError）。"""
+    global _analysis_pending
+    with _analysis_pending_lock:
+        if _analysis_pending >= _ANALYSIS_MAX_PENDING:
+            raise AiRequestError("AI 解析排队已满，请稍后再试")
+        _analysis_pending += 1
+
+    def _run():
+        global _analysis_pending
+        try:
+            return fn(*args)
+        finally:
+            with _analysis_pending_lock:
+                _analysis_pending -= 1
+
+    return _ANALYSIS_EXECUTOR.submit(_run)
 
 
 def is_configured() -> bool:

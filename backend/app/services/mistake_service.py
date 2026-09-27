@@ -55,6 +55,17 @@ ATTACHMENT_KEYS = (
     # 错因归因也走"不带键=保留"：录入/编辑表单没有这个输入框，
     # 按"普通字段不传即重置"的口径，编辑一次就会把用户亲手标的归因洗掉
     "error_reason",
+    # 复习调度字段同理：编辑表单不携带它们，"不带键=按库保留"才能保住
+    # 用户的复习进度/星标/暂停状态（导出 JSON 里带着时导入会原样回来）
+    "review_count",
+    "wrong_count",
+    "mastery_level",
+    "last_reviewed_at",
+    "next_review_at",
+    "review_paused",
+    "starred",
+    "ease_factor",
+    "last_interval",
 )
 # 这些键在库里是 JSON 文本列（列名与 body 键名一致，见 MISTAKE_FIELD_KEYS），回填时要解码
 _ATTACHMENT_JSON_KEYS = frozenset(
@@ -268,6 +279,21 @@ def validate_source_requirements(
     return None
 
 
+def _int_or(value, default):
+    """宽松取整：导入 JSON 里格式异常的调度字段退回默认值，不炸整个批次。"""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _float_or(value, default):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def build_mistake_fields(
     body: Dict[str, Any],
     conn: sqlite3.Connection,
@@ -424,6 +450,17 @@ def build_mistake_fields(
         "source_year": source_year,
         "source_name": source_name,
         "error_reason": str(body.get("error_reason") or "").strip(),
+        # —— 复习调度字段：导出→导入往返保真。不传给默认值（手动新录从零调度），
+        # 导出 JSON 里带着就原样回来；UPDATE 路径由 ATTACHMENT_KEYS 兜底不洗进度。
+        "review_count": _int_or(body.get("review_count"), 0),
+        "wrong_count": _int_or(body.get("wrong_count"), 0),
+        "mastery_level": _int_or(body.get("mastery_level"), 0),
+        "last_reviewed_at": str(body.get("last_reviewed_at") or "").strip() or None,
+        "next_review_at": str(body.get("next_review_at") or "").strip() or None,
+        "review_paused": 1 if body.get("review_paused") else 0,
+        "starred": 1 if body.get("starred") else 0,
+        "ease_factor": _float_or(body.get("ease_factor"), 2.5),
+        "last_interval": _int_or(body.get("last_interval"), 0),
         "images": images,
         "images_text": json.dumps(images, ensure_ascii=False),
         "passage_text": str(body.get("passage_text") or "").strip(),

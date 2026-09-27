@@ -260,6 +260,17 @@ MISTAKE_COLUMNS = (
     "source_year",
     "source_name",
     "error_reason",
+    # 复习调度字段：进列清单让导出→导入的往返保真（复习进度是用户资产，
+    # 此前导入按这张清单重建行，调度字段被静默清零）
+    "review_count",
+    "wrong_count",
+    "mastery_level",
+    "last_reviewed_at",
+    "next_review_at",
+    "review_paused",
+    "starred",
+    "ease_factor",
+    "last_interval",
     "images",
     "passage_text",
     "passage_translation",

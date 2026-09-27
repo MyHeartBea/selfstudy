@@ -538,5 +538,76 @@ class ErrorReasonPersistenceTest(unittest.TestCase):
         self.assertEqual(target.get("error_reason"), "calc")
 
 
+class ImportScheduleRoundtripTest(unittest.TestCase):
+    """导出→导入往返：SM-2 调度字段/星标/归因必须保真（复习进度是用户资产）。
+
+    此前导入按内容列重建行，ease_factor/复习次数/下次复习时间被静默清零。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    def test_export_import_preserves_schedule(self):
+        r = client.post(
+            "/api/mistakes",
+            json={
+                "subject_id": 3,
+                "question_type": "choice",
+                "question": "调度往返测试题目验证",
+                "correct_answer": "A",
+                "difficulty": 3,
+                "difficulty_points": "难点",
+                "analysis": "解析",
+                "review_count": 5,
+                "wrong_count": 2,
+                "mastery_level": 3,
+                "ease_factor": 2.7,
+                "last_interval": 7,
+                "next_review_at": "2099-01-01 00:00:00",
+                "review_paused": True,
+                "starred": True,
+            },
+        )
+        self.assertEqual(r.status_code, 200, r.text)
+        mid = r.json()["data"]["id"]
+
+        exported = client.get("/api/export").json()["data"]
+        imported = client.post("/api/import", json=exported).json()["data"]
+        self.assertEqual(imported["failed"], [])
+        # 全部撞指纹去重（原题还在库里）→ 没有新建行；真往返要换库验证，
+        # 这里直接验证**导出形状**带了调度字段 + build 后字段不归零即可：
+        exported_row = next(m for m in exported["mistakes"] if m["id"] == mid)
+        self.assertEqual(exported_row["ease_factor"], 2.7)
+        self.assertEqual(exported_row["review_count"], 5)
+        self.assertEqual(exported_row["starred"], 1)
+        self.assertEqual(exported_row["next_review_at"], "2099-01-01 00:00:00")
+        # 原库里的行也没被导入流程动过
+        detail = client.get(f"/api/mistakes/{mid}").json()["data"]
+        self.assertEqual(detail["ease_factor"], 2.7)
+        self.assertEqual(detail["review_count"], 5)
+
+    def test_import_carries_schedule_into_new_row(self):
+        """换库语义：同一份导出在删掉原题后重导，调度字段原样落地（手动新录才走默认值）。"""
+        exported = client.get("/api/export").json()["data"]
+        target = next(m for m in exported["mistakes"] if m["question"] == "调度往返测试题目验证")
+        client.delete(f"/api/mistakes/{target['id']}")
+        # 只导这一条，避免种子演示数据干扰计数
+        r = client.post("/api/import", json={"mistakes": [target]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["data"]["created"], 1)
+        # 列表列不含调度字段，详情接口再取一次
+        rows = client.get("/api/mistakes", params={"search": "调度往返测试题目验证"}).json()["data"]
+        self.assertEqual(len(rows), 1)
+        detail = client.get(f"/api/mistakes/{rows[0]['id']}").json()["data"]
+        self.assertEqual(detail["ease_factor"], 2.7)
+        self.assertEqual(detail["review_count"], 5)
+        self.assertEqual(detail["starred"], 1)
+        self.assertEqual(detail["next_review_at"], "2099-01-01 00:00:00")
+
+
 if __name__ == "__main__":
     unittest.main()
