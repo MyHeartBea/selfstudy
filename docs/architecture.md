@@ -3,7 +3,7 @@
 ## 总体分层
 
 ```text
-浏览器（Vue 3 + Element Plus）
+浏览器（Vue 3 + 自建设计系统「墨纸印/墨韵」，零 UI 框架依赖）
         │ axios（/api）
         ▼
 FastAPI 路由层 routers/
@@ -57,6 +57,8 @@ SQLite（sqlite3 + 表结构 models/）
    `related_mistakes`（同标签其他错题，最多 5 条）。
 3. 统计接口按科目聚合，包含零错题科目，便于前端展示完整进度。
 4. 导出生成完整 JSON；导入时逐条校验并复用自动建标签逻辑。
-5. 启动时自动备份数据库到 `data/backups/`（保留最近 20 份）；
-   数据库结构升级通过 `app_meta.migration_version` 门控（当前 v3）。
+5. 启动时自动备份数据库到 `data/backups/`（保留最近 20 份），另有每日定时备份
+   （24h 间隔，含图片目录 zip，保留 5 份）与操作前快照（导入/批量删除/单题删除/回滚前）；
+   数据库结构升级通过 `app_meta.migration_version` 门控（当前 v10；v11 起只补索引，
+   索引归 `TABLES_DDL` 管，见 AGENTS 第 3 节）。
 6. AI 端点带每分钟限流；设置 `API_TOKEN` 后所有接口需鉴权（可选）。

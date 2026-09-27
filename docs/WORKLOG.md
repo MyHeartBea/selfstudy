@@ -1113,3 +1113,50 @@ pillow 12.3 / python-docx 1.2 / pypdf 6.17，升级先本机验证再改版本�
 
 **验证**：后端 356→**364**、前端 Vitest 158→**161**、build、ruff/eslint/prettier/
 pre-commit 全绿；孤儿图复验 0 残留；E2E 与双主题截图见收尾批次。
+
+## 2026-09-27 · 第二次全面体检 + 修复拆分批（用户拍板"全部解决"）
+
+第二次全面体检（本轮自检 + 前后端验尸）找出 **4 个上一轮新改动自己引入的问题**，
+随后按"波一修复 → 波二拆分 → 波三文档"执行。
+
+**波一·体检修复（1797225）**：
+- **keep-alive 生命周期对齐**（这是上一轮最锋利的刀也最容易割到自己）：
+  ①生词闪卡的 window keydown 在缓存后仍然活着——离开页面后按空格/方向键会
+  **静默推进闪卡甚至发打分请求**（`mode==='flashcard'` 守卫拦不住缓存态）；
+  ②公式背诵键同款（开着背诵弹窗 Ctrl+K 跳走后方向键仍推进队列）。
+  两处都改 `onActivated(add)/onDeactivated(remove)` 配对（addEventListener 同引用幂等，
+  激活时监听一定在，卸载/缓存态一定不在）；③KnowledgeView 的 `route.query.tag`
+  watcher 在**离开页面**时误触发（route 已是别人的）→ 清筛选+发后台请求，
+  加 `route.name !== 'knowledge'` 守卫；④MistakeList/Essay/Vocab 的防抖定时器
+  离开页面即清（缓存下 onUnmounted 不触发，后台会补枪加载）。
+- **error_reason 数据链路补齐**：进 `MISTAKE_COLUMNS` + `MistakeCreate` +
+  `build_mistake_fields`，并列入 **ATTACHMENT_KEYS**（编辑表单没有这个输入框，
+  按"普通字段不传即重置"的口径，编辑一次就会把归因洗掉——这是普通字段陷阱的反例）；
+  导出/导入现在能带回归因。+1 持久化链路测试。
+- 图片 zip 挂进每日备份线程（`maybe_daily_images_backup`，独立 24h 门控）；
+- AI 错因周报纳入用户归因：周报 items 带 `error_reason`，提示词明确
+  "用户亲手标的错因置信度最高，聚类优先以它们为锚点"。
+
+**波二·拆分双打（dc4dea0 / 99fef87 / 08bd05e）**：
+- `exam_paper_service`（1160 行）拆出 **exam_paper_scan**（科目/年份/文件角色识别 +
+  目录扫描，纯文件系统不碰 AI）与 **exam_paper_extract**（docx/pypdf/OCR/视觉提取 +
+  导入探针），主文件 re-export 保持 `eps.xxx` 调用面；**协作者改模块式调用**
+  （`scan_mod.papers_root()`）——顶层 from-import 会让测试 patch 扫描根失效
+  （拆分后首批 13 红的根因，靠 365 测试当场抓住）；
+- `ai_service` 拆出 **ai_latex**（LaTeX/定界符归一化家族，纯函数零依赖，
+  database.py 的 `from ai_service import _wrap_math` 经 re-export 不变）；
+- `StatsView`（2015 行）拆出 **ForecastStrip / WeeklyReportStrip / MockTrendStrip**
+  三条带（数据仍由 dashboard 聚合下发，周报自取数；样式随组件走——
+  编号章节 ::before/头部排印/纸化规则按"根选择器留主文件、内部选择器进子组件"切分；
+  templateBindings 守卫当场抓回手术误删的一个 ref）。主文件降到 **1760 行**。
+
+**波三·文档刷新（本提交）**：architecture.md（Element Plus 字样、迁移 v3→v10、
+备份体系四层）、README（目录树/测试数 365/161/53/覆盖率门槛 70%/CI 3.12）、
+NEW_SESSION.md（测试数）——上一轮体检发现的三处文档欠账清零。
+
+**明确不进本批**：ReviewView/VocabView 视图级拆分（StatsView 模式已验证，剩余收益
+递减）；模考多科连考、知识点 SM-2 队列（路线图级新功能，各自独立批次）；
+SQLite 连接复用（维持否决）。
+
+**验证**：后端 **365**、前端 Vitest **161**、build、ruff/eslint/prettier 全绿；
+E2E 与双主题截图见最终收尾。

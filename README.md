@@ -21,13 +21,13 @@ km-v2/（仓库根 = D:\km-v2）
 ├── backend/            # FastAPI 后端
 │   ├── app/
 │   │   ├── config.py       # 端口(8000)/路径/AI 参数
-│   │   ├── database.py     # 连接、建表、迁移门控(v9)、备份
+│   │   ├── database.py     # 连接、建表、迁移门控(v10)、启动/每日备份与快照
 │   │   ├── schemas.py      # Pydantic 模型
 │   │   ├── models/tables.py# DDL
-│   │   ├── services/       # 业务逻辑（mistake/review/knowledge/formula/vocab/stats/ai/ai_english/answer/exam_paper）
-│   │   └── routers/        # mistakes/reviews/knowledge/formulas/vocab/subjects/stats/papers/transfer/ai/system
+│   │   ├── services/       # 业务逻辑（mistake/review/knowledge/formula/vocab/stats/ai/ai_english/ai_essay/answer/exam_paper[+scan/extract]/integrity/search/sprint/local_ocr）
+│   │   └── routers/        # mistakes/reviews/knowledge/formulas/vocab/subjects/stats/papers/transfer/ai/essay/system/sprint
 │   ├── main.py         # 启动入口（127.0.0.1:8000）
-│   ├── tests/          # 148 个单元/接口测试（临时库，不碰真实数据）
+│   ├── tests/          # 365 个单元/接口测试（临时库，不碰真实数据）
 │   └── .env            # AI 密钥（不入库）
 ├── frontend/           # Vue 3 前端（自建组件库 src/ui/）
 │   ├── src/{views,components,ui,composables,utils,styles,directives}
@@ -128,15 +128,16 @@ AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 
 ## 测试与 CI
 
-- 后端 **148 个**测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）；
-  前端 Vitest **49 个**：`cd frontend && npm test`（判分/筛选/Markdown 纯函数 + **卡片点击、知识点弹窗、关联错题区的 DOM 级交互回归**，环境 happy-dom）
-- 前端 **E2E 31 个**（Playwright，真浏览器）：`cd frontend && npm run test:e2e` —— 补单测抓不到的盲区：
+- 后端 **365 个**测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）；
+  前端 Vitest **161 个**：`cd frontend && npm test`（判分/筛选/Markdown/收录过滤纯函数 + **卡片点击、知识点弹窗、
+  划词归因、快照回滚页等 DOM 级交互回归**，环境 happy-dom）
+- 前端 **E2E 53 个**（Playwright，真浏览器）：`cd frontend && npm run test:e2e` —— 补单测抓不到的盲区：
   **卡片整块可点的真命中测试**（单测 `trigger('click')` 会绕过命中测试；桌面与窄屏都跑）、
   **真实 paste 事件驱动的多图暂存**（断言只暂存 / 只发一次请求 / 请求体带齐全部图片 /
-  **解析结果真的渲染出来**，而不只是"请求发出去了"）、**10 条主路由渲染烟测**（零 console 错误）。
+  **解析结果真的渲染出来**，而不只是"请求发出去了"）、**11 条主路由渲染烟测**（零 console 错误）。
   用例内所有 `/api/**` 在浏览器层打桩，**不需要启动后端**；本机用系统 Chrome，CI 装自带 chromium。
 - GitHub Actions（`.github/workflows/ci.yml`）三个 job：`backend-tests`（ruff check + format --check、
-  unittest、**覆盖率门槛 55%**）、`frontend-test-build`（eslint + prettier、vitest、build）、
+  unittest、**覆盖率门槛 70%**，Python 3.12）、`frontend-test-build`（eslint + prettier、vitest、build）、
   `frontend-e2e`（装 chromium 后跑 Playwright，失败上传报告）
 - 本地提交钩子（`pip install pre-commit && pre-commit install`）：ruff、eslint+prettier、
   大文件/行尾空白/文件末尾换行、**密钥泄漏拦截**（只扫暂存新增行，命中即拦且不回显密钥内容）
@@ -150,8 +151,9 @@ AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 
 ## 数据安全
 
-- 全部数据在 `data/kaoyan_mistakes.db`，升级/重启不删数据；迁移只加列加表（版本门控 v8）
-- 每次启动前自动备份数据库到 `data/backups/`，保留最近 20 份
+- 全部数据在 `data/kaoyan_mistakes.db`，升级/重启不删数据；迁移只加列加表（版本门控 v10）
+- 每次启动前自动备份数据库到 `data/backups/`，保留最近 20 份；另有每日定时备份
+  （24h 间隔，含图片目录 zip 保留 5 份）与操作前快照（导入/批量删除/单题删除/回滚前）
 - 演示数据只在数据库首次创建时写入
 
 ## API 文档
