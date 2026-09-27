@@ -44,11 +44,13 @@ async function load() {
       .map(Number)
       .filter((n) => Number.isInteger(n) && n > 0)
     if (type.value === 'mistakes') {
-      // 数量即勾选数（上限 100，列表每页最多选这么多），逐条取详情最稳
-      const details = await Promise.all(
-        ids.slice(0, 100).map((id) => request.get(`/mistakes/${id}`)),
-      )
-      rows.value = details.map((res) => res.data.data)
+      // 批量详情一次带回（此前 100 个并发 GET 在浏览器 6 连接上排队慢）；
+      // 已删除的 id 服务端直接跳过——单条缺失不再让整份背诵稿报错
+      const res = await request.get('/mistakes/batch-detail', {
+        params: { ids: ids.slice(0, 100).join(',') },
+        silent: true,
+      })
+      rows.value = res.data.data || []
     } else if (type.value === 'formula') {
       const res = await request.get('/formulas')
       const all = res.data.data || []
@@ -110,6 +112,15 @@ function doPrint() {
             </span>
           </div>
           <div class="item-question"><MathText :text="item.question || '（无题干）'" /></div>
+          <!-- 题干配图：图片题的背诵稿少了图就少了半边（URL 拼法与 QuestionImages 同源） -->
+          <div v-if="item.images && item.images.length" class="item-images">
+            <img
+              v-for="(img, k) in item.images"
+              :key="k"
+              :src="img.startsWith('data:') ? img : '/images/' + img.replace(/^images\//, '')"
+              alt=""
+            />
+          </div>
           <div v-if="isChoiceLike(item)" class="item-options">
             <p
               v-for="key in ['a', 'b', 'c', 'd', 'e', 'f', 'g']"
@@ -221,6 +232,18 @@ function doPrint() {
 .item-question {
   font-size: 13.5px;
   line-height: 1.9;
+}
+.item-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.item-images img {
+  max-width: 46%;
+  border: 1px solid #d8d2c4;
+  border-radius: 4px;
+  break-inside: avoid;
 }
 .item-options {
   display: grid;

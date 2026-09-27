@@ -65,7 +65,8 @@ const modes = [
 ]
 
 // 模考配置：来源（错题库/真题库）+ 年份（错题库）+ 选题（真题库）+ 时长
-const mockYear = ref(String(new Date().getFullYear()))
+// 年份默认留空：当年真题多半还没出，预填当前年只会搜出一张空卷
+const mockYear = ref('')
 const mockDuration = ref(60)
 const mockSource = ref('mistakes') // mistakes | paper
 const papers = ref([])

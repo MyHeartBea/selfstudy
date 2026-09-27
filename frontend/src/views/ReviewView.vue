@@ -44,7 +44,9 @@ function openQuota() {
 }
 
 async function saveQuota() {
-  const value = Number(quotaInput.value)
+  // `Number('') === 0` 会把"清空输入"静默变成"今日不限量"，所以先转字符串再判空
+  const raw = String(quotaInput.value ?? '').trim()
+  const value = raw === '' ? NaN : Number(raw)
   if (!Number.isInteger(value) || value < 0) {
     toast.warning('配额要是非负整数，0 表示今天不限量')
     return

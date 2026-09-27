@@ -45,6 +45,12 @@ export function confirmOk() {
 }
 
 export function confirmDialog(options = {}) {
+  // 旧弹窗还没人应答就来了新的：把旧的按"取消"落地——否则第一个 await
+  // 永远挂起，提交流程会卡死在一个看不见的弹窗上
+  if (resolver) {
+    resolver(null)
+    resolver = null
+  }
   confirmState.title = options.title || '确认操作'
   confirmState.message = options.message || ''
   confirmState.danger = options.danger === true

@@ -1,7 +1,7 @@
 <script setup>
 /** 英语整篇精读面板：原文(分段)、全文翻译、句子拆解、猜词&重点短语(全选入生词本)、题目列表(多题)。
  * 点词查义；多题可「存为另一题」切到表单保存。 */
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import request from '../api/request'
 import MathText from './MathText.vue'
@@ -32,12 +32,15 @@ const extractedMap = computed(() => {
 })
 
 // AI 提取的重点短语：短语整体可点（点击直接用已提取的释义，不调 AI）
+// + 用户在点词弹窗里手动加入生词本的短语（并进来让 tokenRe 也认它，整体变红）
+const localPhraseMap = reactive(new Map())
 const phraseMap = computed(() => {
   const map = new Map()
   for (const p of props.parsed?.english_phrases || []) {
     const phrase = String(p.phrase || '').trim()
     if (phrase) map.set(phrase.toLowerCase().replace(/\s+/g, ' '), p)
   }
+  for (const [k, p] of localPhraseMap) map.set(k, p)
   return map
 })
 
@@ -142,9 +145,21 @@ function onPanelMouseup(e) {
   }
   const rect = sel.getRangeAt(0).getBoundingClientRect()
   selPhrase.value = phrase
-  selBtnPos.value = { x: rect.left + rect.width / 2, y: Math.max(8, rect.top - 40) }
+  // 视口钳制：选词靠屏幕右缘时按钮（max-width 320px + translateX(-50%)）会溢出
+  const halfW = 160
+  const x = rect.left + rect.width / 2
+  selBtnPos.value = {
+    x: Math.min(Math.max(x, halfW), (window.innerWidth || 1200) - halfW),
+    y: Math.max(8, rect.top - 40),
+  }
   selBtn.value = true
 }
+// 面板滚动后选区坐标已失效：直接收起浮钮，等下一次 mouseup 重新定位
+function hideSelButton() {
+  selBtn.value = false
+}
+onMounted(() => window.addEventListener('scroll', hideSelButton, true))
+onBeforeUnmount(() => window.removeEventListener('scroll', hideSelButton, true))
 function lookupSelection() {
   const phrase = selPhrase.value
   selBtn.value = false
@@ -166,7 +181,25 @@ function tokenize(text) {
   return out
 }
 
+// 分词缓存：原文对照与句子拆解渲染同一批句子，此前每次渲染对每句重跑正则
+//（长文两区加起来数千 token，加入生词本等任何状态变化都会全量重算）。
+// tokenRe/phraseMap 变化（换题/加短语）时整体失效。
+const tokenCache = new Map()
+watch([tokenRe, phraseMap], () => tokenCache.clear())
+function cachedTokenize(text) {
+  const key = String(text || '')
+  let tokens = tokenCache.get(key)
+  if (!tokens) {
+    tokens = tokenize(key)
+    if (tokenCache.size > 800) tokenCache.clear()
+    tokenCache.set(key, tokens)
+  }
+  return tokens
+}
+
+let lookupSeq = 0
 async function openWord(text) {
+  const seq = ++lookupSeq
   const norm = String(text || '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
@@ -201,12 +234,15 @@ async function openWord(text) {
   }
   try {
     const res = await request.get('/ai/sense', { params: { word: text }, silent: true })
+    // 快速连点两词时慢的旧响应不许覆盖新词弹窗
+    if (seq !== lookupSeq) return
     lookupData.value = res.data.data
   } catch (err) {
+    if (seq !== lookupSeq) return
     lookupData.value = null
     toast.warning('该词暂未查询到释义，可加入生词本后补充')
   } finally {
-    lookupLoading.value = false
+    if (seq === lookupSeq) lookupLoading.value = false
   }
 }
 
@@ -317,7 +353,17 @@ async function addLookupWord() {
         kind: lookupKind.value,
       },
     ])
-    if (lookupKind.value === 'word') addedWords.add(lookupWord.value.toLowerCase())
+    if (lookupKind.value === 'word') {
+      addedWords.add(lookupWord.value.toLowerCase())
+    } else {
+      // 短语变红走 phraseMap：整体成为一个可点 token，点击直接复用本次查询释义
+      localPhraseMap.set(lookupWord.value.toLowerCase().replace(/\s+/g, ' '), {
+        phrase: lookupWord.value,
+        pos: d?.meanings?.[0]?.pos || '',
+        meaning: meaning || d?.meanings?.[0]?.meaning || '',
+        example: d?.example || '',
+      })
+    }
     lookupVisible.value = false
   } catch (err) {
   } finally {
@@ -447,7 +493,20 @@ async function saveAll() {
   }
   savingAll.value = true
   try {
-    await request.post('/mistakes', payload, { silent: true })
+    const res = await request.post('/mistakes', payload, { silent: true })
+    // 后端已把 dataURL 落盘成 images/xxx.png：把相对路径写回源数据，
+    // 后续再保存（含单题入库）不会把同一批截图反复传成新文件（payload 瘦身）
+    let savedImages = res.data.data?.images
+    if (typeof savedImages === 'string') {
+      try {
+        savedImages = JSON.parse(savedImages)
+      } catch (parseErr) {
+        savedImages = []
+      }
+    }
+    if (Array.isArray(savedImages) && savedImages.length && Array.isArray(base.images)) {
+      base.images.splice(0, base.images.length, ...savedImages)
+    }
     const wrongN = qs.filter((q) => getMark(q) === 'wrong').length
     toast.success(`整篇已录入 1 道（含 ${qs.length} 题，答错 ${wrongN}）`)
     // 先跳转，避免生词导入卡住导航；生词后台异步导入
@@ -491,7 +550,7 @@ async function saveAll() {
         <div class="ep-bi">
           <template v-for="(item, si) in bilingual" :key="si">
             <p class="ep-bi-en">
-              <span v-for="(t, j) in tokenize(item.english)" :key="j">
+              <span v-for="(t, j) in cachedTokenize(item.english)" :key="j">
                 <span v-if="t.type === 'text'">{{ t.value }}</span>
                 <button
                   v-else
@@ -597,7 +656,7 @@ async function saveAll() {
             class="ep-sentence"
             :style="{ background: chipColor(i).bg, borderColor: chipColor(i).border }"
           >
-            <span v-for="(t, j) in tokenize(s.text)" :key="j">
+            <span v-for="(t, j) in cachedTokenize(s.text)" :key="j">
               <span v-if="t.type === 'text'">{{ t.value }}</span>
               <button
                 v-else

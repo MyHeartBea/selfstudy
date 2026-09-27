@@ -12,6 +12,13 @@ const observer =
               const delay = Number(el.dataset.revealDelay || 0)
               el.style.transitionDelay = `${delay}ms`
               el.classList.add('reveal-in')
+              // 交错延迟只在入场时生效：transition 结束后清掉 inline delay，
+              // 否则元素后续的 hover 等过渡全被拖着这几十毫秒（实测 hover 变钝）
+              const clearDelay = () => {
+                el.style.transitionDelay = ''
+              }
+              el.addEventListener('transitionend', clearDelay, { once: true })
+              setTimeout(clearDelay, delay + 800) // 兜底：transitionend 被吞也不残留
               observer.unobserve(el)
             }
           }

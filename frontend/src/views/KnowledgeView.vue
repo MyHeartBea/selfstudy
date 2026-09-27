@@ -89,12 +89,23 @@ function resetFilters() {
   searchKnowledge()
 }
 
-function printCurrent() {
+async function printCurrent() {
   if (!items.value.length) return
-  router.push({
-    path: '/print',
-    query: { type: 'knowledge', ids: items.value.map((it) => it.id).join(',') },
-  })
+  // 「打印当前筛选」要打**全部命中**，不是当前分页的那几条：按同一筛选拉一整页
+  const query = { type: 'knowledge' }
+  try {
+    const params = { page: 1, page_size: 500 }
+    if (filters.subjectId) params.subject_id = filters.subjectId
+    if (filters.subSubjectId) params.sub_subject_id = filters.subSubjectId
+    if (filters.tag) params.tag = filters.tag
+    const res = await request.get('/knowledge', { params })
+    const all = res.data.data?.items || []
+    query.ids = (all.length ? all : items.value).map((it) => it.id).join(',')
+  } catch (err) {
+    // 拉全量失败退回当前页，至少别让人打印不了
+    query.ids = items.value.map((it) => it.id).join(',')
+  }
+  router.push({ path: '/print', query })
 }
 
 function practiceTag(tag) {

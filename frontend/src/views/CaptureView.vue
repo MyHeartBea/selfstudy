@@ -124,7 +124,11 @@ function useManualImage() {
   analyzing.value = false
   analyzingText.value = ''
   stopStepNarrative()
+  // 手动整理也要把已暂存的截图带进草稿——用户贴图就是要贴这道题。
+  // 此前只清 moreImages、留着主图预览，提交后题上却没图（预览是摆设）
+  const staged = [previewImage.value, ...moreImages.value.map((m) => m.preview)].filter(Boolean)
   parsed.value = createMistakeDraft('')
+  if (staged.length) parsed.value.images = staged
   ocrRawText.value = ''
   moreImages.value = []
   formKey.value += 1
@@ -151,6 +155,9 @@ async function handleImageFile(file) {
   const requestId = ++analysisRequestId
   analyzing.value = false
   analyzingText.value = ''
+  // 重置主图即重置分析现场：步骤叙事定时器必须一起停（否则粘贴新图后
+  // interval 一直空转到下次 analyze 或卸载）
+  stopStepNarrative()
   parsed.value = null
   ocrRawText.value = ''
   aiWarning.value = ''
@@ -359,7 +366,8 @@ function onSaveQuestion(qIndex) {
   }
   parsed.value = merged
   formKey.value += 1
-  toast.success(`已切换到第 ${qIndex + 1} 题，请在下方核对后保存`)
+  // 该题已从多题池移出、成为当前保存题（面板题号会重排），别说成"切换到第 N 题"
+  toast.success('已选中该题进入下方表单，核对后保存；其余题目仍在多题列表中')
 }
 
 onMounted(() => {

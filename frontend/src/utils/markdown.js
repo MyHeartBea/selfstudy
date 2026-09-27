@@ -132,7 +132,7 @@ export function renderBlocks(source) {
       index += 1
       continue
     }
-    // 十六进制转储块 → 等宽 mono，防止换行错位（如 题47-b 帧数据）
+    // 十六进制转储块：等宽 mono 渲染，防止换行错位（如 题47-b 帧数据）
     if (isHexDump(lines[index])) {
       const pre = []
       while (index < lines.length && (lines[index].trim() === '' || isHexDump(lines[index]))) {
@@ -207,12 +207,21 @@ export function renderBlocks(source) {
 
 export function renderMarkdown(text) {
   const source = String(text || '').replace(/\r/g, '')
-  const parts = source.split(/(\$\$[\s\S]+?\$\$)/g)
+  // 先切**跨行**数学块：$$…$$（原有）与跨行的 \[…\] / \(…\)。
+  // renderBlocks 逐行处理，跨行定界会被按行拆碎成裸反斜杠；
+  // 正则强制中间含换行，单行 \(x\) 仍留在段落里交给 renderInline。
+  const parts = source.split(
+    /(\$\$[\s\S]+?\$\$|\\\[[\s\S]*?\n[\s\S]*?\\\]|\\\([^)]*?\n[\s\S]*?\\\))/g,
+  )
   const html = []
   for (const part of parts) {
     if (!part) continue
     if (part.startsWith('$$') && part.endsWith('$$') && part.length > 4) {
       html.push(`<span class="math-block">${renderMath(part.slice(2, -2), true)}</span>`)
+    } else if (part.startsWith('\\[') && part.endsWith('\\]')) {
+      html.push(`<span class="math-block">${renderMath(part.slice(2, -2), true)}</span>`)
+    } else if (part.startsWith('\\(') && part.endsWith('\\)')) {
+      html.push(renderMath(part.slice(2, -2), false))
     } else {
       html.push(renderBlocks(part))
     }

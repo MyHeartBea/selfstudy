@@ -4,10 +4,22 @@ import { reactive } from 'vue'
 let seq = 0
 export const toasts = reactive([])
 
+// 同文案合并 + 数量上限：批量操作时拦截器连发 toast 会叠一摞挡住页面
+const MAX_TOASTS = 5
+
 function push(type, message, duration) {
+  const dup = toasts.find((t) => t.type === type && t.message === message)
+  if (dup) {
+    // 同文案只刷新一次存活时间，不重复叠条
+    clearTimeout(dup._timer)
+    dup._timer = setTimeout(() => dismiss(dup.id), duration)
+    return
+  }
+  while (toasts.length >= MAX_TOASTS) toasts.shift()
   const id = ++seq
-  toasts.push({ id, type, message })
-  setTimeout(() => dismiss(id), duration)
+  const item = { id, type, message }
+  item._timer = setTimeout(() => dismiss(id), duration)
+  toasts.push(item)
 }
 
 export function dismiss(id) {

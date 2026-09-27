@@ -86,6 +86,38 @@ def list_approaches(limit: int = Query(200, ge=1, le=1000)):
         conn.close()
 
 
+@router.get("/batch-detail")
+def batch_detail(ids: str = Query(..., max_length=2000)):
+    """批量取错题详情（打印背诵稿用）：一次请求带回全部题目。
+
+    此前打印稿逐条 GET，100 个请求在浏览器 6 连接上排队；已删除的 id 直接跳过
+    （返回条数可能少于请求数，前端按"缺了就不打"处理）。**必须注册在
+    /{mistake_id} 之前**，否则 "batch-detail" 会先撞进 int 路径参数返回 422。
+    """
+    id_list = []
+    for part in ids.split(","):
+        part = part.strip()
+        if part.isdigit():
+            value = int(part)
+            if value > 0:
+                id_list.append(value)
+    id_list = list(dict.fromkeys(id_list))[:100]
+    if not id_list:
+        return ok([])
+    conn = get_connection()
+    try:
+        placeholders = ", ".join("?" for _ in id_list)
+        rows = conn.execute(
+            f"SELECT * FROM mistakes WHERE id IN ({placeholders})", id_list
+        ).fetchall()
+        by_id = {r["id"]: mistake_to_dict(r) for r in rows}
+        return ok([by_id[i] for i in id_list if i in by_id])
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
 @router.get("/{mistake_id}")
 def get_mistake(mistake_id: int):
     """返回错题详情，附带知识点补充与同知识点错题。"""
