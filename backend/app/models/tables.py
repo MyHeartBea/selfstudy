@@ -259,6 +259,7 @@ MISTAKE_COLUMNS = (
     "source_type",
     "source_year",
     "source_name",
+    "error_reason",
     "images",
     "passage_text",
     "passage_translation",

@@ -367,7 +367,7 @@ def weekly_report(force: int = Query(0, ge=0, le=1)):
         rows = conn.execute(
             """
             SELECT m.id, m.question, m.knowledge_tags, r.note, r.user_answer,
-                   s.name AS subject_name
+                   s.name AS subject_name, m.error_reason
             FROM review_records r
             JOIN mistakes m ON m.id = r.mistake_id
             LEFT JOIN subjects s ON s.id = m.subject_id
@@ -388,6 +388,8 @@ def weekly_report(force: int = Query(0, ge=0, le=1)):
             "tags": [t for t in (r["knowledge_tags"] or "").split(",") if t][:4],
             "note": (r["note"] or "")[:120],
             "user_answer": (r["user_answer"] or "")[:80],
+            # 用户在复习答错后亲手标的错因（knowledge/read/calc/careless），空串=未归因
+            "error_reason": r["error_reason"] or "",
         }
         for r in rows
     ]

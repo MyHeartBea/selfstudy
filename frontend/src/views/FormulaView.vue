@@ -1,6 +1,6 @@
 <script setup>
 /** 公式背诵库：分类/搜索 + 卡片网格 + 详情/编辑 + 背诵模式 */
-import { computed, onActivated, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -182,6 +182,10 @@ function onReciteKey(event) {
   }
 }
 onMounted(() => window.addEventListener('keydown', onReciteKey))
+// 缓存状态下离开页面监听必须停：开着背诵弹窗用 Ctrl+K 跳走后，
+// 方向键/空格仍会静默推进背诵队列（onActivated 的 add 幂等，激活时一定在）
+onActivated(() => window.addEventListener('keydown', onReciteKey))
+onDeactivated(() => window.removeEventListener('keydown', onReciteKey))
 onUnmounted(() => window.removeEventListener('keydown', onReciteKey))
 
 function openEdit(item) {

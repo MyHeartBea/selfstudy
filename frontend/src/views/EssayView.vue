@@ -1,6 +1,6 @@
 <script setup>
 /** 作文档案：AI 批改过的英语作文历史（分数趋势 + 逐句改错回看）。 */
-import { computed, onActivated, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 
 import request from '../api/request'
@@ -146,6 +146,10 @@ onActivated(() => {
   evActivated = true
 })
 onUnmounted(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+})
+// 缓存状态下离开：挂起的搜索防抖别在后台补枪
+onDeactivated(() => {
   if (searchTimer) clearTimeout(searchTimer)
 })
 </script>

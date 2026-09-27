@@ -168,6 +168,32 @@ def maybe_daily_backup(min_interval_hours: float = DAILY_BACKUP_INTERVAL_HOURS) 
     return snapshot_database(DAILY_BACKUP_LABEL)
 
 
+def last_images_backup_age_hours() -> Optional[float]:
+    """最近一份图片 zip 距今多少小时；一份都没有则返回 None。"""
+    if not settings.BACKUP_DIR.exists():
+        return None
+    newest = None
+    for path in settings.BACKUP_DIR.glob("images_backup_*.zip"):
+        mtime = path.stat().st_mtime
+        newest = mtime if newest is None else max(newest, mtime)
+    if newest is None:
+        return None
+    return (datetime.now().timestamp() - newest) / 3600
+
+
+def maybe_daily_images_backup(
+    min_interval_hours: float = DAILY_BACKUP_INTERVAL_HOURS,
+) -> Optional[str]:
+    """距上一份图片 zip 超过 min_interval_hours（或从没有过）就自动打一份。
+
+    图片目录为空时返回 ""（snapshot_images 的空串约定），不算失败。
+    """
+    age = last_images_backup_age_hours()
+    if age is not None and age < min_interval_hours:
+        return None
+    return snapshot_images()
+
+
 # 图片目录打包备份：数据库快照**不含图片**（删了找不回的那句声明），图片的
 # "后悔药"走这里——把 data/images 打包成 zip 存进 BACKUP_DIR（缩略图可再生，不打包）。
 IMAGE_SNAPSHOT_MAX = 5

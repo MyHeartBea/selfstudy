@@ -15,7 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import metrics
 from app.config import PROJECT_ROOT, settings
-from app.database import init_database, maybe_daily_backup
+from app.database import init_database, maybe_daily_backup, maybe_daily_images_backup
 from app.routers import (
     ai,
     essay,
@@ -84,6 +84,7 @@ def _daily_backup_loop(check_interval_seconds: int = 1800) -> None:
     while not _backup_stop.wait(check_interval_seconds):
         try:
             maybe_daily_backup()
+            maybe_daily_images_backup()
         except Exception:
             # 数据路径禁止静默失败：线程里的异常没人接，必须落日志
             logger.exception("每日自动备份失败")

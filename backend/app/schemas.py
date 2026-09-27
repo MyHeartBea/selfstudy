@@ -28,6 +28,8 @@ class MistakeCreate(BaseModel):
     source_type: str = "other"
     source_year: str = ""
     source_name: str = ""
+    # 错因归因（ATTACHMENT_KEYS 成员：PUT 不带键=保留库里原值，防止编辑表单洗掉归因）
+    error_reason: str = ""
     # 题干配图：元素为 data URL（新上传）或已保存的相对路径（编辑时保留）
     images: List[str] = Field(default_factory=list, max_length=5)
     # 英语整篇精读（可选）：解析后挂在错题上的附加内容

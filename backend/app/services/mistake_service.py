@@ -52,6 +52,9 @@ ATTACHMENT_KEYS = (
     "english_phrases",
     "english_words",
     "english_questions",
+    # 错因归因也走"不带键=保留"：录入/编辑表单没有这个输入框，
+    # 按"普通字段不传即重置"的口径，编辑一次就会把用户亲手标的归因洗掉
+    "error_reason",
 )
 # 这些键在库里是 JSON 文本列（列名与 body 键名一致，见 MISTAKE_FIELD_KEYS），回填时要解码
 _ATTACHMENT_JSON_KEYS = frozenset(
@@ -420,6 +423,7 @@ def build_mistake_fields(
         "source_type": source_type,
         "source_year": source_year,
         "source_name": source_name,
+        "error_reason": str(body.get("error_reason") or "").strip(),
         "images": images,
         "images_text": json.dumps(images, ensure_ascii=False),
         "passage_text": str(body.get("passage_text") or "").strip(),

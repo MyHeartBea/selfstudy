@@ -3,7 +3,16 @@
  * 生词本（英语二核心）：词表管理 + 闪卡快刷 + 批量导入。
  * 复习节奏：认识则阶梯拉远（1/2/4/7/15/30/60 天），模糊说明天，不认识留在队列。
  */
-import { computed, onActivated, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import {
+  computed,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  reactive,
+  ref,
+  watch,
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -416,11 +425,21 @@ onMounted(() => {
 // keep-alive 返回本页：列表静默刷新 + 统计数字原地更新（loadStats 无 loading 态）
 let vvActivated = false
 onActivated(() => {
+  // addEventListener 对同一函数引用幂等，重复 add 无副作用——
+  // 这样无论组件是否真被缓存，激活时键盘监听一定在
+  window.addEventListener('keydown', onKeydown)
   if (vvActivated) {
     loadList({ background: true })
     loadStats()
   }
   vvActivated = true
+})
+
+// 缓存状态下离开页面组件不会卸载：window 键盘监听必须跟着停，
+// 否则在别的页面按空格/方向键会静默推进闪卡（甚至发出打分请求）
+onDeactivated(() => {
+  window.removeEventListener('keydown', onKeydown)
+  if (searchTimer) clearTimeout(searchTimer)
 })
 
 onUnmounted(() => window.removeEventListener('keydown', onKeydown))

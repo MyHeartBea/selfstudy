@@ -223,6 +223,9 @@ onActivated(() => {
 watch(
   () => route.query.tag,
   (value) => {
+    // keep-alive 缓存下本组件在离开页面后仍活着：此时 route 已经是别人的页面，
+    // 不能再动本页筛选（否则每次离开都会清掉筛选并发起一次后台请求）
+    if (route.name !== 'knowledge') return
     const tag = value == null ? '' : String(value)
     if (tag === filters.tag) return
     filters.tag = tag

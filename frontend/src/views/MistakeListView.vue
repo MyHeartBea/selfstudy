@@ -6,7 +6,17 @@
  * - 筛选条件同步到 URL（刷新/分享不丢）
  * - 批量操作 / 导入导出 / 详情弹窗
  */
-import { computed, onActivated, onMounted, onUnmounted, ref, toRef, watch, nextTick } from 'vue'
+import {
+  computed,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  ref,
+  toRef,
+  watch,
+  nextTick,
+} from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 import request from '../api/request'
@@ -325,6 +335,11 @@ let mlActivated = false
 onActivated(() => {
   if (mlActivated) loadMistakes({ background: true })
   mlActivated = true
+})
+// 缓存状态下离开：挂起的防抖定时器会在后台补一枪加载，顺手清掉
+onDeactivated(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+  if (syncTimer) clearTimeout(syncTimer)
 })
 onUnmounted(() => {
   if (searchTimer) clearTimeout(searchTimer)

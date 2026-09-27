@@ -482,5 +482,61 @@ class VariantEndpointTest(unittest.TestCase):
         self.assertEqual(r.status_code, 404)
 
 
+class ErrorReasonPersistenceTest(unittest.TestCase):
+    """error_reason 数据链路：CREATE 带、PUT 不带键保留、显式空串清除、导出带回。
+
+    这是个"普通字段不传即重置"陷阱的反例——归因表单不在编辑表单里，
+    必须走 ATTACHMENT_KEYS 的"不带键=保留"语义，否则编辑一次归因就被洗掉。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    @staticmethod
+    def _payload(question="归因链路测试题", error_reason=None):
+        payload = {
+            "subject_id": 3,
+            "question_type": "choice",
+            "question": question,
+            "correct_answer": "A",
+            "difficulty": 3,
+            "difficulty_points": "难点",
+            "analysis": "解析",
+        }
+        if error_reason is not None:
+            payload["error_reason"] = error_reason
+        return payload
+
+    def _detail(self, mid):
+        return client.get(f"/api/mistakes/{mid}").json()["data"]
+
+    def test_create_put_preserves_clear_and_export(self):
+        r = client.post("/api/mistakes", json=self._payload(error_reason="knowledge"))
+        self.assertEqual(r.status_code, 200, r.text)
+        mid = r.json()["data"]["id"]
+        self.assertEqual(self._detail(mid)["error_reason"], "knowledge")
+
+        # PUT 全量更新但**不带** error_reason 键 → 保留（表单没有这个输入框）
+        put_payload = self._payload(question="改过题干的题")
+        r2 = client.put(f"/api/mistakes/{mid}", json=put_payload)
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(self._detail(mid)["error_reason"], "knowledge")
+
+        # 显式提交空串 = 真的要清除
+        r3 = client.put(f"/api/mistakes/{mid}", json=self._payload(error_reason=""))
+        self.assertEqual(r3.status_code, 200)
+        self.assertEqual(self._detail(mid)["error_reason"], "")
+
+        # 导出必须带回归因（导入走 MISTAKE_COLUMNS 重建，同列清单）
+        client.post("/api/mistakes", json=self._payload(question="带归因的题", error_reason="calc"))
+        exported = client.get("/api/export").json()["data"]["mistakes"]
+        target = next(m for m in exported if m["question"] == "带归因的题")
+        self.assertEqual(target.get("error_reason"), "calc")
+
+
 if __name__ == "__main__":
     unittest.main()
