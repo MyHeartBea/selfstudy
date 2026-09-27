@@ -15,12 +15,13 @@ const ReviewCalendar = defineAsyncComponent(() => import('../components/ReviewCa
 import Icon from '../ui/Icon.vue'
 import UiEmpty from '../ui/UiEmpty.vue'
 import UiButton from '../ui/UiButton.vue'
-import UiTag from '../ui/UiTag.vue'
-import MathText from '../components/MathText.vue'
 import GlassCard from '../ui/GlassCard.vue'
 import MetricTile from '../ui/MetricTile.vue'
 import RingProgress from '../ui/RingProgress.vue'
 import AreaChart from '../ui/AreaChart.vue'
+import ForecastStrip from '../components/stats/ForecastStrip.vue'
+import WeeklyReportStrip from '../components/stats/WeeklyReportStrip.vue'
+import MockTrendStrip from '../components/stats/MockTrendStrip.vue'
 
 const loading = ref(false)
 const router = useRouter()
@@ -157,26 +158,8 @@ function goErrorReason(reason) {
   router.push({ path: '/mistakes', query: { error_reason: reason } })
 }
 
-// —— 复习负荷预报：未来 30 天到期分布 + 逾期 ——
+// —— 复习负荷预报：数据由 dashboard 聚合带回（fallback 单独拉），列计算在 ForecastStrip ——
 const forecast = ref({ overdue: 0, items: [] })
-const forecastCols = computed(() => {
-  const map = new Map((forecast.value.items || []).map((i) => [i.day, Number(i.count) || 0]))
-  const out = []
-  const today = new Date()
-  for (let i = 0; i < 30; i++) {
-    const d = new Date(today)
-    d.setDate(d.getDate() + i)
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-    out.push({
-      day: key,
-      count: map.get(key) || 0,
-      label: i === 0 ? '今天' : i % 7 === 0 ? `${d.getMonth() + 1}/${d.getDate()}` : '',
-    })
-  }
-  return out
-})
-const forecastMax = computed(() => Math.max(1, ...forecastCols.value.map((c) => c.count)))
-
 async function loadForecast() {
   try {
     const res = await request.get('/reviews/forecast', { params: { days: 30 }, silent: true })
@@ -186,52 +169,8 @@ async function loadForecast() {
   }
 }
 
-// —— AI 错因周报（按天缓存，重新生成强制刷新） ——
-const report = ref(null)
-const reportLoading = ref(false)
-
-async function loadWeeklyReport(force = false) {
-  if (reportLoading.value) return
-  reportLoading.value = true
-  try {
-    const res = await request.post(`/ai/weekly-report${force ? '?force=1' : ''}`, {})
-    report.value = res.data.data
-  } catch (err) {
-    // 错误提示由请求拦截器统一处理
-  } finally {
-    reportLoading.value = false
-  }
-}
-
 // —— 模考成绩趋势 ——
 const mocks = ref([])
-const mockTrend = computed(() => {
-  // 时间正序，取最近 12 场画折线
-  const list = [...mocks.value].reverse().slice(-12)
-  return list
-})
-const mockTrendPoints = computed(() => {
-  const list = mockTrend.value
-  if (list.length < 2) return ''
-  return list
-    .map((m, i) => {
-      const p = mockPoint(i)
-      return `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`
-    })
-    .join(' ')
-})
-
-function mockPoint(i) {
-  const W = 560
-  const H = 90
-  const pad = 10
-  const list = mockTrend.value
-  return {
-    x: pad + (i * (W - 2 * pad)) / Math.max(1, list.length - 1),
-    y: H - pad - ((Number(list[i]?.score) || 0) / 100) * (H - 2 * pad),
-  }
-}
-
 async function loadMocks() {
   try {
     const res = await request.get('/mocks', { params: { limit: 12 }, silent: true })
@@ -601,154 +540,11 @@ onBeforeUnmount(() => {
         <ReviewHeatmap v-else :days="119" />
       </GlassCard>
 
-      <!-- 复习负荷预报 -->
-      <GlassCard class="span3 fc-strip km-live" :pad="false" :hover="false">
-        <!-- 复合悬停装饰层 -->
-        <span class="km-live__ghost" aria-hidden="true">07</span>
-        <span class="km-live__rule" aria-hidden="true"></span>
-        <span class="km-live__corner tl" aria-hidden="true"></span>
-        <span class="km-live__corner tr" aria-hidden="true"></span>
-        <span class="km-live__corner bl" aria-hidden="true"></span>
-        <span class="km-live__corner br" aria-hidden="true"></span>
-        <span class="km-live__scan" aria-hidden="true"></span>
-        <div class="fc-head">
-          <h3 class="panel-title" data-reveal-lines>复习负荷预报</h3>
-          <span class="cap">未来 30 天到期分布，哪天堆多了提前匀开</span>
-          <span v-if="forecast.overdue" class="fc-overdue"
-            >逾期 <b class="num km-num">{{ forecast.overdue }}</b> 题</span
-          >
-        </div>
-        <div class="fc-bars" data-grow="bars">
-          <div
-            v-for="c in forecastCols"
-            :key="c.day"
-            class="fc-col"
-            :title="`${c.day}：到期 ${c.count} 题`"
-          >
-            <i
-              :class="{ peak: c.count === forecastMax && c.count > 0, today: c.label === '今天' }"
-              :style="{
-                height:
-                  (c.count ? Math.max(6, Math.round((c.count / forecastMax) * 64)) : 4) + 'px',
-              }"
-            ></i>
-            <span class="fc-label num km-num">{{ c.label }}</span>
-          </div>
-        </div>
-      </GlassCard>
-
-      <!-- AI 错因周报 -->
-      <GlassCard class="span3 report-strip km-live" :hover="false">
-        <!-- 复合悬停装饰层 -->
-        <span class="km-live__ghost" aria-hidden="true">08</span>
-        <span class="km-live__rule" aria-hidden="true"></span>
-        <span class="km-live__corner tl" aria-hidden="true"></span>
-        <span class="km-live__corner tr" aria-hidden="true"></span>
-        <span class="km-live__corner bl" aria-hidden="true"></span>
-        <span class="km-live__corner br" aria-hidden="true"></span>
-        <span class="km-live__scan" aria-hidden="true"></span>
-        <div class="rp-head">
-          <div>
-            <h3 class="panel-title" data-reveal-lines>AI 错因周报</h3>
-            <p class="cap">近 7 天答错题目按错因聚类，给出针对性训练建议</p>
-          </div>
-          <div class="rp-actions">
-            <span v-if="report && !report.empty && report.cached" class="rp-cached"
-              >今日已生成 · 缓存</span
-            >
-            <UiButton
-              variant="primary"
-              size="sm"
-              :loading="reportLoading"
-              @click="loadWeeklyReport(!report || report.cached)"
-            >
-              <Icon name="sparkles" :size="14" />
-              {{ report ? '重新生成' : '生成本周报告' }}
-            </UiButton>
-          </div>
-        </div>
-        <p v-if="reportLoading" class="rp-hint">AI 正在聚类分析近 7 天的错题…（约 10-30 秒）</p>
-        <p v-else-if="report?.empty" class="rp-hint">{{ report.message }}</p>
-        <template v-else-if="report">
-          <p class="rp-summary"><MathText :text="report.summary" /></p>
-          <div class="rp-clusters">
-            <div v-for="(c, i) in report.clusters" :key="i" class="rp-cluster">
-              <span class="rp-rank num km-num">{{ i + 1 }}</span>
-              <div class="rp-body">
-                <div class="rp-line">
-                  <b class="serif">{{ c.cause }}</b>
-                  <span class="rp-count num km-num">{{ c.count }} 题</span>
-                </div>
-                <p class="rp-advice"><MathText :text="c.advice" /></p>
-                <div v-if="c.tags && c.tags.length" class="rp-tags">
-                  <UiTag
-                    v-for="t in c.tags"
-                    :key="t"
-                    size="sm"
-                    color="var(--gold)"
-                    soft
-                    clickable
-                    @click="practiceTag(t)"
-                    >{{ t }}</UiTag
-                  >
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-      </GlassCard>
-
-      <!-- 模考成绩趋势 -->
-      <GlassCard class="span3 mock-strip" :pad="false" :hover="false">
-        <!-- 复合悬停装饰层 -->
-        <span class="km-live__ghost" aria-hidden="true">09</span>
-        <span class="km-live__rule" aria-hidden="true"></span>
-        <span class="km-live__corner tl" aria-hidden="true"></span>
-        <span class="km-live__corner tr" aria-hidden="true"></span>
-        <span class="km-live__corner bl" aria-hidden="true"></span>
-        <span class="km-live__corner br" aria-hidden="true"></span>
-        <span class="km-live__scan" aria-hidden="true"></span>
-        <div class="fc-head">
-          <h3 class="panel-title" data-reveal-lines>模考成绩趋势</h3>
-          <span class="cap">最近 {{ mockTrend.length }} 场 · 交卷自动存档</span>
-        </div>
-        <div v-if="mockTrend.length >= 2" class="mk-chart" data-grow="chart">
-          <svg
-            viewBox="0 0 560 90"
-            width="100%"
-            style="display: block"
-            role="img"
-            aria-label="模考分数趋势"
-          >
-            <path
-              :d="mockTrendPoints"
-              fill="none"
-              stroke="var(--accent)"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-            <circle
-              v-for="(m, i) in mockTrend"
-              :key="i"
-              :cx="mockPoint(i).x"
-              :cy="mockPoint(i).y"
-              r="3.5"
-              fill="var(--surface)"
-              stroke="var(--accent)"
-              stroke-width="2.2"
-            />
-          </svg>
-        </div>
-        <div v-if="mockTrend.length" class="mk-meta">
-          <span v-for="(m, i) in mockTrend" :key="i" class="mk-chip num km-num">
-            {{ m.exam_year || '—' }} · {{ m.score }} 分 · {{ m.correct }}/{{ m.total }}
-          </span>
-        </div>
-        <p v-else class="cap mk-empty">
-          还没有模考存档——去「自主练习 - 真题模考」打一场，成绩会自动记到这里。
-        </p>
-      </GlassCard>
+      <!-- 复习负荷预报 / AI 错因周报 / 模考成绩趋势：2026-09-27 拆为 components/stats/* 子组件，
+           数据仍由本页 dashboard 聚合取回后下发（周报自取数），样式随组件走 -->
+      <ForecastStrip :forecast="forecast" />
+      <WeeklyReportStrip @practice="practiceTag" />
+      <MockTrendStrip :mocks="mocks" />
     </div>
 
     <!-- 分布 -->
@@ -1361,173 +1157,6 @@ onBeforeUnmount(() => {
   margin-top: 12px;
 }
 
-/* 复习负荷预报条 */
-.fc-strip {
-  overflow: hidden;
-}
-.fc-head {
-  display: flex;
-  align-items: baseline;
-  gap: 14px;
-  flex-wrap: wrap;
-  padding: 16px 22px 0;
-}
-.fc-overdue {
-  margin-left: auto;
-  font-size: 12.5px;
-  color: var(--red);
-  background: var(--red-soft);
-  padding: 3px 12px;
-  border-radius: 999px;
-}
-.fc-overdue b {
-  font-weight: 800;
-}
-.fc-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 5px;
-  padding: 14px 22px 10px;
-}
-.fc-col {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-}
-.fc-col i {
-  display: block;
-  width: 100%;
-  max-width: 24px;
-  border-radius: 4px 4px 2px 2px;
-  background: color-mix(in srgb, var(--accent) 40%, var(--surface-2));
-  transition: height 0.8s var(--spring);
-}
-.fc-col i.today {
-  background: var(--accent-grad);
-  box-shadow: 0 0 0 1px var(--accent-ring);
-}
-.fc-col i.peak {
-  background: var(--accent);
-}
-.fc-label {
-  font-size: 10px;
-  color: var(--ink-3);
-  height: 14px;
-  white-space: nowrap;
-}
-
-/* AI 错因周报 */
-.rp-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-.rp-hint {
-  margin: 14px 0 2px;
-  font-size: 13px;
-  color: var(--ink-3);
-}
-.rp-summary {
-  margin: 14px 0 2px;
-  padding: 12px 16px;
-  border-radius: var(--r-md);
-  background: var(--accent-soft);
-  font-size: 14px;
-  line-height: 1.9;
-  color: var(--ink);
-}
-.rp-clusters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-.rp-cluster {
-  display: flex;
-  gap: 11px;
-  padding: 12px 14px;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--r-md);
-}
-.rp-rank {
-  width: 24px;
-  height: 24px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 800;
-  font-size: 12px;
-}
-.rp-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.rp-line b {
-  font-size: 15px;
-  color: var(--ink);
-}
-.rp-count {
-  font-size: 12px;
-  color: var(--accent-ink);
-  font-weight: 700;
-}
-.rp-advice {
-  margin: 4px 0 6px;
-  font-size: 12.8px;
-  line-height: 1.8;
-  color: var(--ink-2);
-}
-.rp-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.rp-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.rp-cached {
-  font-size: 12px;
-  color: var(--teal);
-  background: var(--teal-soft);
-  padding: 3px 11px;
-  border-radius: 999px;
-}
-
-/* 模考趋势条 */
-.mk-chart {
-  padding: 12px 22px 2px;
-}
-.mk-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px 22px 16px;
-}
-.mk-chip {
-  font-size: 11.5px;
-  color: var(--ink-2);
-  background: var(--surface-2);
-  padding: 3px 11px;
-  border-radius: 999px;
-}
-.mk-empty {
-  padding: 0 22px 16px;
-  margin: 0;
-}
-
 /* ---------- 下部布局 ---------- */
 .grid-2 {
   display: grid;
@@ -1972,18 +1601,14 @@ button.ers-row .s-nums {
 }
 
 /* ③ 编号章节：每个区标题写成 [NN] — 名称，配上下发丝线 */
-.stats-page .panel-head,
-.stats-page .fc-head,
-.stats-page .rp-head {
+.stats-page .panel-head {
   align-items: baseline;
   gap: 16px;
   padding-bottom: 14px;
   border-bottom: 1px solid var(--line);
   margin-bottom: clamp(20px, 3vh, 36px);
 }
-.stats-page .panel-title,
-.stats-page .fc-head .panel-title,
-.stats-page .rp-head .panel-title {
+.stats-page .panel-title {
   font-size: 11.5px !important;
   letter-spacing: 0.2em !important;
   text-transform: uppercase !important;
@@ -1996,14 +1621,6 @@ button.ers-row .s-nums {
 .stats-page .bento > .span2:nth-of-type(2) .panel-head::before {
   content: '[02]';
 }
-.stats-page .fc-strip .fc-head::before {
-  content: '[03]';
-}
-.stats-page .report-strip .rp-head::before {
-  content: '[04]';
-}
-.stats-page .fc-head::before,
-.stats-page .rp-head::before,
 .stats-page .panel-head::before {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -2072,12 +1689,12 @@ button.ers-row .s-nums {
 }
 
 /* ⑤ 数字与标签排版：读数更大、标签统一极小大写等宽 */
-.stats-page :is(.b-tile .num, .m-num, .rp-cluster b) {
+.stats-page :is(.b-tile .num, .m-num) {
   font-size: clamp(1.7rem, 2.9vw, 2.6rem) !important;
   line-height: 1 !important;
   letter-spacing: -0.03em !important;
 }
-.stats-page :is(.m-label, .b-tile .k, .cap, .rp-hint) {
+.stats-page :is(.m-label, .b-tile .k, .cap) {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.1em;
