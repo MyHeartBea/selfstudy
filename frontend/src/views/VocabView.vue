@@ -389,7 +389,11 @@ function goContext(hit) {
 }
 
 async function grade(result) {
+  // 飞出动画窗口内（flyGrade 的 240ms setTimeout 未落地）的任何判分调用都会
+  // 打到**下一张卡**上且请求双发——flyDir 非空说明上一张还在飞，直接忽略
+  if (flyDir.value) return
   if (!currentCard.value) return
+  justDragged = false // 触屏拖拽若未派生 click，标志残留会吞掉下一张卡的首次点击
   try {
     await request.post(`/vocab/${currentCard.value.id}/review`, { result })
   } catch (err) {}
@@ -454,13 +458,14 @@ function onKeydown(event) {
     flipped.value = !flipped.value
   } else if (event.key === 'ArrowRight') {
     event.preventDefault()
-    flyGrade('known')
+    // 方向键判分与按钮同语义：必须先翻面看过答案（B4）
+    if (flipped.value) flyGrade('known')
   } else if (event.key === 'ArrowLeft') {
     event.preventDefault()
-    flyGrade('unknown')
+    if (flipped.value) flyGrade('unknown')
   } else if (event.key === 'ArrowDown') {
     event.preventDefault()
-    flyGrade('fuzzy')
+    if (flipped.value) flyGrade('fuzzy')
   } else if (flipped.value && event.key === '1') {
     grade('unknown')
   } else if (flipped.value && event.key === '2') {

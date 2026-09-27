@@ -11,6 +11,7 @@ import {
   questionTypesForKind,
 } from '../composables/useBaseData'
 import { createMistakeDraft } from '../composables/mistakeDraft'
+import { compressImageFile } from '../utils/image'
 import { useSubSubject } from '../composables/useSubSubject'
 import { toast } from '../ui/toast'
 import UiButton from '../ui/UiButton.vue'
@@ -153,7 +154,9 @@ async function onImagePick(event) {
   event.target.value = ''
   if (!file) return
   try {
-    const dataUrl = await readFileAsDataUrl(file)
+    // 与智能录入同源压缩（长边 2000、PNG 无损）：8MB 截图 base64 直塞 PUT 是白花 token
+    const compressed = await compressImageFile(file)
+    const dataUrl = compressed ? compressed.dataUrl : await readFileAsDataUrl(file)
     if (dataUrl.length > 11 * 1024 * 1024) {
       toast.warning('图片过大，请压缩到 8MB 以内再上传')
       return

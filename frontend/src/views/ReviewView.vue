@@ -216,6 +216,8 @@ watch(
     gradeResult.value = null
     reviewSaved.value = false
     wrongSaved.value = false
+    // 本轮对错计数也属于"上一块的作答现场"：不清会把两块的成绩加在一起
+    resultCount.value = { correct: 0, wrong: 0 }
     done.value = false
     loadQueue()
   },
@@ -381,40 +383,45 @@ async function submitMock(auto = false) {
       confirmText: '交卷',
     })
     if (!okToGo) return
+    // 弹窗期间倒计时可能已触发自动交卷并跑完：必须复查，否则两边各跑一遍，
+    // 全队列复习记录双写（守卫在 await 之前检查不到这种交错）
+    if (done.value || mockSubmitting.value) return
   }
   stopMockTimer()
   mockSubmitting.value = true
   try {
-    let correct = 0
-    const details = []
-    for (const q of queue.value) {
-      const ans = String(mockAnswers.value[q.id] || '').trim()
-      let result = false
-      if (q.question_type === 'fill' && ans) {
-        try {
-          const res = await request.post(`/mistakes/${q.id}/judge`, { user_answer: ans })
-          result = !!res.data.data?.correct
-        } catch (err) {
-          result = false
+    // 第一遍：本地判分（填空走服务端判分接口，其余本地 scoreLetters）——各题独立，并行
+    const judged = await Promise.all(
+      queue.value.map(async (q) => {
+        const ans = String(mockAnswers.value[q.id] || '').trim()
+        let result
+        if (q.question_type === 'fill' && ans) {
+          try {
+            const res = await request.post(`/mistakes/${q.id}/judge`, { user_answer: ans })
+            result = !!res.data.data?.correct
+          } catch (err) {
+            result = false
+          }
+        } else {
+          result = scoreLetters(ans, q.correct_answer)
         }
-      } else if (q.question_type === 'multi') {
-        result = scoreLetters(ans, q.correct_answer)
-      } else {
-        result = scoreLetters(ans, q.correct_answer)
-      }
-      if (result) correct += 1
-      // 错题库的题：结果写入 SM-2 复习记录；真题库的题：不写错题记录，交卷后错题入错题本
-      if (!q.paperQuestion) {
-        await request.post(`/mistakes/${q.id}/review`, { result, user_answer: ans })
-      }
-      details.push({
-        id: q.id,
-        snippet: (q.question || '').slice(0, 64),
-        your: ans || '（未作答）',
-        right: q.correct_answer || '',
-        result,
-      })
-    }
+        return { q, ans, result }
+      }),
+    )
+    const correct = judged.filter((j) => j.result).length
+    // 第二遍：错题库的题写 SM-2 复习记录。并行 + 静默 + allSettled——
+    // 此前串行 await：50 题 RTT 叠加很慢，且任一失败抛到外层把整场作废、重交双计
+    await Promise.allSettled(
+      judged
+        .filter((j) => !j.q.paperQuestion)
+        .map((j) =>
+          request.post(
+            `/mistakes/${j.q.id}/review`,
+            { result: j.result, user_answer: j.ans },
+            { silent: true },
+          ),
+        ),
+    )
     resultCount.value.correct = correct
     resultCount.value.wrong = queue.value.length - correct
     mockReport.value = {
@@ -423,35 +430,43 @@ async function submitMock(auto = false) {
       score: Math.round((correct / Math.max(1, queue.value.length)) * 100),
       usedSec: mockDuration.value * 60 - mockLeft.value,
       overtime: auto === true,
-      details: details.filter((d) => !d.result),
+      details: judged
+        .filter((j) => !j.result)
+        .map((j) => ({
+          id: j.q.id,
+          snippet: (j.q.question || '').slice(0, 64),
+          your: j.ans || '（未作答）',
+          right: j.q.correct_answer || '',
+          result: false,
+        })),
       savedToMistakes: 0,
     }
     // 真题库整卷：错题自动收进错题本（仅收「作答了且错」的——未作答只是没做完，不进错题本）
     if (route.query.paper_id) {
-      const wrongQs = queue.value.filter((q) => {
-        const ans = String(mockAnswers.value[q.id] || '').trim()
-        return ans && !scoreLetters(ans, q.correct_answer)
-      })
+      const wrongQs = judged.filter((j) => j.q.paperQuestion && j.ans && !j.result)
       const subjectId = await subjectIdFor(paperSubject.value)
-      for (const q of wrongQs) {
-        try {
-          await request.post(
+      const saved = await Promise.allSettled(
+        wrongQs.map((j) =>
+          request.post(
             '/mistakes',
             {
               subject_id: subjectId,
-              question_type: q.question_type,
-              question: q.question,
-              option_a: q.option_a || '',
-              option_b: q.option_b || '',
-              option_c: q.option_c || '',
-              option_d: q.option_d || '',
-              option_e: q.option_e || '',
-              option_f: q.option_f || '',
-              option_g: q.option_g || '',
-              correct_answer: q.correct_answer || '',
+              question_type: j.q.question_type,
+              question: j.q.question,
+              // 原文（完形/阅读的题组文章）必须跟过去，否则错题本里复习时没有语境
+              passage_text: j.q.passage || '',
+              option_a: j.q.option_a || '',
+              option_b: j.q.option_b || '',
+              option_c: j.q.option_c || '',
+              option_d: j.q.option_d || '',
+              option_e: j.q.option_e || '',
+              option_f: j.q.option_f || '',
+              option_g: j.q.option_g || '',
+              correct_answer: j.q.correct_answer || '',
               analysis:
-                q.analysis || `模考答错（正确答案 ${q.correct_answer || '见解析'}），解析待整理。`,
-              difficulty_points: q.difficulty_points || `模考错题 · ${q.section || '客观题'}`,
+                j.q.analysis ||
+                `模考答错（正确答案 ${j.q.correct_answer || '见解析'}），解析待整理。`,
+              difficulty_points: j.q.difficulty_points || `模考错题 · ${j.q.section || '客观题'}`,
               difficulty: 3,
               knowledge_tags: [],
               source_type: 'real_exam',
@@ -460,12 +475,10 @@ async function submitMock(auto = false) {
               images: [],
             },
             { silent: true },
-          )
-          mockReport.value.savedToMistakes += 1
-        } catch (err) {
-          // 单题入库失败不阻塞其余
-        }
-      }
+          ),
+        ),
+      )
+      mockReport.value.savedToMistakes = saved.filter((r) => r.status === 'fulfilled').length
     }
     done.value = true
     window.dispatchEvent(new CustomEvent('km:review-saved'))

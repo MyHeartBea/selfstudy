@@ -111,11 +111,17 @@ def _degrade_note(failed_channels: List[str]) -> str:
 
     通道按序回退时，前一个通道的异常会被后一个通道的成功掩盖，识别"照样出结果、
     只是又慢又抖" —— 以前只回一句"识别完成"，等于把通道故障藏起来，只能靠手感察觉。
-    **措辞里的"已降级"是前端 CaptureView 判定要不要提醒的锚点**，改字要同步改那里。
+    前端判定改用**结构化的 `degraded` 字段**（message 后缀只给人看，措辞随便改）。
     """
     if not failed_channels:
         return ""
     return f"（首选通道 {'、'.join(failed_channels)} 失败，已降级）"
+
+
+def _mark_degraded(parsed: dict, failed_channels: List[str]) -> None:
+    """把降级事实写进响应 data：前端靠这个字段挂提醒条，不再解析 message 文案。"""
+    if failed_channels:
+        parsed["degraded"] = True
 
 
 @router.post("/analyze", dependencies=[Depends(ai_rate_limit)])
@@ -187,6 +193,7 @@ def ocr_image(body: AiOcrRequest):
             parsed["method"] = "vision"
             parsed["raw_text"] = ""
             parsed["vision_model"] = provider[0]
+            _mark_degraded(parsed, failed_channels)
             _apply_auto_subject(parsed)
             return ok(parsed, f"视觉模型识别完成{_degrade_note(failed_channels)}")
         except Exception as exc:
@@ -213,6 +220,7 @@ def ocr_image(body: AiOcrRequest):
                     )
                     parsed["method"] = "local"
                     parsed["raw_text"] = text
+                    parsed["degraded"] = True  # 视觉通道全军覆没退到本地 OCR，本身就是降级
                     reason = (
                         f"（视觉模型失败：{mask_secret(last_vision_error, 120)}）"
                         if last_vision_error
@@ -309,6 +317,7 @@ def english_analysis(body: AiEnglishRequest):
         )
         return error(502, message)
     parsed["method"] = "vision" if body.images else "text"
+    _mark_degraded(parsed, failed_channels)
     # 自动识别并填入 科目/二级科目（英语→阅读、数学→高数、408→计网等）
     if parsed.get("is_english") and not parsed.get("subject_hint"):
         parsed["subject_hint"] = "英语"

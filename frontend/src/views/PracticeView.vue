@@ -141,8 +141,12 @@ function start() {
   if (filters.difficulty) query.difficulty = filters.difficulty
   if (filters.tag.trim()) query.tag = filters.tag.trim()
   if (filters.search.trim()) query.search = filters.search.trim()
-  if (filters.sourceType) query.source_type = filters.sourceType
-  if (filters.sourceYear.trim()) query.source_year = filters.sourceYear.trim()
+  // 真题模考的来源参数在上面 mock 分支里已经定死，高级筛选不得覆盖
+  //（勾过"来源=模拟题"再开真题模考，会把卷子悄悄换成模拟题——实测踩过）
+  if (mode.value !== 'mock') {
+    if (filters.sourceType) query.source_type = filters.sourceType
+    if (filters.sourceYear.trim()) query.source_year = filters.sourceYear.trim()
+  }
   router.push({ path: '/review', query })
 }
 

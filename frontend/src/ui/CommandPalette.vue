@@ -26,6 +26,16 @@ const route = useRoute()
 
 const results = computed(() => visibleItems(paletteState))
 
+/**
+ * 空查询态的键盘编址：导航命令 + 快捷操作摊平成一维列表（与搜索结果同一套
+ * activeIndex 寻址）。此前空态只有模板高亮、没有键盘编址——上下方向键与 Enter
+ * 全部无效，是整套面板里唯一"看起来能用、实际断线"的死角。
+ */
+const emptyStateItems = computed(() => [
+  ...NAV_COMMANDS.map((c) => ({ ...c, kind: 'nav', target: c.path })),
+  ...QUICK_ACTIONS.map((a) => ({ ...a, kind: 'quick' })),
+])
+
 /** 分段渲染，但每行带着自己在一维列表里的下标（见 store 里的 visibleSections）。 */
 const sections = computed(() => visibleSections(paletteState))
 
@@ -84,19 +94,23 @@ function onKeydown(event) {
     return
   }
   if (!paletteState.open) return
+  // 键盘编址跟随内容：空查询编址"导航+快捷操作"，有查询编址搜索结果
+  const activeList = paletteState.query.trim() ? results.value : emptyStateItems.value
   if (event.key === 'Escape') {
     event.preventDefault()
     closePalette()
   } else if (event.key === 'ArrowDown') {
     event.preventDefault()
-    moveActive(1, results.value.length)
+    moveActive(1, activeList.length)
   } else if (event.key === 'ArrowUp') {
     event.preventDefault()
-    moveActive(-1, results.value.length)
+    moveActive(-1, activeList.length)
   } else if (event.key === 'Enter') {
     event.preventDefault()
-    const item = results.value[paletteState.activeIndex]
-    if (item) choose(item)
+    const item = activeList[paletteState.activeIndex]
+    if (!item) return
+    if (item.kind === 'quick' && item.event) runQuick(item)
+    else choose(item)
   } else if (event.key === 'Tab') {
     // Tab 只是换过滤器：结果已经在本地，不重新打接口
     event.preventDefault()
@@ -161,11 +175,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               </button>
               <div class="palette-group">快捷操作</div>
               <button
-                v-for="item in QUICK_ACTIONS"
+                v-for="(item, j) in QUICK_ACTIONS"
                 :key="item.label"
                 type="button"
                 class="palette-item"
+                :class="{ active: NAV_COMMANDS.length + j === paletteState.activeIndex }"
                 @click="runQuick(item)"
+                @mousemove="paletteState.activeIndex = NAV_COMMANDS.length + j"
               >
                 <Icon :name="item.icon" :size="16" class="palette-item-icon" />
                 <span class="palette-item-label">{{ item.label }}</span>

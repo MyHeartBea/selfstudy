@@ -304,10 +304,9 @@ async function analyzeImage() {
     // 都把后端给的具体原因显示出来。识别"照样成功但更慢更抖"是最难自查的一类问题，
     // 不显示就等于让用户替我们盯通道健康。
     const ocrMessage = String(res.data?.message || '')
-    aiWarning.value =
-      (parsed.value.method === 'local' && ocrMessage) || ocrMessage.includes('已降级')
-        ? ocrMessage
-        : ''
+    // 降级判定用后端的结构化字段（data.degraded）；message 里的"已降级"仅作旧后端兜底
+    const degraded = parsed.value.degraded === true || ocrMessage.includes('已降级')
+    aiWarning.value = degraded && ocrMessage ? ocrMessage : ''
     formKey.value += 1
     toast.success(
       parsed.value.is_english
