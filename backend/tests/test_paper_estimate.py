@@ -13,6 +13,8 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services import exam_paper_extract as extract_mod
+from app.services import exam_paper_scan as scan_mod
 from app.services import exam_paper_service as eps
 
 client = TestClient(app)
@@ -32,7 +34,8 @@ class EstimateBillTest(unittest.TestCase):
 
     def _patch_root(self, names):
         root = _make_root(self._tmp.name, names)
-        p = patch.object(eps, "papers_root", lambda: root)
+        # papers_root 定义在 exam_paper_scan（2026-09-27 拆分），patch 要打到定义处
+        p = patch.object(scan_mod, "papers_root", lambda: root)
         p.start()
         self.addCleanup(p.stop)
         return root
@@ -41,7 +44,8 @@ class EstimateBillTest(unittest.TestCase):
         def fake_probe(path, kind):
             return source if kind == "source" else (answer or source)
 
-        p = patch.object(eps, "_probe_file", side_effect=fake_probe)
+        # _probe_file 定义在 exam_paper_extract（estimate_import 的同模块协作者）
+        p = patch.object(extract_mod, "_probe_file", side_effect=fake_probe)
         p.start()
         self.addCleanup(p.stop)
 

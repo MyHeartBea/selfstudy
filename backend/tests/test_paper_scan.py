@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from app.services import exam_paper_scan as scan_mod
 from app.services import exam_paper_service as eps
 
 
@@ -89,7 +90,8 @@ class ScanFolderTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def scan(self):
-        with patch.object(eps, "papers_root", return_value=self.root):
+        # papers_root 定义在 exam_paper_scan（2026-09-27 拆分），patch 要打到定义处
+        with patch.object(scan_mod, "papers_root", return_value=self.root):
             return eps.scan_folder()
 
     def test_dedupes_same_subject_and_year_into_one_candidate(self):
