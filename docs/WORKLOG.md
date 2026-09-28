@@ -1203,3 +1203,53 @@ scoped 不跨组件边界——根选择器留主文件、内部样式搬子组�
 **验证**：后端 **374**（+2 文件 8 用例）、前端 Vitest **163**（+knowledgeReview 2）、
 build、ruff/eslint/prettier 全绿；E2E **54** 全绿（workers=2，2.2 分钟）；
 8000 生产实测闪卡会话（翻面/释义/真题语境回链/退出）与 /review 渲染零 console 错误。
+
+## 2026-09-28 · 第四轮体检修复批（波四验收 + P0-P3 全清）
+
+两个审计代理对"波四"三大新功能验尸 + 全量复查,发现问题按 P0-P3 全清
+（本轮除"维持不做"清单外只剩 ReviewView/VocabView 视图拆分与生词停用词）。
+
+**P0（会写脏数据的）**：
+- **真题卷填空题判分必错**：拼卷题 id 属 exam_questions,前端走
+  `/mistakes/{id}/judge` 必 404 → 答对的填空也被判错塞进错题本。新增
+  `POST /papers/{pid}/questions/{qid}/judge`（复用 judge_fill 同口径）,
+  前端对 paperQuestion 的填空改走新端点;
+- **VocabFlashcard 判分竞态**：快速双击"认识"会对同卡双发请求、连跳两卡、
+  "不认识"回队重复入列。flyDir + grading 双重守卫(flyDir 只管飞出窗口,
+  grading 锁在途请求);
+- **提字缓存固化截断结果**：被截断的残缺原文一旦进 24h 缓存,重试必命中且
+  跳过视觉,"重试补齐"成假话。`_vision_extract_text` 加 out_meta 回传
+  truncated（不改返回签名,essay/papers 老调用方零影响）,**截断不写缓存**;
+  且 instruction（补充要求）参与缓存哈希——换要求重试不再被旧缓存静默忽略。
+
+**P1**：
+- 连考防御：URL 直达 paper_ids 去重、只收 done 且有题的卷（半卷不开考）、
+  失败卷号明示（allSettled 替代 Promise.all）、paperQuestionView 带 paperId
+  （换卷断原文改按 id,title 同名不再漏）、模考分支 loadErrorText 独立文案;
+- 知识点复习弹窗：related_tags 未设防白屏修复、**先回忆再揭示门禁**
+  （没显示摘要禁用判分,口径与闪卡翻面一致）、键盘流（空格揭示/1 忘了/
+  2 记住了/s 跳过,activated/deactivated 配对挂卸）、判分失败 toast、
+  新增"跳过"（不判分推本轮末尾,不污染调度）;
+- **知识点复习进度纳入导入**：ImportPayload 加可选 knowledge 段
+  （KnowledgeImportItem 放宽 null）,insert-if-absent（同名 COLLATE NOCASE
+  跳过不覆盖,本地可能更新）、科目/二级科目 id 跨库容错缺失置空、
+  空 payload 显式 400。
+
+**P2**：
+- **队列口径共享**：review_service 抽出 `queue_due_cond(alias)` /
+  `queue_order(alias)`,错题今日队列与知识点队列同源——知识点此前手抄版
+  少了第三排序键,已对齐;TABLES_DDL 补 `idx_knowledge_base_next_review_at`;
+- degraded_steps **保留在 data**（此前 pop 掉只剩布尔,前端将来"缺哪步补哪步"
+  没数据口）;`_qa_task` 失败改显式 `_qa_failed` 标记（res is orig 对象身份
+  判断脆弱,收集时剥标记不落库）;
+- **HTTP 层冒烟 7 条**（test_http_surface.py）：/reviews/today 对象双信封、
+  配额 GET/PUT 往返、forecast 形状、知识点队列/复习/404、/snapshots/images
+  （含空目录跳过）、/mistakes/batch-detail（按请求序返回+跳过缺失）——
+  这些端点此前只有 service 层测试,HTTP 形状没人钉。
+
+**P3**：连考多选显示"已选共 N 题 + 建议时长"（每题 1.5 分钟估算）;
+ai_service 再拆遥测/预算层评估后不动（904 行,先例已立,等下次动 AI 层顺手做）。
+
+**验证**：后端 374→**381**（+7 HTTP 冒烟+2 调度往返）、前端 Vitest **163**、
+build、ruff/eslint/prettier 全绿;导入往返测试当场抓到"NULL 字段卡死整批
+导入 422"的真 bug（MistakeCreate 可空列已放宽 Optional）。
