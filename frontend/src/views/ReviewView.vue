@@ -587,7 +587,11 @@ async function loadQueue() {
       settled.forEach((res, i) => {
         if (res.status === 'fulfilled') {
           const paper = res.value.data.data
-          if (paper && paper.status === 'done' && (paper.questions || []).length) {
+          // 只显式拒绝"未完成"状态(pending/extracting/structuring/error——题目可能
+          // 不全,静默开半卷比报错更糟);status 缺省视为可用(兼容打桩/旧数据)
+          const status = paper?.status || 'done'
+          const usable = status === 'done' && (paper.questions || []).length > 0
+          if (paper && usable) {
             paperList.push(paper)
             return
           }

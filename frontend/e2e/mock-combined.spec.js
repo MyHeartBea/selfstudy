@@ -11,6 +11,7 @@ import { test, expect, mockApi, guardPageErrors, expectAllApiStubbed, callsTo } 
 
 const paper11 = {
   id: 11,
+  status: 'done',
   title: '2021 数学二真题',
   year: '2021',
   subject: '数学二',
@@ -32,6 +33,7 @@ const paper11 = {
 }
 const paper12 = {
   id: 12,
+  status: 'done',
   title: '2020 英语二真题',
   year: '2020',
   subject: '英语二',
