@@ -13,6 +13,31 @@ INTERVALS = [1, 3, 7, 15, 30]  # v5 旧固定阶梯：仅迁移回填/兼容保�
 
 DAILY_LIMIT_META_KEY = "review_daily_limit"
 
+# ── 今日队列统一口径（错题与知识点共用，别名由调用方代入）──────────────
+# 到期 = 未暂停且（没排期 / 已到期 / 从未复习）；排序 = 新条目优先 → 老复习时间优先
+# → 没排期的在前 → id 稳定序。**两个队列必须同口径**，改这里就同时改了两个。
+# 错题多一个 review_paused 条件与 block_sql 由调用方自行拼接。
+
+
+def queue_due_cond(alias: str = "") -> str:
+    """到期 WHERE 片段（不含暂停条件）。alias 传 "kb." / "" 等表别名。"""
+    c = f"{alias}." if alias else ""
+    return (
+        f"({c}next_review_at IS NULL OR {c}next_review_at <= datetime('now') "
+        f"OR {c}review_count = 0)"
+    )
+
+
+def queue_order(alias: str = "") -> str:
+    """排序片段：新条目优先 → 最久没复习的在前 → 没排期的兜底 → id 稳定序。"""
+    c = f"{alias}." if alias else ""
+    return (
+        f"CASE WHEN {c}review_count = 0 OR {c}next_review_at IS NULL THEN 0 ELSE 1 END ASC, "
+        f"COALESCE({c}last_reviewed_at, '1970-01-01 00:00:00') ASC, "
+        f"COALESCE({c}next_review_at, '9999-12-31 23:59:59') ASC, "
+        f"{c}id ASC"
+    )
+
 
 def get_daily_limit(conn: sqlite3.Connection) -> int:
     """每日配额：页内覆盖值（app_meta）优先，未设置或非法时回退 .env 的 REVIEW_DAILY_LIMIT。"""
@@ -265,8 +290,7 @@ def get_today_queue(
         conn.execute(
             "SELECT COUNT(*) AS c FROM mistakes "
             "WHERE COALESCE(review_paused, 0) = 0 "
-            "AND (next_review_at IS NULL OR next_review_at <= datetime('now') "
-            "     OR review_count = 0) " + block_sql,
+            "AND " + queue_due_cond() + " " + block_sql,
             block_params,
         ).fetchone()["c"]
     )
@@ -288,13 +312,7 @@ def get_today_queue(
         rows = conn.execute(
             "SELECT * FROM mistakes "
             "WHERE COALESCE(review_paused, 0) = 0 "
-            "AND (next_review_at IS NULL OR next_review_at <= datetime('now') "
-            "     OR review_count = 0) " + block_sql + "ORDER BY "
-            "  CASE WHEN review_count = 0 OR next_review_at IS NULL THEN 0 ELSE 1 END ASC, "
-            "  COALESCE(last_reviewed_at, '1970-01-01 00:00:00') ASC, "
-            "  COALESCE(next_review_at, '9999-12-31 23:59:59') ASC, "
-            "  id ASC "
-            "LIMIT ?",
+            "AND " + queue_due_cond() + " " + block_sql + "ORDER BY " + queue_order() + " LIMIT ?",
             block_params + (fetch,),
         ).fetchall()
 

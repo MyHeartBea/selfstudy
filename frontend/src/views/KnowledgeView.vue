@@ -1,6 +1,16 @@
 <script setup>
 /** 知识点库：筛选 + 分页表格 + 编辑/创建弹窗 + AI 总结 + 一键练习 */
-import { computed, onActivated, onMounted, reactive, ref, toRef, watch } from 'vue'
+import {
+  computed,
+  onActivated,
+  onDeactivated,
+  onMounted,
+  onUnmounted,
+  reactive,
+  ref,
+  toRef,
+  watch,
+} from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -264,11 +274,45 @@ async function gradeKnowledge(result) {
     reviewCount.value += 1
     reviewSummaryShown.value = false
   } catch (err) {
-    // 失败不动队列：这条留原地，用户可再评一次
+    // 失败不动队列:这条留原地,用户可再评一次
+    toast.error('复习结果保存失败,这条会留在队列里')
   } finally {
     reviewSaving.value = false
   }
 }
+
+/** 跳过:不判分推到本轮末尾(总有"现在不想看"的,硬判会污染调度数据)。 */
+function skipKnowledge() {
+  if (reviewQueue.value.length <= 1) return
+  reviewQueue.value.push(reviewQueue.value.shift())
+  reviewSummaryShown.value = false
+}
+
+// 复习键盘流(与闪卡/错题复习同风格):空格显示摘要,1 忘了,2 记住了,s 跳过。
+// KnowledgeView 在 KeepAlive 里:监听按 activated/deactivated 配对挂卸,
+// 缓存态离开页面不能让数字键误触判分。
+function onReviewKeydown(event) {
+  if (!reviewVisible.value || !reviewCurrent.value) return
+  const tag = event.target?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  if ((event.key === ' ' || event.key === 'Enter') && !reviewSummaryShown.value) {
+    event.preventDefault()
+    reviewSummaryShown.value = true
+  } else if (reviewSummaryShown.value && event.key === '1') {
+    event.preventDefault()
+    gradeKnowledge(false)
+  } else if (reviewSummaryShown.value && event.key === '2') {
+    event.preventDefault()
+    gradeKnowledge(true)
+  } else if (event.key.toLowerCase() === 's' && reviewQueue.value.length > 1) {
+    event.preventDefault()
+    skipKnowledge()
+  }
+}
+onMounted(() => window.addEventListener('keydown', onReviewKeydown))
+onActivated(() => window.addEventListener('keydown', onReviewKeydown))
+onDeactivated(() => window.removeEventListener('keydown', onReviewKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onReviewKeydown))
 
 // keep-alive 返回本页：静默刷新，首次激活不刷（mounted 刚拉过）
 let kvActivated = false
@@ -581,7 +625,10 @@ watch(
         <UiButton v-else variant="outline" block @click="reviewSummaryShown = true">
           回忆一下，再显示摘要
         </UiButton>
-        <div v-if="reviewCurrent.related_tags.length" class="kr-related">
+        <div
+          v-if="reviewCurrent.related_tags && reviewCurrent.related_tags.length"
+          class="kr-related"
+        >
           <UiTag v-for="tag in reviewCurrent.related_tags" :key="tag">{{ tag }}</UiTag>
         </div>
       </template>
@@ -594,11 +641,30 @@ watch(
           {{ reviewCurrent ? '退出' : '关闭' }}
         </UiButton>
         <template v-if="reviewCurrent">
-          <UiButton variant="danger" :loading="reviewSaving" @click="gradeKnowledge(false)">
+          <!-- 先回忆再揭示:没显示摘要就判分 = 没如实暴露"忘了",口径与闪卡翻面一致 -->
+          <UiButton
+            variant="danger"
+            :disabled="!reviewSummaryShown"
+            :loading="reviewSaving"
+            @click="gradeKnowledge(false)"
+          >
             忘了
           </UiButton>
-          <UiButton variant="success" :loading="reviewSaving" @click="gradeKnowledge(true)">
+          <UiButton
+            variant="success"
+            :disabled="!reviewSummaryShown"
+            :loading="reviewSaving"
+            @click="gradeKnowledge(true)"
+          >
             记住了
+          </UiButton>
+          <UiButton
+            v-if="reviewQueue.length > 1"
+            variant="ghost"
+            :loading="reviewSaving"
+            @click="skipKnowledge"
+          >
+            跳过
           </UiButton>
         </template>
       </template>

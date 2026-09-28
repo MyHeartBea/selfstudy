@@ -148,7 +148,11 @@ def import_mistakes(body: ImportPayload):
     **按题干指纹去重**：同一份导出文件重复导入不再把库翻倍（`duplicates` 逐条给出
     撞车的既有 id）。纯图片题没有可比对的文字，一律照常入库——判重的假阳性代价是
     "静默丢题"，比翻倍严重。
+    可选 `knowledge` 段：知识点词条（含 SM-2 调度字段）随行迁移；
+    **已存在同名（COLLATE NOCASE）词条跳过不覆盖**——本地的词条可能比导出文件新。
     """
+    if not body.mistakes and not body.knowledge:
+        return error(400, "导入内容为空：payload 里既没有 mistakes 也没有 knowledge")
     snapshot = snapshot_database(f"before-import-{len(body.mistakes)}")
     conn = get_connection()
     try:
@@ -201,13 +205,75 @@ def import_mistakes(body: ImportPayload):
                 if fingerprint:
                     seen[fingerprint] = cur.lastrowid
                 created += 1
+            # —— 可选 knowledge 段：知识点词条（含 SM-2 调度字段）insert-if-absent ——
+            # 已存在同名词条跳过不覆盖：本地词条可能比导出文件新，覆盖是数据倒退。
+            # 科目 id 在导入库里未必存在（自增 id 不跨库），缺失时置空不阻塞。
+            knowledge_created = 0
+            knowledge_skipped = 0
+            for item in body.knowledge:
+                tag = str(item.tag_name or "").strip()
+                if not tag:
+                    knowledge_skipped += 1
+                    continue
+                exists = conn.execute(
+                    "SELECT 1 FROM knowledge_base WHERE tag_name = ? COLLATE NOCASE", (tag,)
+                ).fetchone()
+                if exists:
+                    knowledge_skipped += 1
+                    continue
+                subject_id = item.subject_id
+                if (
+                    subject_id is not None
+                    and not conn.execute(
+                        "SELECT 1 FROM subjects WHERE id = ?", (subject_id,)
+                    ).fetchone()
+                ):
+                    subject_id = None
+                sub_subject_id = item.sub_subject_id
+                if sub_subject_id is not None and (
+                    subject_id is None
+                    or not conn.execute(
+                        "SELECT 1 FROM sub_subjects WHERE id = ? AND subject_id = ?",
+                        (sub_subject_id, subject_id),
+                    ).fetchone()
+                ):
+                    sub_subject_id = None
+                conn.execute(
+                    "INSERT INTO knowledge_base (tag_name, subject_id, sub_subject_id, summary, "
+                    "related_tags, ease_factor, last_interval, review_count, "
+                    "last_reviewed_at, next_review_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        tag,
+                        subject_id,
+                        sub_subject_id,
+                        item.summary or "",
+                        item.related_tags or "",
+                        item.ease_factor if item.ease_factor is not None else 2.5,
+                        item.last_interval if item.last_interval is not None else 0,
+                        item.review_count if item.review_count is not None else 0,
+                        item.last_reviewed_at or None,
+                        item.next_review_at or None,
+                    ),
+                )
+                knowledge_created += 1
         message = f"成功导入 {created} 条错题"
+        if body.knowledge:
+            message += (
+                f"；知识点新建 {knowledge_created} 条、跳过 {knowledge_skipped} 条（同名不覆盖）"
+            )
         if duplicates:
             message += f"，重复跳过 {len(duplicates)} 条"
         if not snapshot:
             message += "（导入前快照失败，回滚点缺失，详见服务日志）"
         return ok(
-            {"created": created, "duplicates": duplicates, "failed": failed, "snapshot": snapshot},
+            {
+                "created": created,
+                "duplicates": duplicates,
+                "failed": failed,
+                "snapshot": snapshot,
+                "knowledge_created": knowledge_created,
+                "knowledge_skipped": knowledge_skipped,
+            },
             message,
         )
     except Exception as exc:

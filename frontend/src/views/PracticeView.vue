@@ -84,6 +84,15 @@ function togglePaper(id) {
   else mockPaperIds.value = [...mockPaperIds.value, id]
 }
 
+// 多选小结:共 N 题 + 按客观题节奏的建议时长(约每题 1.5 分钟,向上取整到 5)
+const pickedPapers = computed(() =>
+  donePapers.value.filter((p) => mockPaperIds.value.includes(p.id)),
+)
+const pickedTotal = computed(() =>
+  pickedPapers.value.reduce((sum, p) => sum + (Number(p.question_count) || 0), 0),
+)
+const suggestedDuration = computed(() => Math.max(5, Math.ceil((pickedTotal.value * 1.5) / 5) * 5))
+
 async function loadPapers() {
   papersLoading.value = true
   try {
@@ -268,6 +277,10 @@ onMounted(loadBaseData)
                 </div>
                 <p v-if="mockPaperIds.length > 1" class="cap">
                   连考：{{ mockPaperIds.length }} 卷按顺序拼成一张卷面，共用同一个倒计时。
+                </p>
+                <p v-if="mockPaperIds.length" class="cap">
+                  已选共 <b class="num">{{ pickedTotal }}</b> 题 —— 建议时长约
+                  <b class="num">{{ suggestedDuration }}</b> 分钟（每题 1.5 分钟估算）
                 </p>
                 <p class="cap">
                   真题库只有 {{ donePapers.length }} 份可用卷——

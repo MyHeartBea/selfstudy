@@ -138,6 +138,9 @@ CREATE TABLE IF NOT EXISTS vocab_items (
 CREATE INDEX IF NOT EXISTS idx_vocab_next_review_at ON vocab_items(next_review_at);
 CREATE INDEX IF NOT EXISTS idx_vocab_mastery ON vocab_items(mastery_level);
 
+-- 知识点 SM-2 队列的到期扫描（与 vocab 同风格；TABLES_DDL 管，幂等）
+CREATE INDEX IF NOT EXISTS idx_knowledge_base_next_review_at ON knowledge_base(next_review_at);
+
 CREATE TABLE IF NOT EXISTS app_meta (
     key TEXT PRIMARY KEY,
     value TEXT

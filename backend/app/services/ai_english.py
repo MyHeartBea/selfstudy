@@ -607,13 +607,20 @@ def analyze_english(
                 timeout=_remaining(),
             )
         except Exception:
-            # 单题分析失败时保留该题清单信息兜底，不影响其它题
-            return q
+            # 单题分析失败时保留该题清单信息兜底，不影响其它题。
+            # 显式打失败标记（别用"res is orig"对象身份判断——谁改成返回副本
+            # 计数就静默归零）
+            return {**q, "_qa_failed": True}
 
     # 逐题并发：同样先全部提交、再统一收集，才是真并发
     _q_futures = [_submit(_qa_task, q) for q in todo]
-    full_questions = [f.result() for f in _q_futures]
-    failed_qa = sum(1 for orig, res in zip(todo, full_questions, strict=False) if res is orig)
+    results = [f.result() for f in _q_futures]
+    failed_qa = sum(1 for res in results if isinstance(res, dict) and res.get("_qa_failed"))
+    # 收集时剥掉内部失败标记，别让它混进 english_questions 落库/下发
+    full_questions = [
+        {k: v for k, v in res.items() if k != "_qa_failed"} if isinstance(res, dict) else res
+        for res in results
+    ]
     if failed_qa:
         issues.append(f"{failed_qa} 题解析缺失（已退回题干清单）")
 

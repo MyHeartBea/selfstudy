@@ -96,8 +96,29 @@ class KnowledgeReviewCreate(BaseModel):
     result: bool
 
 
+class KnowledgeImportItem(BaseModel):
+    """知识点导入条目:放宽 null(历史数据的 NULL 列导出后是 null),调度字段随行保真。
+
+    tag_name 是唯一键:导入时已存在同名(COLLATE NOCASE)词条则跳过不覆盖——
+    本地的词条可能比导出文件新。
+    """
+
+    tag_name: str = Field(min_length=1, max_length=200)
+    subject_id: Optional[int] = None
+    sub_subject_id: Optional[int] = None
+    summary: Optional[str] = ""
+    related_tags: Optional[str] = ""
+    ease_factor: Optional[float] = 2.5
+    last_interval: Optional[int] = 0
+    review_count: Optional[int] = 0
+    last_reviewed_at: Optional[str] = None
+    next_review_at: Optional[str] = None
+
+
 class ImportPayload(BaseModel):
-    mistakes: List[MistakeCreate] = Field(min_length=1, max_length=5000)
+    mistakes: List[MistakeCreate] = Field(default_factory=list, max_length=5000)
+    # 可选:知识点词条(含 SM-2 调度字段)随错题一起迁移;已存在同名词条跳过不覆盖
+    knowledge: List[KnowledgeImportItem] = Field(default_factory=list, max_length=5000)
 
 
 class PaperCreate(BaseModel):

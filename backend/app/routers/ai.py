@@ -319,8 +319,9 @@ def english_analysis(body: AiEnglishRequest):
     parsed["method"] = "vision" if body.images else "text"
     _mark_degraded(parsed, failed_channels)
     # 步骤级降级（ai_english 内部某步失败带伤返回）：缺了什么要在 message 里说清，
-    # 不许只默默给个残缺结果
-    step_issues = parsed.pop("degraded_steps", [])
+    # 不许只默默给个残缺结果。**degraded_steps 保留在 data 里**——前端将来要做
+    # "缺哪步、点哪步重试"就有数据口，message 只是人话摘要。
+    step_issues = list(parsed.get("degraded_steps") or [])
     note = _degrade_note(failed_channels)
     if step_issues:
         note += f"（部分内容缺失：{'、'.join(step_issues)}，可直接重试补齐）"

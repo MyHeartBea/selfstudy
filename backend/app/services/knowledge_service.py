@@ -80,8 +80,14 @@ def get_knowledge_review_queue(
     limit: int = 20,
     subject_id: Optional[int] = None,
 ) -> dict:
-    """今日到期的知识点复习队列：新条目优先 + 逾期轮转（排序口径与错题队列一致）。"""
-    conditions = ["(kb.next_review_at IS NULL OR kb.next_review_at <= datetime('now'))"]
+    """今日到期的知识点复习队列：新条目优先 + 逾期轮转（排序口径与错题队列一致）。
+
+    到期/排序片段取自 review_service 的共享常量——两个队列必须同口径，
+    手抄必漂移（知识点此前就少了第三排序键）。
+    """
+    from app.services.review_service import queue_due_cond, queue_order
+
+    conditions = [queue_due_cond("kb")]
     params: list = []
     if subject_id is not None:
         conditions.append("kb.subject_id = ?")
@@ -94,8 +100,7 @@ def get_knowledge_review_queue(
         "SELECT kb.*, s.name AS subject_name FROM knowledge_base kb "
         "LEFT JOIN subjects s ON s.id = kb.subject_id "
         f"WHERE {where} "
-        "ORDER BY CASE WHEN kb.review_count = 0 OR kb.next_review_at IS NULL THEN 0 ELSE 1 END, "
-        "COALESCE(kb.last_reviewed_at, '1970-01-01 00:00:00') ASC, kb.id ASC "
+        f"ORDER BY {queue_order('kb')} "
         "LIMIT ?",
         (*params, max(1, limit)),
     ).fetchall()
