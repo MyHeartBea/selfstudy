@@ -23,8 +23,8 @@ import Icon from '../ui/Icon.vue'
 import GlassCard from '../ui/GlassCard.vue'
 import StageBadge from '../ui/StageBadge.vue'
 import Skeleton from '../ui/Skeleton.vue'
-import RingProgress from '../ui/RingProgress.vue'
 import InkRain from '../ui/InkRain.vue'
+import MockReportCard from '../components/stats/MockReportCard.vue'
 import YearRing from '../ui/YearRing.vue'
 
 const router = useRouter()
@@ -185,7 +185,9 @@ const blockKey = computed(() =>
 const blockName = computed(
   () => REVIEW_BLOCKS.find((b) => b.key === blockKey.value)?.name || '数学',
 )
-const showBlockTabs = computed(() => !route.query.paper_id && !isPractice.value)
+const showBlockTabs = computed(
+  () => !route.query.paper_id && !route.query.paper_ids && !isPractice.value,
+)
 const blockStats = ref([])
 const otherBlockDues = computed(() =>
   blockStats.value.filter((b) => b.key !== blockKey.value && b.due > 0),
@@ -267,6 +269,37 @@ const mockReport = ref(null)
 const paperTitle = ref('')
 const paperYear = ref('')
 const paperSubject = ref('')
+
+/** 真题库题目 -> 卷面视图（带所属卷身份；单卷/连考共用一份字段） */
+function paperQuestionView(q, paper) {
+  return {
+    id: q.id,
+    paperQuestion: true,
+    paperTitle: paper.title || '',
+    paperYear: paper.year || '',
+    paperSubject: paper.subject || '',
+    no: q.no,
+    section: q.section,
+    question_type: q.question_type,
+    passage: q.passage,
+    question: q.question,
+    option_a: q.option_a,
+    option_b: q.option_b,
+    option_c: q.option_c,
+    option_d: q.option_d,
+    option_e: q.option_e,
+    option_f: q.option_f,
+    option_g: q.option_g,
+    correct_answer: q.correct_answer,
+    analysis: q.analysis,
+    diagram_image: q.diagram_image || '',
+    images: [],
+    knowledge_tags: [],
+    subject_id: null,
+    difficulty: 0,
+  }
+}
+
 let mockTimer = 0
 
 // —— 模考中途离开保护 ——
@@ -285,12 +318,14 @@ function onMockBeforeUnload(event) {
   event.returnValue = ''
 }
 
-// 卷面题的阅读原文：优先本题自带，否则沿用上一题的（完形/阅读题组共用）
+// 卷面题的阅读原文：优先本题自带，否则沿用上一题的（完形/阅读题组共用）。
+// 换卷即断：连考时不能让上一卷的阅读原文漏给下一卷的题。
 const displayPassage = computed(() => {
   if (!isMock.value || !current.value) return ''
   if (current.value.passage) return current.value.passage
   for (let i = index.value - 1; i >= 0; i--) {
-    if (queue.value[i]?.passage) return queue.value[i].passage
+    if (queue.value[i]?.paperTitle !== current.value.paperTitle) break
+    if (queue.value[i].passage) return queue.value[i].passage
   }
   return ''
 })
@@ -351,12 +386,6 @@ function mockPicked(key) {
 
 function openDiagram(url) {
   if (url) window.open(url, '_blank')
-}
-
-function fmtDuration(sec) {
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`
 }
 
 /** 真题库科目名（如 英语二/数学二/计算机408/政治）-> 错题本 subject_id（按名称包含关系匹配）。 */
@@ -426,12 +455,25 @@ async function submitMock(auto = false) {
     )
     resultCount.value.correct = correct
     resultCount.value.wrong = queue.value.length - correct
+    // 分卷小计（只有连考 >1 卷时展示；单卷成绩卡本身就是这组数）
+    const byPaperMap = new Map()
+    for (const j of judged) {
+      const key = j.q.paperTitle || paperTitle.value || '卷面'
+      if (!byPaperMap.has(key)) byPaperMap.set(key, { title: key, total: 0, correct: 0 })
+      const row = byPaperMap.get(key)
+      row.total += 1
+      if (j.result) row.correct += 1
+    }
+    const byPaper = [...byPaperMap.values()]
+    if (byPaper.length > 1)
+      byPaper.forEach((r) => (r.score = Math.round((r.correct / Math.max(1, r.total)) * 100)))
     mockReport.value = {
       total: queue.value.length,
       correct,
       score: Math.round((correct / Math.max(1, queue.value.length)) * 100),
       usedSec: mockDuration.value * 60 - mockLeft.value,
       overtime: auto === true,
+      byPaper: byPaper.length > 1 ? byPaper : [],
       details: judged
         .filter((j) => !j.result)
         .map((j) => ({
@@ -443,13 +485,19 @@ async function submitMock(auto = false) {
         })),
       savedToMistakes: 0,
     }
-    // 真题库整卷：错题自动收进错题本（仅收「作答了且错」的——未作答只是没做完，不进错题本）
-    if (route.query.paper_id) {
+    // 真题库整卷/连考：错题自动收进错题本（仅收「作答了且错」的——未作答只是没做完，不进错题本）
+    if (route.query.paper_id || route.query.paper_ids) {
       const wrongQs = judged.filter((j) => j.q.paperQuestion && j.ans && !j.result)
-      const subjectId = await subjectIdFor(paperSubject.value)
+      // 连考各题科目不同：按题所属卷查 subject_id（同科只查一次，/subjects 结果会话内复用）
+      const subjectIdCache = new Map()
+      const subjectIdCached = async (name) => {
+        if (!subjectIdCache.has(name)) subjectIdCache.set(name, await subjectIdFor(name))
+        return subjectIdCache.get(name)
+      }
       const saved = await Promise.allSettled(
-        wrongQs.map((j) =>
-          request.post(
+        wrongQs.map(async (j) => {
+          const subjectId = await subjectIdCached(j.q.paperSubject || paperSubject.value)
+          return request.post(
             '/mistakes',
             {
               subject_id: subjectId,
@@ -472,13 +520,13 @@ async function submitMock(auto = false) {
               difficulty: 3,
               knowledge_tags: [],
               source_type: 'real_exam',
-              source_year: paperYear.value,
-              source_name: paperTitle.value,
+              source_year: j.q.paperYear || paperYear.value,
+              source_name: j.q.paperTitle || paperTitle.value,
               images: [],
             },
             { silent: true },
-          ),
-        ),
+          )
+        }),
       )
       mockReport.value.savedToMistakes = saved.filter((r) => r.status === 'fulfilled').length
     }
@@ -508,36 +556,26 @@ async function loadQueue() {
   loadError.value = false
   try {
     let res
-    if (route.query.paper_id) {
-      // 真题库整卷模考：题目来自真题库
-      const paperRes = await request.get(`/papers/${route.query.paper_id}`, { silent: true })
-      const paper = paperRes.data.data
-      paperTitle.value = paper.title || ''
-      paperYear.value = paper.year || ''
-      paperSubject.value = paper.subject || ''
-      queue.value = (paper.questions || []).map((q) => ({
-        id: q.id,
-        paperQuestion: true,
-        no: q.no,
-        section: q.section,
-        question_type: q.question_type,
-        passage: q.passage,
-        question: q.question,
-        option_a: q.option_a,
-        option_b: q.option_b,
-        option_c: q.option_c,
-        option_d: q.option_d,
-        option_e: q.option_e,
-        option_f: q.option_f,
-        option_g: q.option_g,
-        correct_answer: q.correct_answer,
-        analysis: q.analysis,
-        diagram_image: q.diagram_image || '',
-        images: [],
-        knowledge_tags: [],
-        subject_id: null,
-        difficulty: 0,
-      }))
+    if (route.query.paper_id || route.query.paper_ids) {
+      // 真题库整卷模考（paper_id 单卷）或连考（paper_ids 多卷按序拼接）
+      const ids = route.query.paper_ids
+        ? String(route.query.paper_ids)
+            .split(',')
+            .map((s) => Number(s))
+            .filter(Boolean)
+        : [Number(route.query.paper_id)]
+      const paperRes = await Promise.all(
+        ids.map((id) => request.get(`/papers/${id}`, { silent: true })),
+      )
+      const paperList = paperRes.map((r) => r.data.data)
+      paperTitle.value = paperList.map((p) => p.title || '').join(' + ')
+      paperYear.value = [...new Set(paperList.map((p) => String(p.year || '')))]
+        .filter(Boolean)
+        .join('·')
+      paperSubject.value = paperList.length === 1 ? paperList[0].subject || '' : ''
+      queue.value = paperList.flatMap((paper) =>
+        (paper.questions || []).map((q) => paperQuestionView(q, paper)),
+      )
     } else if (isPractice.value) {
       const params = {
         mode: practiceMode.value,
@@ -557,7 +595,7 @@ async function loadQueue() {
       // 今日复习按分块取题（默认数学；配额全局共享）
       res = await request.get('/reviews/today', { params: { category: blockKey.value } })
     }
-    if (!route.query.paper_id) {
+    if (!route.query.paper_id && !route.query.paper_ids) {
       // /reviews/today 现在返回 {items, dueTotal, remaining, dailyLimit, reviewedToday}
       // （每日配额 + 逾期轮转），旧格式是纯数组，这里两种都兼容
       const payload = res.data.data
@@ -915,53 +953,8 @@ onBeforeRouteLeave(async () => {
       </button>
     </nav>
 
-    <!-- 模考成绩单 -->
-    <template v-if="done && mockReport">
-      <GlassCard class="stage-card km-card" :hover="false">
-        <template #badge><StageBadge text="模考成绩单" /></template>
-        <div class="mr-body">
-          <RingProgress :percentage="mockReport.score">
-            <div class="ring-center-text">
-              <b class="num">{{ mockReport.score }} 分</b>
-              <span>{{ mockReport.correct }}/{{ mockReport.total }} 正确</span>
-            </div>
-          </RingProgress>
-          <div class="mr-stats">
-            <div class="mr-line">
-              <span>用时</span><b class="num">{{ fmtDuration(mockReport.usedSec) }}</b>
-              <i v-if="mockReport.overtime" class="mr-overtime">超时自动交卷</i>
-            </div>
-            <div class="mr-line">
-              <span>答对</span><b class="num mr-ok">{{ mockReport.correct }}</b>
-            </div>
-            <div class="mr-line">
-              <span>答错</span><b class="num mr-bad">{{ mockReport.total - mockReport.correct }}</b>
-            </div>
-            <div v-if="mockReport.savedToMistakes" class="mr-line">
-              <span>错题入本</span>
-              <b class="num">{{ mockReport.savedToMistakes }}</b>
-              <i class="mr-overtime saved">已自动收进错题本</i>
-            </div>
-            <p class="mr-note">每题结果已计入复习记录（SM-2 自适应调度），错题将按计划再次推送。</p>
-          </div>
-        </div>
-        <div v-if="mockReport.details.length" class="mr-wrong">
-          <div class="block-label">错题回顾</div>
-          <div v-for="d in mockReport.details" :key="d.id" class="mr-item km-item">
-            <p class="mr-q"><MathText :text="d.snippet + '…'" /></p>
-            <p class="mr-ans">
-              你的答案：<b class="mr-bad">{{ d.your }}</b>
-              <span class="mr-sep">·</span>
-              正确答案：<b class="mr-ok">{{ d.right }}</b>
-            </p>
-          </div>
-        </div>
-        <div class="done-actions">
-          <UiButton variant="primary" @click="router.push('/practice')">再来一场</UiButton>
-          <UiButton variant="ghost" @click="router.push('/mistakes')">返回错题列表</UiButton>
-        </div>
-      </GlassCard>
-    </template>
+    <!-- 模考成绩单（自含组件：总分环 + 统计 + 分卷小计 + 错题回顾） -->
+    <MockReportCard v-if="done && mockReport" :report="mockReport" />
 
     <template v-else-if="done">
       <div class="done-stage">
@@ -1028,7 +1021,8 @@ onBeforeRouteLeave(async () => {
               <div class="detail-meta">
                 <template v-if="current.paperQuestion">
                   <span class="count-tip"
-                    >{{ paperTitle }}{{ current.section ? ' · ' + current.section : ''
+                    >{{ current.paperTitle || paperTitle
+                    }}{{ current.section ? ' · ' + current.section : ''
                     }}<i v-if="current.no"> · 第 {{ current.no }} 题</i></span
                   >
                 </template>
@@ -1886,96 +1880,6 @@ onBeforeRouteLeave(async () => {
   max-height: 300px;
   overflow-y: auto;
 }
-.mock-report {
-  padding-bottom: 26px;
-}
-.mr-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 40px;
-  flex-wrap: wrap;
-  padding: 8px 0 6px;
-}
-.mr-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 220px;
-}
-.mr-line {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 13.5px;
-  color: var(--ink-2);
-}
-.mr-line b {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 900;
-  color: var(--ink);
-}
-.mr-line span {
-  width: 42px;
-  flex: none;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.mr-ok {
-  color: var(--green);
-}
-.mr-bad {
-  color: var(--red);
-}
-.mr-overtime {
-  font-style: normal;
-  font-size: 11.5px;
-  color: var(--red);
-  background: var(--red-soft);
-  padding: 2px 9px;
-  border-radius: 999px;
-}
-.mr-overtime.saved {
-  color: var(--green);
-  background: var(--green-soft);
-}
-.mr-note {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.8;
-  color: var(--ink-3);
-}
-.mr-wrong {
-  margin-top: 18px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line);
-}
-.mr-item {
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  margin-bottom: 8px;
-}
-.mr-q {
-  margin: 0 0 5px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--ink);
-}
-.mr-ans {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--ink-2);
-}
-.mr-ans b {
-  font-weight: 800;
-}
-.mr-sep {
-  margin: 0 6px;
-  color: var(--ink-3);
-}
-
 /* ── 模考纸感：卷面是一张"考卷"而不是网页卡片 ──
    米白纸底 + 淡横格线（答题纸意象），深色主题下横线自然变墨色；克制、不抢内容。 */
 .stage-card.paper-mode :deep(.gcard-body) {

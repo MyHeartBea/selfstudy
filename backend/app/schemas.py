@@ -90,6 +90,12 @@ class KnowledgeCreate(BaseModel):
     related_tags: List[str] = []
 
 
+class KnowledgeReviewCreate(BaseModel):
+    """知识点复习自评：记住 / 忘了（SM-2 调度口径与错题一致）。"""
+
+    result: bool
+
+
 class ImportPayload(BaseModel):
     mistakes: List[MistakeCreate] = Field(min_length=1, max_length=5000)
 

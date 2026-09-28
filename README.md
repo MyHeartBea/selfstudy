@@ -128,10 +128,10 @@ AI_RATE_LIMIT=30                 # AI 端点每分钟限流
 
 ## 测试与 CI
 
-- 后端 **365 个**测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）；
-  前端 Vitest **161 个**：`cd frontend && npm test`（判分/筛选/Markdown/收录过滤纯函数 + **卡片点击、知识点弹窗、
+- 后端 **374 个**测试：`cd backend && python -m unittest discover -s tests -v`（临时库，不碰真实数据）；
+  前端 Vitest **163 个**：`cd frontend && npm test`（判分/筛选/Markdown/收录过滤纯函数 + **卡片点击、知识点弹窗、
   划词归因、快照回滚页等 DOM 级交互回归**，环境 happy-dom）
-- 前端 **E2E 53 个**（Playwright，真浏览器）：`cd frontend && npm run test:e2e` —— 补单测抓不到的盲区：
+- 前端 **E2E 54 个**（Playwright，真浏览器）：`cd frontend && npm run test:e2e` —— 补单测抓不到的盲区：
   **卡片整块可点的真命中测试**（单测 `trigger('click')` 会绕过命中测试；桌面与窄屏都跑）、
   **真实 paste 事件驱动的多图暂存**（断言只暂存 / 只发一次请求 / 请求体带齐全部图片 /
   **解析结果真的渲染出来**，而不只是"请求发出去了"）、**11 条主路由渲染烟测**（零 console 错误）。

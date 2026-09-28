@@ -1,6 +1,7 @@
 """知识点相关业务逻辑。"""
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from app.pagination import resolve_pagination
@@ -66,6 +67,71 @@ def knowledge_to_dict(row) -> dict:
     related = data.get("related_tags") or ""
     data["related_tags"] = [tag.strip() for tag in related.split(",") if tag.strip()]
     return data
+
+
+# ── 知识点 SM-2 复习队列 ────────────────────────────────────────────────
+# 知识点与错题共用同一套简化 SM-2 参数（review_service._next_schedule）：
+# 记住 → 间隔 × 系数（首次 1 天），系数 +0.1 封顶 2.8；忘了 → 重置 1 天，系数 -0.2 下限 1.3。
+# next_review_at 为空的词条 = 队列"新条目"，与错题队列的新题优先口径一致。
+
+
+def get_knowledge_review_queue(
+    conn: sqlite3.Connection,
+    limit: int = 20,
+    subject_id: Optional[int] = None,
+) -> dict:
+    """今日到期的知识点复习队列：新条目优先 + 逾期轮转（排序口径与错题队列一致）。"""
+    conditions = ["(kb.next_review_at IS NULL OR kb.next_review_at <= datetime('now'))"]
+    params: list = []
+    if subject_id is not None:
+        conditions.append("kb.subject_id = ?")
+        params.append(subject_id)
+    where = " AND ".join(conditions)
+    due_total = int(
+        conn.execute(f"SELECT COUNT(*) FROM knowledge_base kb WHERE {where}", params).fetchone()[0]
+    )
+    rows = conn.execute(
+        "SELECT kb.*, s.name AS subject_name FROM knowledge_base kb "
+        "LEFT JOIN subjects s ON s.id = kb.subject_id "
+        f"WHERE {where} "
+        "ORDER BY CASE WHEN kb.review_count = 0 OR kb.next_review_at IS NULL THEN 0 ELSE 1 END, "
+        "COALESCE(kb.last_reviewed_at, '1970-01-01 00:00:00') ASC, kb.id ASC "
+        "LIMIT ?",
+        (*params, max(1, limit)),
+    ).fetchall()
+    items = [knowledge_to_dict(row) for row in rows]
+    return {"items": items, "dueTotal": due_total, "returned": len(items)}
+
+
+def review_knowledge(
+    conn: sqlite3.Connection,
+    knowledge_id: int,
+    result: bool,
+) -> Optional[dict]:
+    """记录一次知识点复习（记住/忘了），按 SM-2 安排下次复习。返回 None = 不存在。
+
+    调度函数局部导入：review_service 顶层 import database，而 database 反过来
+    import 本模块的 canonical_tags，顶层连进来就是循环导入（同 _mistake_to_dict）。
+    """
+    from app.services.review_service import SM2_EASE_INIT, _next_schedule
+
+    row = conn.execute("SELECT * FROM knowledge_base WHERE id = ?", (knowledge_id,)).fetchone()
+    if row is None:
+        return None
+    ease = float(row["ease_factor"] or SM2_EASE_INIT)
+    last_interval = int(row["last_interval"] or 0)
+    ease, interval = _next_schedule(ease, last_interval, bool(result))
+    now = datetime.now(timezone.utc)
+    now_text = now.strftime("%Y-%m-%d %H:%M:%S")
+    next_at = (now + timedelta(days=interval)).strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "UPDATE knowledge_base SET ease_factor = ?, last_interval = ?, review_count = "
+        "COALESCE(review_count, 0) + 1, last_reviewed_at = ?, next_review_at = ? WHERE id = ?",
+        (ease, interval, now_text, next_at, knowledge_id),
+    )
+    conn.commit()
+    updated = conn.execute("SELECT * FROM knowledge_base WHERE id = ?", (knowledge_id,)).fetchone()
+    return knowledge_to_dict(updated)
 
 
 def _mistake_to_dict(row) -> dict:

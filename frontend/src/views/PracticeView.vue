@@ -70,19 +70,27 @@ const mockYear = ref('')
 const mockDuration = ref(60)
 const mockSource = ref('mistakes') // mistakes | paper
 const papers = ref([])
-const mockPaperId = ref(null)
+// 多选：勾 1 卷 = 普通整卷模考（paper_id）；勾多卷 = 连考（paper_ids，按卷拼接共用倒计时）
+const mockPaperIds = ref([])
 const papersLoading = ref(false)
 
 const donePapers = computed(() =>
   papers.value.filter((p) => p.status === 'done' && p.question_count > 0),
 )
 
+function togglePaper(id) {
+  const idx = mockPaperIds.value.indexOf(id)
+  if (idx >= 0) mockPaperIds.value = mockPaperIds.value.filter((x) => x !== id)
+  else mockPaperIds.value = [...mockPaperIds.value, id]
+}
+
 async function loadPapers() {
   papersLoading.value = true
   try {
     const res = await request.get('/papers', { params: { status: 'done' }, silent: true })
     papers.value = res.data.data || []
-    if (!mockPaperId.value && donePapers.value.length) mockPaperId.value = donePapers.value[0].id
+    if (!mockPaperIds.value.length && donePapers.value.length)
+      mockPaperIds.value = [donePapers.value[0].id]
   } catch (err) {
     // 静默
   } finally {
@@ -100,8 +108,9 @@ const activeMode = computed(() => modes.find((m) => m.value === mode.value) || m
 
 const mockBriefTail = computed(() => {
   if (mockSource.value === 'paper') {
-    const paper = papers.value.find((p) => p.id === mockPaperId.value)
-    return `${paper ? paper.title : '真题卷'} · ${mockDuration.value} 分钟`
+    const picked = papers.value.filter((p) => mockPaperIds.value.includes(p.id))
+    if (picked.length > 1) return `${picked.length} 卷连考 · ${mockDuration.value} 分钟`
+    return `${picked[0] ? picked[0].title : '真题卷'} · ${mockDuration.value} 分钟`
   }
   return `${mockYear.value} 年 · ${mockDuration.value} 分钟`
 })
@@ -117,13 +126,13 @@ function start() {
   }
   if (mode.value === 'mock') {
     if (mockSource.value === 'paper') {
-      // 真题库整卷模考
-      const paper = papers.value.find((p) => p.id === mockPaperId.value)
-      if (!paper) {
-        toast.warning('请选择一份已入库的真题卷（没有就先去「真题库」导入）')
+      // 真题库整卷模考；勾多卷 = 连考（题目按卷拼接，共用倒计时）
+      if (!mockPaperIds.value.length) {
+        toast.warning('请至少勾选一份已入库的真题卷（没有就先去「真题库」导入）')
         return
       }
-      query.paper_id = paper.id
+      if (mockPaperIds.value.length === 1) query.paper_id = mockPaperIds.value[0]
+      else query.paper_ids = mockPaperIds.value.join(',')
     } else {
       // 错题库真题模考：年份必填
       const year = String(mockYear.value || '').trim()
@@ -234,19 +243,32 @@ onMounted(loadBaseData)
               </div>
             </template>
             <template v-else>
-              <div class="section-label" style="margin-top: 4px">选择试卷</div>
+              <div class="section-label" style="margin-top: 4px">
+                选择试卷<span class="section-sub">可多选 · 多卷连考</span>
+              </div>
               <div class="mock-config">
-                <UiSelect
-                  v-model="mockPaperId"
-                  :options="
-                    donePapers.map((p) => ({
-                      label: `${p.title}（${p.question_count} 题）`,
-                      value: p.id,
-                    }))
-                  "
-                  placeholder="选择已入库真题"
-                  :disabled="papersLoading"
-                />
+                <div v-if="papersLoading" class="cap">正在读取卷库…</div>
+                <div v-else-if="!donePapers.length" class="cap">卷库还没有可用试卷</div>
+                <div v-else class="paper-pick" role="group" aria-label="选择试卷（可多选连考）">
+                  <button
+                    v-for="p in donePapers"
+                    :key="p.id"
+                    type="button"
+                    class="paper-chip km-item clickable"
+                    :class="{ active: mockPaperIds.includes(p.id) }"
+                    :aria-pressed="mockPaperIds.includes(p.id)"
+                    @click="togglePaper(p.id)"
+                  >
+                    <span class="chip-check" aria-hidden="true"
+                      ><Icon name="check" :size="11"
+                    /></span>
+                    <span class="paper-chip-title">{{ p.title }}</span>
+                    <span class="paper-chip-count num">{{ p.question_count }} 题</span>
+                  </button>
+                </div>
+                <p v-if="mockPaperIds.length > 1" class="cap">
+                  连考：{{ mockPaperIds.length }} 卷按顺序拼成一张卷面，共用同一个倒计时。
+                </p>
                 <p class="cap">
                   真题库只有 {{ donePapers.length }} 份可用卷——
                   <router-link to="/papers" class="mock-link">去真题库导入更多</router-link>
@@ -612,6 +634,71 @@ onMounted(loadBaseData)
   background: var(--accent-grad);
   color: #fff;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent-hover) 40%, transparent);
+}
+
+/* 多选卷子（1 卷 = 整卷模考，多卷 = 连考） */
+.paper-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.paper-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 12px;
+  border: 1px solid var(--surface-glass);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s var(--ease);
+}
+.paper-chip:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.paper-chip.active {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--ink);
+}
+.chip-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1.5px solid var(--ink-3);
+  color: transparent;
+  transition: all 0.18s var(--ease);
+}
+.paper-chip.active .chip-check {
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: #fff;
+}
+.paper-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.paper-chip-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.section-sub {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-3);
 }
 
 .filter-grid {

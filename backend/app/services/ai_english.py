@@ -10,6 +10,8 @@
   ai_service 会再导出它们，保持既有调用点不变。
 """
 
+import hashlib
+import json
 import logging
 import re
 import time
@@ -329,6 +331,72 @@ def _parse_english_questions_prompt(standard_tags: List[str] | None = None) -> s
     return prompt
 
 
+# ---- 提字结果缓存（app_meta，免迁移）：同批图片重试不重烧视觉调用 ----------
+# key = 图片 base64 的 sha1 前 16 位；TTL 24h（试卷不会变，文本短期内也没理由变）。
+# 只在提字成功后写；读/写任何 DB 异常都静默降级为"无缓存"，绝不影响主流程。
+
+_STAGE_KEY_PREFIX = "english_ocr_stage_"
+_STAGE_TTL_SECONDS = 24 * 86400
+
+
+def _stage_cache_key(images: List[str]) -> str:
+    joined = "\n".join(images)
+    return _STAGE_KEY_PREFIX + hashlib.sha1(joined.encode("utf-8")).hexdigest()[:16]
+
+
+def _read_stage_cache(cache_key: str) -> str:
+    try:
+        from app.database import get_connection
+
+        conn = get_connection()
+        try:
+            row = conn.execute("SELECT value FROM app_meta WHERE key = ?", (cache_key,)).fetchone()
+        finally:
+            conn.close()
+        if not row or not row["value"]:
+            return ""
+        data = json.loads(row["value"])
+        if time.time() - float(data.get("ts") or 0) > _STAGE_TTL_SECONDS:
+            return ""
+        return str(data.get("source_text") or "")
+    except Exception:
+        return ""
+
+
+def _write_stage_cache(cache_key: str, source_text: str) -> None:
+    try:
+        from app.database import get_connection
+
+        conn = get_connection()
+        try:
+            now = time.time()
+            conn.execute(
+                "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+                (
+                    cache_key,
+                    json.dumps({"ts": now, "source_text": source_text}, ensure_ascii=False),
+                ),
+            )
+            # 顺手清掉过期条目（该缓存条目少，不值得常驻清理线程）
+            rows = conn.execute(
+                "SELECT key, value FROM app_meta WHERE key LIKE ?", (_STAGE_KEY_PREFIX + "%",)
+            ).fetchall()
+            for key, value in rows:
+                if key == cache_key:
+                    continue
+                try:
+                    ts = float(json.loads(value).get("ts") or 0)
+                except (TypeError, ValueError):
+                    ts = 0
+                if now - ts > _STAGE_TTL_SECONDS:
+                    conn.execute("DELETE FROM app_meta WHERE key = ?", (key,))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
 def analyze_english(
     image_base64_list: List[str],
     text: str = "",
@@ -347,6 +415,13 @@ def analyze_english(
     并发只用于缩短互不依赖调用（词汇‖清单、逐题）的墙钟时间；
     仅当预算真的耗尽时，失败步骤才退化为兜底结果（词汇空/该题仅题干清单）。
     model/base_url/api_key 指定视觉通道（未指定时用 DeepSeek 首选通道）。
+
+    两个"不报废"机制（2026-09-27，实测一次读超时让整批已花的调用全浪费）：
+    ① 提字缓存：提字成功即存 app_meta（key 按图片内容哈希，TTL 24h）——同批图片
+      重试时直接复用提字结果，最贵的视觉调用不再重烧（后面步骤失败不写缓存，
+      重试只补失败的文本步骤）；
+    ② 步骤级降级：词汇/清单/逐题/兜底出题失败不再抛异常报废整批，而是带伤返回
+      （degraded=True + degraded_steps 列出缺了什么），前端提醒条照常亮。
     """
     deadline = time.monotonic() + (timeout or _svc().settings.AI_TIMEOUT)
 
@@ -356,23 +431,32 @@ def analyze_english(
     images = [img for img in (image_base64_list or []) if img and img.strip()]
     source_text = text.strip()
     if images:
-        whole = max(1, int(deadline - time.monotonic()))
-        limit = vision_timeout or _svc().settings.AI_VISION_PRIMARY_TIMEOUT
-        vision_cap = max(10, whole - 60)
-        try:
-            source_text = (
-                _vision_extract_text(
-                    images,
-                    instruction,
-                    max(1, min(limit, vision_cap, whole)),
-                    model=model,
-                    base_url=base_url,
-                    api_key=api_key,
+        stage_key = _stage_cache_key(images)
+        cached_text = _read_stage_cache(stage_key)
+        if cached_text.strip():
+            source_text = cached_text
+        else:
+            whole = max(1, int(deadline - time.monotonic()))
+            limit = vision_timeout or _svc().settings.AI_VISION_PRIMARY_TIMEOUT
+            vision_cap = max(10, whole - 60)
+            try:
+                extracted = (
+                    _vision_extract_text(
+                        images,
+                        instruction,
+                        max(1, min(limit, vision_cap, whole)),
+                        model=model,
+                        base_url=base_url,
+                        api_key=api_key,
+                    )
+                    or ""
                 )
-                or source_text
-            )
-        except Exception:
-            source_text = text.strip()
+            except Exception:
+                extracted = ""
+            if extracted.strip():
+                source_text = extracted
+                # 提字是最贵的视觉调用：成功即缓存，重试不重烧（TTL 内同图直接复用）
+                _write_stage_cache(stage_key, extracted)
     if not source_text.strip():
         raise _err()("未能从图片或文本中获取到内容")
 
@@ -457,11 +541,17 @@ def analyze_english(
     #    注意不能写成 `executor.submit(fn).result()` —— 那等于"提交后立刻阻塞等结果"，
     #    第二个任务要等第一个跑完才提交，实际完全串行（原实现即如此，与注释不符）。
     # submit_analysis = 有界排队版提交（排队超限直接报错，不让无界队列拖垮内存）
+    # 步骤级降级：失败不再上抛报废整批，记进 issues 由结尾统一打 degraded 标。
+    issues: List[str] = []
     _submit = _svc().submit_analysis
     future_vocab = _submit(_vocab_task)
     future_titles = _submit(_titles_task)
     vocab = future_vocab.result()
     questions_items = future_titles.result()
+    if not vocab:
+        issues.append("生词短语提取失败")
+    if not questions_items:
+        issues.append("题目清单识别失败")
 
     # ③ 逐题完整分析：并发执行（单题输出小，不易漏逗号；结果按清单顺序归位）
     todo = [q for q in questions_items if isinstance(q, dict) and q.get("question")]
@@ -508,21 +598,30 @@ def analyze_english(
     # 逐题并发：同样先全部提交、再统一收集，才是真并发
     _q_futures = [_submit(_qa_task, q) for q in todo]
     full_questions = [f.result() for f in _q_futures]
+    failed_qa = sum(1 for orig, res in zip(todo, full_questions, strict=False) if res is orig)
+    if failed_qa:
+        issues.append(f"{failed_qa} 题解析缺失（已退回题干清单）")
 
     if not full_questions:
         # 兜底：整篇一次性出题。这里返回的 qa 自身可能带 questions 数组，
         # **只在兜底分支**并入后续列表 —— 正常路径下模型按系统提示也可能回带
         # questions（第 2 题起），若无条件并入就会让第 2..N 题重复出两次。
-        qa = _svc()._chat_json(
-            [
-                {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
-                {"role": "user", "content": user_req},
-            ],
-            max_tokens=12000,
-            timeout=_remaining(),
-        )
-        nested = [q for q in (qa.get("questions") or []) if isinstance(q, dict)]
-        full_questions = [qa] + nested
+        # 兜底也失败时不再抛异常报废整批：原文/翻译/句子/词汇已花掉调用拿到手，
+        # 带伤返回（题目为空）比重试整条链省得多。
+        try:
+            qa = _svc()._chat_json(
+                [
+                    {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
+                    {"role": "user", "content": user_req},
+                ],
+                max_tokens=12000,
+                timeout=_remaining(),
+            )
+            nested = [q for q in (qa.get("questions") or []) if isinstance(q, dict)]
+            full_questions = [qa] + nested
+        except Exception:
+            full_questions = []
+            issues.append("整篇出题失败（仅返回原文与精读内容）")
 
     qa = full_questions[0] if full_questions else {}
     # 顶层保留第一题，其余题目进 english_questions。
@@ -537,4 +636,9 @@ def analyze_english(
     qa["sentences"] = reading.get("sentences", [])
     qa["phrases"] = vocab.get("phrases", [])
     qa["words"] = vocab.get("words", [])
-    return normalize_english_parsed(qa, fallback_text=source_text)
+    result = normalize_english_parsed(qa, fallback_text=source_text)
+    if issues:
+        # normalize_parsed 会丢未知键，降级标记必须在规整之后补上
+        result["degraded"] = True
+        result["degraded_steps"] = issues
+    return result

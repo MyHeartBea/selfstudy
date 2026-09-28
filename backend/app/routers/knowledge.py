@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from app.database import get_connection
 from app.metrics import mask_secret
 from app.responses import error, ok, server_error
-from app.schemas import KnowledgeCreate, KnowledgeUpdate
+from app.schemas import KnowledgeCreate, KnowledgeReviewCreate, KnowledgeUpdate
 from app.security import ai_rate_limit
 from app.services import ai_service, knowledge_service
 from app.services.ai_service import AiNotConfigured, AiRequestError
@@ -152,6 +152,36 @@ def delete_knowledge(knowledge_id: int):
         if not knowledge_service.delete_knowledge(conn, knowledge_id):
             return error(404, "知识点不存在")
         return ok({"id": knowledge_id}, "知识点删除成功")
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.get("/review/queue")
+def knowledge_review_queue(
+    limit: int = Query(20, ge=1, le=200),
+    subject_id: Optional[int] = Query(None),
+):
+    """今日到期的知识点复习队列（新条目优先 + 逾期轮转，口径与错题队列一致）。"""
+    conn = get_connection()
+    try:
+        return ok(knowledge_service.get_knowledge_review_queue(conn, limit, subject_id))
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.post("/{knowledge_id}/review")
+def review_knowledge(knowledge_id: int, body: KnowledgeReviewCreate):
+    """知识点复习自评：记住 / 忘了，按 SM-2 简化版安排下次复习。"""
+    conn = get_connection()
+    try:
+        updated = knowledge_service.review_knowledge(conn, knowledge_id, body.result)
+        if updated is None:
+            return error(404, "知识点不存在")
+        return ok(updated, "已记录，下次复习已排期")
     except Exception as exc:
         return server_error(exc)
     finally:

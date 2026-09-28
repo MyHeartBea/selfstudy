@@ -1160,3 +1160,46 @@ SQLite 连接复用（维持否决）。
 
 **验证**：后端 **365**、前端 Vitest **161**、build、ruff/eslint/prettier 全绿；
 E2E 与双主题截图见最终收尾。
+
+## 2026-09-28 · 遗留三件全做 + 双视图拆分（用户拍板"全做"）
+
+**① 完形/整篇大件 AI 录入容错**：`ai_english.analyze_english` 提字/逐句/词汇/题目
+各步独立 try/except，失败步记进 `degraded_steps` 并置 `degraded:true`（**必须在
+`normalize_english_parsed` 之后置**——normalize 会丢弃未知键），响应照常 200，
+前端亮"部分完成"账，单题解析失败不再让整个完形 502；提字结果按图哈希缓存进
+`app_meta`（`english_ocr_stage_<sha1[:16]>`，TTL 24h），重试不重复烧视觉通道。
+测试坑：类级临时库共享 app_meta，`setUp` 必须清 `english_ocr_stage_%`，否则
+先跑的用例把缓存留给后面（假件一次都不被调）；单题落在顶层 `question` 字段，
+`english_questions` 只装第 2 题起。
+
+**② 模考多卷连考**：练习页试卷 chip 多选 → `paper_ids=1,2`（单卷仍 `paper_id`），
+题目按卷序拼接、每题盖 `paperTitle/paperYear/paperSubject` 章；**换卷即断
+passage**（语境不跨卷泄漏，`displayPassage` 按 paperTitle 相等才续）；错题入库按
+各题所属卷的科目/年份/卷名（`subjectIdCached` Map 缓存）；`/api/mocks` 的
+`exam_year` 用 `·` 连接；成绩单 `byPaper` 分卷小计（>1 卷才渲染）。零后端改动
+（papers 端点现成）。**顺手抓回一个潜伏崩溃**：loadQueue 的下游守卫漏判
+`paper_ids`，连考模式下 `res.data.data` 打在 undefined 上直接 TypeError。
+E2E `mock-combined.spec.js` 钉全链路（卷面盖章→交卷→分卷小计→错题入库字段）。
+
+**③ 知识点 SM-2 复习队列**：`knowledge_base` 加五列调度字段（PRAGMA 探测幂等
+ALTER，不动迁移门控），调度**复用 `review_service._next_schedule`**（与错题同一
+条记忆曲线，不许漂移）；队列排序与错题今日队列同口径（新题优先 + last_reviewed
+ASC）。入口 `GET /knowledge/review/queue` + `POST /knowledge/{id}/review`，前端
+知识点页「复习知识点」弹窗（先回忆再揭示摘要）。**循环导入**：`knowledge_service`
+顶部不许 import `review_service`（database → knowledge_service → review_service
+→ database），函数内局部 import（同 `_mistake_to_dict` 的既有模式）。
+
+**④ ReviewView/VocabView 视图级拆分**（StatsView 同模式：自含组件带样式走，
+scoped 不跨组件边界——根选择器留主文件、内部样式搬子组件）：
+- `ReviewView`（1958 行）拆出 `components/stats/MockReportCard.vue`（模考成绩单：
+  总分环 + 统计 + 分卷小计 + 错题回顾 + 落地按钮）；`.done-actions` 的 flex 基础
+  样式与 gather-in 动画要**一起复制**进子组件，否则按钮失去入场节奏；
+- `VocabView`（1582→948 行）拆出 `components/VocabFlashcard.vue`（闪卡整场会话：
+  拉到期队列/判分/飞出/键盘流/window 监听全自管，父页只接 `@exit`/`@done`）；
+  keep-alive 的 activated/deactivated 钩子**沿子树级联**，子组件内配对挂摘即可，
+  父页的键盘监听代码整个消失；`masteryLabel` 词表分布 tooltip 还在用——拆分时
+  两边各留一份（或后续抽 utils）。
+
+**验证**：后端 **374**（+2 文件 8 用例）、前端 Vitest **163**（+knowledgeReview 2）、
+build、ruff/eslint/prettier 全绿；E2E **54** 全绿（workers=2，2.2 分钟）；
+8000 生产实测闪卡会话（翻面/释义/真题语境回链/退出）与 /review 渲染零 console 错误。

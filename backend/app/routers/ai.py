@@ -318,6 +318,12 @@ def english_analysis(body: AiEnglishRequest):
         return error(502, message)
     parsed["method"] = "vision" if body.images else "text"
     _mark_degraded(parsed, failed_channels)
+    # 步骤级降级（ai_english 内部某步失败带伤返回）：缺了什么要在 message 里说清，
+    # 不许只默默给个残缺结果
+    step_issues = parsed.pop("degraded_steps", [])
+    note = _degrade_note(failed_channels)
+    if step_issues:
+        note += f"（部分内容缺失：{'、'.join(step_issues)}，可直接重试补齐）"
     # 自动识别并填入 科目/二级科目（英语→阅读、数学→高数、408→计网等）
     if parsed.get("is_english") and not parsed.get("subject_hint"):
         parsed["subject_hint"] = "英语"
@@ -330,7 +336,7 @@ def english_analysis(body: AiEnglishRequest):
                 parsed["sub_subject_id"] = sub_id
     finally:
         conn.close()
-    return ok(parsed, f"英语整篇解析完成{_degrade_note(failed_channels)}")
+    return ok(parsed, f"英语整篇解析完成{note}")
 
 
 @router.post("/variant", dependencies=[Depends(ai_rate_limit)])

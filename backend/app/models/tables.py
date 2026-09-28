@@ -76,6 +76,12 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
     sub_subject_id INTEGER REFERENCES sub_subjects(id),
     summary TEXT,
     related_tags TEXT,
+    -- 知识点 SM-2 复习调度（与 mistakes 同一套简化参数；新词条 next_review_at 为空 = 队列新条目）
+    ease_factor REAL DEFAULT 2.5,
+    last_interval INTEGER DEFAULT 0,
+    review_count INTEGER DEFAULT 0,
+    last_reviewed_at DATETIME,
+    next_review_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

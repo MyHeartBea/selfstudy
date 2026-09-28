@@ -32,7 +32,7 @@ cd frontend && npm run dev   # http://127.0.0.1:5174，已代理 /api 与 /image
 # 开机自启：开始菜单启动文件夹中的 考研错题本自启.vbs（已在运行则跳过；日志 D:\temp\km-launch.log）
 
 # 测试
-cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（356 个）
+cd backend && python -m unittest discover -s tests -v   # 临时库，不碰真实数据（374 个）
 cd frontend && npm test                                  # Vitest 158 个；含 DOM 级交互回归（happy-dom）与全量 SFC 静态扫描（templateBindings.test.js）
 cd frontend && npm run test:e2e                          # Playwright 51 个（真 Chrome；自起 vite，/api 全部浏览器层打桩）；workers 已在配置里钉成 2
 
@@ -205,6 +205,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
      **11514 个推理 token 吃光 12000 预算、正文一个字都没产出**（截断重试），
      所以关推理不只是提速，是修掉一个真实故障。`tests/test_ai_reasoning_budget.py`
      的 `MechanicalThinkingOffTest` 把"必须真的下发 disabled"与"不许再乘余量"钉住。
+   - **完形/整篇大件按步降级，单请求失败不报废整批**（2026-09-27）：`ai_english.analyze_english` 对提字/逐句/词汇/题目各步 try/except，失败步记进 `degraded_steps` 并置 `degraded:true`（**必须在 `normalize_english_parsed` 之后置**——normalize 会丢弃未知键），响应照常 200，前端亮"部分完成"账；单题解析失败不再让整个完形 502。提字阶段结果按图哈希缓存进 `app_meta`（`english_ocr_stage_<sha1[:16]>`，TTL 24h），重试不再重复烧视觉通道。测试注意：类级临时库共享 app_meta，`setUp` 要清 `english_ocr_stage_%`，否则先跑的用例把缓存留给后面（假件一次都不被调）。
    - **逐题解析（`_qa_task`）实测过"关推理"并**否决**，不要再试**：同一题 A/B
      （`thinking` 开 vs 关，其余完全相同）—— 结构上两者都有【定位/来源/思路/总结】、
      答案都对，但**关推理那版在【定位】里引用了一句原文里根本不存在的话**
@@ -253,6 +254,7 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 - `utils/markdown.js`：`renderMarkdown`（详情排版）与 `markdownToPlain`（卡片纯文本预览）。
 - `views/CaptureView.vue`：多图 / 粘贴目标 / 自动检测 / 分析进度叙事。
 - `views/StatsView.vue`：Bento 统计；`views/ReviewView.vue`：复习沉浸舞台。
+- **视图级拆分（自含组件带样式走，scoped 不跨组件边界——根选择器留在主文件、内部样式搬进子组件）**：`components/stats/`（ForecastStrip/WeeklyReportStrip/MockTrendStrip/MockReportCard 模考成绩单）、`components/VocabFlashcard.vue`（生词闪卡整场会话：拉到期队列/判分/键盘流/window 监听全自管，父页只接 `@exit`/`@done`）。
 - `components/MistakeCard.vue`：列表首图；`components/DetailMeta.vue` + `ui/QuestionImages.vue`：详情全图 / 首图。
 - `utils/markdown.js` + `components/RichText.vue`：Markdown 表格 / hex-dump。
 - `ui/UiModal.vue`：加宽弹窗；设计系统「墨纸印」：`src/ui/`。
@@ -354,11 +356,11 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
   列表一维（键盘）+ 分组渲染（`visibleSections()` 带扁平下标），落地页统一吃 `?search=`、知识点走 `?tag=`。
 - **错题库**：题型按科目感知（数学 / 408：选择·填空·解答；政治：单选·多选·分析；英语：客观题·翻译·作文）；筛选 / 排序 / 分页 / 批量操作 / URL 同步筛选状态 / 导入导出 JSON / **Anki TSV 导出（`/api/export/anki?type=mistakes|vocab`）** / 打印（`window.print()` + 全局 print 样式）。列表首图走**缩略图**：`/images/thumb/{name}`（懒生成 WebP 到 `data/images/_thumbs/`，失败回退原图；删除错题同步清缩略图）。**收藏标星**（`starred` 列 + `POST /{id}/star` + 只看收藏筛选；只影响展示，不进复习调度）。**打印背诵稿**：勾选错题 / 知识点 / 公式 → `/print?type=&ids=`（上限 100 题，题干 + 选项在前、答案解析在后，A4 打印样式；三处入口都在列表页工具条）。
 - **今日复习**：间隔重复由 SM-2 驱动；选择 / 多选（全对判分，顺序无关，判分统一走 `utils/examScoring.js` 的 scoreLetters）/ 填空（别名 + 数值容差）/ 翻译（对照参考译文自评）/ 解答（AI 按步骤给分 0-100）；全键盘流（1-4 选答、Enter 下一题、Q/W 标记）；`?` 呼出快捷键速查。**单题直练**：practice 接口支持 `mistake_id` 参数（详情「练这道题」用）。**每日配额页内可调**（`GET|PUT /api/reviews/quota`，存 `app_meta` 优先于 `.env`，`0`=不限；冲刺计划页同源）。**稍后再看（Snooze）**：`POST /api/reviews/snooze` 把当前题推到明天（每天 3 次，按本地日记在 `app_meta`；不写复习记录、不动 SM-2 计数——想跳过又不想算答错时用）。
-- **真题模考（mode=mock）**：练习页选年份+时长 → `mode=mock&duration=分钟&source_type=real_exam&source_year=年`；ReviewView mock 分支：倒计时（归零自动交卷）、作答暂存不判分、自由翻题、交卷统一判分（choice/multi 本地、fill 走 /judge）并逐题写入复习记录 + POST /mocks 存档；卷面客户端过滤为客观题。
+- **真题模考（mode=mock）**：练习页选年份+时长 → `mode=mock&duration=分钟&source_type=real_exam&source_year=年`；ReviewView mock 分支：倒计时（归零自动交卷）、作答暂存不判分、自由翻题、交卷统一判分（choice/multi 本地、fill 走 /judge）并逐题写入复习记录 + POST /mocks 存档；卷面客户端过滤为客观题。**多卷连考**（2026-09-27）：练习页试卷 chip 可多选 → `paper_ids=1,2`（单卷仍 `paper_id`），题目按卷序拼接、每题盖 `paperTitle/paperYear/paperSubject` 章（换卷即断 passage，语境不跨卷泄漏），共用一个倒计时；错题入库按各题所属卷的科目/年份/卷名；`/api/mocks` 的 `exam_year` 用 `·` 连接。成绩单出现 `.mr-papers` 分卷小计（`byPaper.length>1` 时）。
 - **真题库（v8，`/papers` 页）**：扫描 `PAPERS_DIR`（默认 `D:\km-v2\真题`，.env 可覆盖）→ 候选按 科目/年份/答案配对 识别（识别率 100%，配对率 90%+）→ 导入后**单工作线程后台流水线**：提取文本（docx=python-docx；pdf=pypdf 文本层，**空/过少/乱码即回退**：pypdfium2 渲染页为图 → **数学/408 优先 DeepSeek 视觉（输出 LaTeX，公式准）+ 本地 Windows OCR 兜底，文科目反之**；判定可读占比 `PDF_TEXT_RATIO`(0.6)/最小字符 `PDF_TEXT_MIN`(200)/最多页 `PDF_OCR_PAGES`(60) 可调，乱码文本层自动拒绝）→ **扫描/公式卷：扁平分块拆题（完整，避免逐页漏同页多个综合题）+ 按题号在逐页文本定位页码**（`_page_for_no`，可靠，供图示题取原图）；公式/上下标要求 `\(...\)` 包裹（MathText 渲染）→ 从配对答案文件文本匹配客观题答案（英语二实测 20/27 配上）。**表**：`exam_papers`（status: pending/extracting/structuring/done/error + status_note）+ `exam_questions`（含 `page_idx`/`diagram_image`，迁移 v9；**图示题存该页原图**到 `data/images/exam_papers/<pid>/p<n>.webp`，前端模考/详情可见）。**整卷模考**：`/review?mode=mock&paper_id=X&duration=分`——题目来自卷库（仅客观题进卷面），交卷判分后**「作答且错」的题自动入错题本**（subject 按 英语二→英语 等映射匹配；analysis/difficulty_points 有非空兜底文案，否则被必填校验 422），未作答不入本。
 - **AI 错因周报**：`POST /api/ai/weekly-report`（force=1 强制重生成）——近 7 天答错记录聚类为错因，**按天缓存于 app_meta（key=weekly_report_YYYY-MM-DD，自动清旧）**；统计页渲染，标签可点击直通练习。
 - **生词本**（英语）：闪卡快刷（认识→1/2/4/7/15/30/60 天阶梯，模糊→明天，不认识→留在队列）；批量导入词表；掌握度墨点；掌握度分布。闪卡正面有**本地 TTS 发音**（`utils/speech.js`，浏览器 speechSynthesis，零 AI；按钮 `@click.stop` 防误翻面）；背面有**真题语境回链**（`GET /api/vocab/{id}/context`，`vocab_service.find_context` 在错题 `passage_text` 里按 LIKE 粗筛 + `\b` 词边界精选，点条目直通单题直练）；语境在会话内按词缓存、答完即清。
-- **知识点库**：标签同义归一、AI 自动总结、贴图分析、服务端分页；知识笺卡片墙（科目色脊+摘要+关联标签）。
+- **知识点库**：标签同义归一、AI 自动总结、贴图分析、服务端分页；知识笺卡片墙（科目色脊+摘要+关联标签）。**知识点 SM-2 复习队列**（2026-09-27）：`knowledge_base` 加 `ease_factor/last_interval/review_count/last_reviewed_at/next_review_at` 五列（PRAGMA 探测幂等 ALTER，不动迁移门控），调度复用 `review_service._next_schedule`（与错题同一条记忆曲线，**不许漂移**）；队列排序与错题今日队列同口径（新题优先 + last_reviewed ASC）。入口 `GET /knowledge/review/queue` + `POST /knowledge/{id}/review`，前端知识点页「复习知识点」弹窗（先回忆再揭示摘要）。`knowledge_service` 顶部**不许** import `review_service`（循环导入，函数内局部 import）。
 - **公式背诵**：分类 / 搜索 / 过卡循环背诵模式（没记住排队尾直到全会）；分类彩色印章。
 - **英语作文批改**（迁移 v10，`essay_records` 表）：录入页第三个 Tab「英语作文批改」→ `POST /api/essays/grade`（手写稿照片**逐张** `_vision_extract_text` 转录后合并，再走文本批改；同样遵守第 5 节"先提文字再分析"，禁止单次超大视觉生成）→ 按考研四型（e1/e2 × 小/大作文）五档评分，`ai_essay.normalize_essay_grade` 钳制分数、按档位兜底 band、四维分和与总分偏差超 1 分时按权重（内容.4/结构.2/语言.3/格式.1）重算。`persist` 默认存档到 `essay_records`，档案页 `/essays`（整卡可点看详情、逐词 diff 用 `utils/essayDiff.js` 的 LCS）。"存入错题库"走普通错题（`question_type=solution`，科目自动匹配「英语」，**匹配不到就拒绝并 toast**，因为 `subject_id` 是必填 int）。
 - **科目指南**：各科复习重点与方法建议（政治 / 英语已预置默认档案，可编辑）；首字印章+顶部色条。
@@ -379,6 +381,6 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 
 - 后端 8000 运行中（`HOST` 改 `0.0.0.0` 必须**同时设 `API_TOKEN`**，见第 4 节）；前端 dist 已构建；openviking 正常（第 8 节）。
 - 数据库迁移已到 **v10**（v6=SM-2 调度 / v7=mock_records / v8=exam_papers / v9=exam_questions.page_idx+diagram_image / v10=essay_records）；启动前自动备份保留 20 份。**v11 只补索引**（见第 3 节"索引归 DDL 管"），`migration_version` 门控**仍是 10**。
-- 测试基线：**后端 364、前端 Vitest 161、E2E 53**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 79%（门槛 70%）。
+- 测试基线：**后端 374、前端 Vitest 163、E2E 54**（workers 已在 `playwright.config.js` 钉成 2，见第 2 节），覆盖率按 CI 口径约 79%（门槛 70%）。
 - 已上线：墨韵 3.x 前端（数字文房设计系统，演进史见 WORKLOG）、真题库（扫描 PDF 视觉提取 + 图示题存原图）、SM-2 复习队列、AI 错因周报、Anki 导出、快照备份。
 - 视觉基准原型 `D:\temp\km-redesign\ink2-prototype.html`（仓库外）；架构与硬规则见第 6.5 节。

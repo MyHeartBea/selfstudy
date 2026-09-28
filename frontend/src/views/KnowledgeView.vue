@@ -1,6 +1,6 @@
 <script setup>
 /** 知识点库：筛选 + 分页表格 + 编辑/创建弹窗 + AI 总结 + 一键练习 */
-import { onActivated, onMounted, reactive, ref, toRef, watch } from 'vue'
+import { computed, onActivated, onMounted, reactive, ref, toRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import request from '../api/request'
@@ -221,6 +221,55 @@ onMounted(() => {
   loadKnowledge()
 })
 
+/* ── 知识点复习（SM-2 与错题同源调度）：看名回忆，再显示摘要自评 ─────────── */
+const reviewVisible = ref(false)
+const reviewLoading = ref(false)
+const reviewQueue = ref([])
+const reviewDue = ref(0)
+const reviewSummaryShown = ref(false)
+const reviewSaving = ref(false)
+const reviewCount = ref(0) // 本轮已复习数（完成页用）
+
+const reviewCurrent = computed(() => reviewQueue.value[0] || null)
+
+async function openReview() {
+  if (reviewLoading.value) return
+  reviewLoading.value = true
+  try {
+    const res = await request.get('/knowledge/review/queue', { params: { limit: 50 } })
+    reviewQueue.value = res.data.data.items || []
+    reviewDue.value = res.data.data.dueTotal || 0
+    reviewCount.value = 0
+    reviewSummaryShown.value = false
+    if (!reviewQueue.value.length) {
+      toast.success('知识点没有到期的，全部按计划在后续几天')
+      return
+    }
+    reviewVisible.value = true
+  } catch (err) {
+    // 错误提示由请求拦截器统一处理
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+async function gradeKnowledge(result) {
+  const cur = reviewCurrent.value
+  if (!cur || reviewSaving.value) return
+  reviewSaving.value = true
+  try {
+    await request.post(`/knowledge/${cur.id}/review`, { result })
+    reviewQueue.value = reviewQueue.value.filter((it) => it.id !== cur.id)
+    reviewDue.value = Math.max(0, reviewDue.value - 1)
+    reviewCount.value += 1
+    reviewSummaryShown.value = false
+  } catch (err) {
+    // 失败不动队列：这条留原地，用户可再评一次
+  } finally {
+    reviewSaving.value = false
+  }
+}
+
 // keep-alive 返回本页：静默刷新，首次激活不刷（mounted 刚拉过）
 let kvActivated = false
 onActivated(() => {
@@ -255,6 +304,10 @@ watch(
         <p class="view-desc">沉淀每个标签背后的核心概念与补充讲解。</p>
       </div>
       <div class="header-actions">
+        <UiButton :loading="reviewLoading" @click="openReview">
+          <Icon name="zap" :size="15" />
+          复习知识点
+        </UiButton>
         <UiButton variant="primary" @click="openCreate">
           <Icon name="plus-circle" :size="15" />
           添加知识点
@@ -508,10 +561,104 @@ watch(
 
     <KnowledgeEditModal v-model="editVisible" :row="editing" @saved="onSaved" />
     <KnowledgeEditModal v-model="createVisible" :row="null" is-create @saved="onSaved" />
+
+    <!-- 知识点复习：看名回忆，再显示摘要，记住或忘了（SM-2 与错题同源） -->
+    <UiModal v-model="reviewVisible" title="知识点复习" size="md">
+      <template v-if="reviewCurrent">
+        <div class="kr-progress">
+          <span>到期 {{ reviewDue }} · 本轮剩 {{ reviewQueue.length }}</span>
+          <span v-if="reviewCurrent.subject_name" class="kr-subject">{{
+            reviewCurrent.subject_name
+          }}</span>
+        </div>
+        <div class="kr-name serif">{{ reviewCurrent.tag_name }}</div>
+        <template v-if="reviewSummaryShown">
+          <RichText class="kr-summary" :text="reviewCurrent.summary || ''" />
+          <p v-if="!reviewCurrent.summary" class="kr-nosum">
+            这条还没有摘要 —— 先凭名字回忆，回头去「编辑」补一条。
+          </p>
+        </template>
+        <UiButton v-else variant="outline" block @click="reviewSummaryShown = true">
+          回忆一下，再显示摘要
+        </UiButton>
+        <div v-if="reviewCurrent.related_tags.length" class="kr-related">
+          <UiTag v-for="tag in reviewCurrent.related_tags" :key="tag">{{ tag }}</UiTag>
+        </div>
+      </template>
+      <div v-else class="kr-done">
+        <div class="kr-done-num serif num">{{ reviewCount }}</div>
+        <p>本轮复习完成，下次复习已按记忆曲线排期。</p>
+      </div>
+      <template #footer>
+        <UiButton variant="ghost" @click="reviewVisible = false">
+          {{ reviewCurrent ? '退出' : '关闭' }}
+        </UiButton>
+        <template v-if="reviewCurrent">
+          <UiButton variant="danger" :loading="reviewSaving" @click="gradeKnowledge(false)">
+            忘了
+          </UiButton>
+          <UiButton variant="success" :loading="reviewSaving" @click="gradeKnowledge(true)">
+            记住了
+          </UiButton>
+        </template>
+      </template>
+    </UiModal>
   </div>
 </template>
 
 <style scoped>
+/* 知识点复习弹窗 */
+.kr-progress {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.kr-subject {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.kr-name {
+  margin: 14px 0 12px;
+  font-size: 30px;
+  font-weight: 900;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+.kr-summary {
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: 14px;
+  line-height: 1.9;
+}
+.kr-nosum {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.kr-related {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.kr-done {
+  text-align: center;
+  padding: 12px 0 4px;
+}
+.kr-done-num {
+  font-size: 44px;
+  font-weight: 900;
+  color: var(--ink);
+}
+.kr-done p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
 /* 玻璃筛选栏 */
 .filter-bar {
   display: flex;

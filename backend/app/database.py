@@ -429,6 +429,16 @@ def migrate_database(conn: sqlite3.Connection) -> None:
     }
     if "related_tags" not in knowledge_columns:
         conn.execute("ALTER TABLE knowledge_base ADD COLUMN related_tags TEXT")
+    # 知识点 SM-2 复习调度（与 mistakes 同一套简化参数，见 knowledge_service.review_knowledge）
+    for column, ddl in (
+        ("ease_factor", "REAL DEFAULT 2.5"),
+        ("last_interval", "INTEGER DEFAULT 0"),
+        ("review_count", "INTEGER DEFAULT 0"),
+        ("last_reviewed_at", "DATETIME"),
+        ("next_review_at", "DATETIME"),
+    ):
+        if column not in knowledge_columns:
+            conn.execute(f"ALTER TABLE knowledge_base ADD COLUMN {column} {ddl}")
 
     grade_columns = {
         row["name"] for row in conn.execute("PRAGMA table_info(solution_grades)").fetchall()
