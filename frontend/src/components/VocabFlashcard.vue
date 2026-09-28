@@ -41,6 +41,7 @@ const drag = reactive({ dx: 0, dy: 0, active: false, moved: false })
 let dragStart = null
 let justDragged = false
 const flyDir = ref(null) // 'known' | 'unknown' | 'fuzzy' 飞出中
+const grading = ref(false) // 判分在途锁:双击/连按不会对同一张卡双发请求
 
 const THRESHOLD = 80
 
@@ -185,27 +186,33 @@ function goContext(hit) {
 }
 
 async function grade(result) {
-  // 飞出动画窗口内（flyGrade 的 240ms setTimeout 未落地）的任何判分调用都会
-  // 打到**下一张卡**上且请求双发——flyDir 非空说明上一张还在飞，直接忽略
-  if (flyDir.value) return
+  // 双重守卫:飞出动画窗口(flyDir)+ 在途请求锁(grading)——快速双击"认识"或
+  // 连按两下数字键,两个 grade 都会在 POST 前通过 flyDir 守卫,造成同卡双发、
+  // sessionCount 双计、cardIndex 连跳两张、"不认识"回队重复入列
+  if (flyDir.value || grading.value) return
   if (!currentCard.value) return
+  grading.value = true
   justDragged = false // 触屏拖拽若未派生 click，标志残留会吞掉下一张卡的首次点击
   try {
-    await request.post(`/vocab/${currentCard.value.id}/review`, { result })
-  } catch (err) {}
-  sessionCount.value[result] += 1
-  // 不认识的词立即排到队尾，直到全会
-  if (result === 'unknown') {
-    queue.value.push(currentCard.value)
-  }
-  flipped.value = false
-  ctxHits.value = []
-  ctxLoading.value = false
-  if (cardIndex.value + 1 >= queue.value.length) {
-    sessionDone.value = true
-    emit('done')
-  } else {
-    cardIndex.value += 1
+    try {
+      await request.post(`/vocab/${currentCard.value.id}/review`, { result })
+    } catch (err) {}
+    sessionCount.value[result] += 1
+    // 不认识的词立即排到队尾，直到全会
+    if (result === 'unknown') {
+      queue.value.push(currentCard.value)
+    }
+    flipped.value = false
+    ctxHits.value = []
+    ctxLoading.value = false
+    if (cardIndex.value + 1 >= queue.value.length) {
+      sessionDone.value = true
+      emit('done')
+    } else {
+      cardIndex.value += 1
+    }
+  } finally {
+    grading.value = false
   }
 }
 

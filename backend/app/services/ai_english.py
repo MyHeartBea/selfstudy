@@ -176,11 +176,14 @@ def _vision_extract_text(
     model: str | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
+    out_meta: dict | None = None,
 ) -> str:
     """用视觉模型把图片里的文字提取成纯文本（小输出、快、稳，供后续文本分析）。
 
     未指定通道时默认走 DeepSeek 视觉首选；指定 model/base_url/api_key 时使用
     调用方通道（多通道回退由路由层逐个尝试），保证回退链真正生效。
+    out_meta 传入 dict 时回填执行信息（truncated 等），供调用方决定"截断结果
+    是否可缓存"等上层策略——不改返回签名，老调用方零影响。
     """
     content = []
     head = (
@@ -218,7 +221,10 @@ def _vision_extract_text(
         thinking=False,
     )
     text = str(result or "").strip()
-    if meta.get("truncated"):
+    truncated = bool(meta.get("truncated"))
+    if out_meta is not None:
+        out_meta["truncated"] = truncated
+    if truncated:
         # _chat 已翻倍重试过仍被截断：必须让上层知道，否则会拿残缺原文去做分析
         # ——表现就是"英语原文只识出一两段、题目和原文错位"。
         logger.warning(
@@ -339,8 +345,10 @@ _STAGE_KEY_PREFIX = "english_ocr_stage_"
 _STAGE_TTL_SECONDS = 24 * 86400
 
 
-def _stage_cache_key(images: List[str]) -> str:
-    joined = "\n".join(images)
+def _stage_cache_key(images: List[str], instruction: str = "") -> str:
+    # instruction 参与哈希:【补充要求】是提字 prompt 的一部分,换要求重试必须重烧,
+    # 否则新要求会被 24h 缓存静默忽略
+    joined = "\n".join(images) + "\n\x00instruction:" + str(instruction or "")
     return _STAGE_KEY_PREFIX + hashlib.sha1(joined.encode("utf-8")).hexdigest()[:16]
 
 
@@ -431,7 +439,7 @@ def analyze_english(
     images = [img for img in (image_base64_list or []) if img and img.strip()]
     source_text = text.strip()
     if images:
-        stage_key = _stage_cache_key(images)
+        stage_key = _stage_cache_key(images, instruction)
         cached_text = _read_stage_cache(stage_key)
         if cached_text.strip():
             source_text = cached_text
@@ -439,6 +447,7 @@ def analyze_english(
             whole = max(1, int(deadline - time.monotonic()))
             limit = vision_timeout or _svc().settings.AI_VISION_PRIMARY_TIMEOUT
             vision_cap = max(10, whole - 60)
+            out_meta: dict = {}
             try:
                 extracted = (
                     _vision_extract_text(
@@ -448,6 +457,7 @@ def analyze_english(
                         model=model,
                         base_url=base_url,
                         api_key=api_key,
+                        out_meta=out_meta,
                     )
                     or ""
                 )
@@ -455,8 +465,13 @@ def analyze_english(
                 extracted = ""
             if extracted.strip():
                 source_text = extracted
-                # 提字是最贵的视觉调用：成功即缓存，重试不重烧（TTL 内同图直接复用）
-                _write_stage_cache(stage_key, extracted)
+                # 提字是最贵的视觉调用:成功即缓存,重试不重烧(TTL 内同图直接复用)。
+                # **截断结果不缓存**——残缺原文一旦进缓存,TTL 内所有重试都命中它
+                # 并跳过视觉调用,"重试补齐"就成了假话
+                if not out_meta.get("truncated"):
+                    _write_stage_cache(stage_key, extracted)
+                else:
+                    logger.warning("提字结果被截断,不写入缓存(重试将重烧视觉通道)")
     if not source_text.strip():
         raise _err()("未能从图片或文本中获取到内容")
 

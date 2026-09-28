@@ -10,8 +10,8 @@ from fastapi import APIRouter, Query
 from app.database import get_connection
 from app.pagination import resolve_pagination
 from app.responses import error, ok, server_error
-from app.schemas import PaperAnswerPatch, PaperCreate
-from app.services import exam_paper_service
+from app.schemas import JudgeRequest, PaperAnswerPatch, PaperCreate
+from app.services import answer_service, exam_paper_service
 
 router = APIRouter(prefix="/api", tags=["真题库"])
 
@@ -236,6 +236,36 @@ def patch_paper_question(paper_id: int, question_id: int, body: PaperAnswerPatch
         if err:
             return error(404 if err == "题目不存在" else 400, err)
         return ok(q)
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.post("/papers/{paper_id}/questions/{question_id}/judge")
+def judge_paper_question(paper_id: int, question_id: int, body: JudgeRequest):
+    """真题卷填空题判分（连考/单卷模考用）。
+
+    拼卷题来自 exam_questions 表，/mistakes/{id}/judge 查不到它们——此前填空题
+    判分 404 后一律按错处理，**答对的填空也被塞进错题本**。这里用与错题判分
+    同一套 answer_service 口径按 exam_questions.correct_answer 判分。
+    """
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT * FROM exam_questions WHERE id = ? AND paper_id = ?",
+            (question_id, paper_id),
+        ).fetchone()
+        if row is None:
+            return error(404, "题目不存在")
+        q = dict(row)
+        verdict = answer_service.judge_fill(body.user_answer, q["correct_answer"])
+        return ok(
+            {
+                "correct": verdict["correct"],
+                "correct_answer": q["correct_answer"] or "",
+            }
+        )
     except Exception as exc:
         return server_error(exc)
     finally:

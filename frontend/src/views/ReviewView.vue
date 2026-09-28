@@ -112,6 +112,8 @@ async function snoozeCurrent() {
 const index = ref(0)
 const loading = ref(false)
 const loadError = ref(false)
+// 加载失败的具体原因（模考分支是"卷"的问题而非"今日无题"，文案要分开说）
+const loadErrorText = ref('')
 const selected = ref(null)
 const answered = ref(false)
 const revealed = ref(false)
@@ -270,11 +272,13 @@ const paperTitle = ref('')
 const paperYear = ref('')
 const paperSubject = ref('')
 
-/** 真题库题目 -> 卷面视图（带所属卷身份；单卷/连考共用一份字段） */
+/** 真题库题目 -> 卷面视图（带所属卷身份；单卷/连考共用一份字段）。
+ * paperId 用于换卷断原文（比 paperTitle 可靠：两卷可能同名）与拼卷判分路由。 */
 function paperQuestionView(q, paper) {
   return {
     id: q.id,
     paperQuestion: true,
+    paperId: paper.id || null,
     paperTitle: paper.title || '',
     paperYear: paper.year || '',
     paperSubject: paper.subject || '',
@@ -324,7 +328,8 @@ const displayPassage = computed(() => {
   if (!isMock.value || !current.value) return ''
   if (current.value.passage) return current.value.passage
   for (let i = index.value - 1; i >= 0; i--) {
-    if (queue.value[i]?.paperTitle !== current.value.paperTitle) break
+    // 按 paperId 断卷（title 可能同名）；非卷面题（paperId null）视为换卷
+    if ((queue.value[i]?.paperId ?? null) !== (current.value.paperId ?? null)) break
     if (queue.value[i].passage) return queue.value[i].passage
   }
   return ''
@@ -428,7 +433,11 @@ async function submitMock(auto = false) {
         let result
         if (q.question_type === 'fill' && ans) {
           try {
-            const res = await request.post(`/mistakes/${q.id}/judge`, { user_answer: ans })
+            // 拼卷题来自 exam_questions 表，判分走真题卷端点（/mistakes/{id}/judge 查不到）
+            const url = q.paperQuestion
+              ? `/papers/${q.paperId}/questions/${q.id}/judge`
+              : `/mistakes/${q.id}/judge`
+            const res = await request.post(url, { user_answer: ans }, { silent: true })
             result = !!res.data.data?.correct
           } catch (err) {
             result = false
@@ -554,20 +563,44 @@ async function submitMock(auto = false) {
 async function loadQueue() {
   loading.value = true
   loadError.value = false
+  loadErrorText.value = ''
   try {
     let res
     if (route.query.paper_id || route.query.paper_ids) {
       // 真题库整卷模考（paper_id 单卷）或连考（paper_ids 多卷按序拼接）
-      const ids = route.query.paper_ids
-        ? String(route.query.paper_ids)
-            .split(',')
+      // URL 直达没有 UI 入口的防线：ids 去重 + 只收 done 且有题的卷，半卷不开考
+      const ids = [
+        ...new Set(
+          (route.query.paper_ids
+            ? String(route.query.paper_ids).split(',')
+            : [String(route.query.paper_id || '')]
+          )
             .map((s) => Number(s))
-            .filter(Boolean)
-        : [Number(route.query.paper_id)]
-      const paperRes = await Promise.all(
+            .filter((n) => Number.isInteger(n) && n > 0),
+        ),
+      ]
+      const settled = await Promise.allSettled(
         ids.map((id) => request.get(`/papers/${id}`, { silent: true })),
       )
-      const paperList = paperRes.map((r) => r.data.data)
+      const paperList = []
+      const failedIds = []
+      settled.forEach((res, i) => {
+        if (res.status === 'fulfilled') {
+          const paper = res.value.data.data
+          if (paper && paper.status === 'done' && (paper.questions || []).length) {
+            paperList.push(paper)
+            return
+          }
+        }
+        failedIds.push(ids[i])
+      })
+      if (failedIds.length) {
+        loadErrorText.value = `试卷未就绪或不存在（${failedIds.join('、')} 卷），已跳过`
+      }
+      if (!paperList.length) {
+        loadError.value = true
+        return
+      }
       paperTitle.value = paperList.map((p) => p.title || '').join(' + ')
       paperYear.value = [...new Set(paperList.map((p) => String(p.year || '')))]
         .filter(Boolean)
@@ -1331,7 +1364,7 @@ onBeforeRouteLeave(async () => {
 
     <UiLoadError
       v-else-if="loadError"
-      text="今日队列没取到"
+      :text="loadErrorText || '今日队列没取到'"
       hint="后端没响应，重试一下。这并不表示「今天没有要复习的题」。"
       @retry="loadQueue"
     />
