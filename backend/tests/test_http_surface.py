@@ -187,5 +187,108 @@ class BatchDetailHttpTest(unittest.TestCase):
         self.assertEqual([m["id"] for m in data], [self.ids[1], self.ids[0]])
 
 
+class PaperJudgeHttpTest(unittest.TestCase):
+    """真题卷填空判分:拼卷题 id 属 exam_questions,/mistakes/{id}/judge 查不到
+    会 404 误判——这里钉住同口径 judge_fill 判分与 404。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+        conn = get_connection()
+        try:
+            cur = conn.execute(
+                "INSERT INTO exam_papers (subject, year, title, source_path, status) "
+                "VALUES ('数学二', 2021, 'HTTP冒烟卷', 'x/y.pdf', 'done')"
+            )
+            cls.pid = cur.lastrowid
+            conn.execute(
+                "INSERT INTO exam_questions (paper_id, no, question_type, question, correct_answer) "
+                "VALUES (?, '1', 'fill', '解方程 2x=4, x=?', 'x=2')",
+                (cls.pid,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_judge_fill_correct_and_wrong(self):
+        right = client.post(
+            f"/api/papers/{self.pid}/questions/1/judge", json={"user_answer": "x = 2"}
+        )
+        self.assertEqual(right.status_code, 200, right.text)
+        self.assertTrue(right.json()["data"]["correct"])
+        wrong = client.post(
+            f"/api/papers/{self.pid}/questions/1/judge", json={"user_answer": "x = 3"}
+        )
+        self.assertEqual(wrong.status_code, 200)
+        self.assertFalse(wrong.json()["data"]["correct"])
+
+    def test_judge_missing_question_is_404(self):
+        r = client.post(
+            f"/api/papers/{self.pid}/questions/999999/judge", json={"user_answer": "x=2"}
+        )
+        self.assertEqual(r.status_code, 404)
+
+
+class KnowledgeImportHttpTest(unittest.TestCase):
+    """知识点导入(knowledge 段):新建带调度字段、同名跳过不覆盖、空 payload 400。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    def _item(self, **overrides):
+        item = {
+            "tag_name": "HTTP导入考点",
+            "summary": "导入的摘要",
+            "ease_factor": 2.7,
+            "review_count": 4,
+            "next_review_at": "2099-01-01 00:00:00",
+        }
+        item.update(overrides)
+        return item
+
+    def _row(self, tag):
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT * FROM knowledge_base WHERE tag_name = ? COLLATE NOCASE", (tag,)
+            ).fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def test_import_creates_with_schedule(self):
+        r = client.post("/api/import", json={"knowledge": [self._item()]})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["data"]["knowledge_created"], 1)
+        row = self._row("HTTP导入考点")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["ease_factor"], 2.7)
+        self.assertEqual(row["review_count"], 4)
+        self.assertEqual(row["next_review_at"], "2099-01-01 00:00:00")
+
+    def test_import_same_tag_skips_without_overwrite(self):
+        # 本地词条比导出文件新(不同摘要):再导一次必须跳过,不许覆盖
+        r = client.post(
+            "/api/import",
+            json={"knowledge": [self._item(summary="导出文件的旧摘要", review_count=99)]},
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["data"]["knowledge_skipped"], 1)
+        row = self._row("HTTP导入考点")
+        self.assertEqual(row["summary"], "导入的摘要")
+        self.assertEqual(row["review_count"], 4)
+
+    def test_empty_payload_is_400(self):
+        r = client.post("/api/import", json={})
+        self.assertEqual(r.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

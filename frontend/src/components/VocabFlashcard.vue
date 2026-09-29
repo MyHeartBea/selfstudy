@@ -42,6 +42,8 @@ let dragStart = null
 let justDragged = false
 const flyDir = ref(null) // 'known' | 'unknown' | 'fuzzy' 飞出中
 const grading = ref(false) // 判分在途锁:双击/连按不会对同一张卡双发请求
+// 会话内回队计数:id 映射到 {fuzzy: n, unknown: n}。模糊限 1 次(防死循环),不认识不限
+const requeueCount = new Map()
 
 const THRESHOLD = 80
 
@@ -139,6 +141,7 @@ async function start() {
     flipped.value = false
     sessionDone.value = false
     sessionCount.value = { known: 0, fuzzy: 0, unknown: 0 }
+    requeueCount.clear()
   } catch (err) {
     emit('exit')
   }
@@ -197,10 +200,22 @@ async function grade(result) {
     try {
       await request.post(`/vocab/${currentCard.value.id}/review`, { result })
     } catch (err) {}
+    const card = currentCard.value
     sessionCount.value[result] += 1
-    // 不认识的词立即排到队尾，直到全会
-    if (result === 'unknown') {
-      queue.value.push(currentCard.value)
+    // —— 会话内随机回队 ——
+    // 用户实测:"模糊"后续不再出现、"不认识"只在队尾出现一次,间隔拉得过开。
+    // 模糊:随机插到后面 1 次(每卡每会话限一次,防模糊死循环);
+    // 不认识:随机插 2 份拉开间隔,再次判不认识仍会再插,直到全会(原哲学保留)。
+    if (result === 'fuzzy' || result === 'unknown') {
+      const counts = requeueCount.get(card.id) || { fuzzy: 0, unknown: 0 }
+      if ((counts[result] || 0) < (result === 'fuzzy' ? 1 : 99)) {
+        counts[result] = (counts[result] || 0) + 1
+        requeueCount.set(card.id, counts)
+        reinsertRandom(card, result === 'unknown' ? 2 : 1)
+      } else if (result === 'unknown') {
+        // 不认识达到上限仍不认识:排到队尾兜底,直到全会
+        queue.value.push(card)
+      }
     }
     flipped.value = false
     ctxHits.value = []
@@ -213,6 +228,23 @@ async function grade(result) {
     }
   } finally {
     grading.value = false
+  }
+}
+
+/**
+ * 把卡片随机插回队列后半段(当前位置至少隔一张,防"刚判完又立刻出现")。
+ * Math.random 注入仅供测试。
+ */
+function reinsertRandom(card, copies, rng = Math.random) {
+  for (let i = 0; i < copies; i++) {
+    const len = queue.value.length
+    const minPos = cardIndex.value + 2
+    if (len < minPos) {
+      queue.value.push(card)
+      continue
+    }
+    const pos = minPos + Math.floor(rng() * (len - minPos + 1))
+    queue.value.splice(Math.min(pos, len), 0, card)
   }
 }
 

@@ -45,12 +45,13 @@
     `missing` = 记录指向一张不存在的图（页面上是破图）
   - `refs` 是 `["mistakes#12", ...]` 这样的定位串；`kind` ∈ `image|thumb|exam_page`
   - 判定口径与 `scripts/clean_orphan_images.py` **共用** `integrity_service`（见 AGENTS 第 3 节）
-- `GET /api/snapshots?limit=20`：数据快照列表（启动备份 + 导入前快照 + 回滚前现场）
+- `GET /api/snapshots?limit=20`：数据快照列表（启动备份 + 每日定时备份 + 导入/删除/回滚前快照）
   - 每项 `{name, label, size_kb, created_at}`；`label` 是**来源标记**（文件名最后一段），
-    `""` = 启动自动备份、`manual` = 手动、`before-import-<条数>`、`before-batch-delete-<条数>`、
-    `before-restore` = 某次回滚前的现场。前端按这个翻成人话，别显示成空白
+    `""` = 启动自动备份、`manual` = 手动、`daily` = 每日定时、`before-import-<条数>`、`before-delete`、
+    `before-batch-delete-<条数>`、`before-restore` = 某次回滚前的现场。前端按这个翻成人话，别显示成空白
 - `POST /api/snapshots?label=manual`：手动打一份快照（批量操作前建议先点）
-  - `POST /api/mistakes/batch`（`action=delete`）与 `POST /api/import` 会**自动先打快照**，
+  - `POST /api/mistakes/batch`（`action=delete`）、`POST /api/mistakes/{id}`（DELETE）与
+    `POST /api/import` 会**自动先打快照**，
     响应里带 `snapshot` 文件名；为 null 表示快照失败（`message` 会明说本次无法一键回滚）
 - `POST /api/snapshots/restore`：`{"name", "confirm"}` —— **整库回滚**到某一份快照
   - `confirm` 必须与 `name` 逐字相等，否则 400 且**一个字节都不改**（前端另有一道"手输 RESTORE"）
@@ -65,26 +66,29 @@
 
 - `GET /api/mistakes`
   - 参数：`subject_id`、`sub_subject_id`、`question_type`、`difficulty`（可多值）、`tag`、
-    `approach`、`search`、`source_type`、`source_year`、`sort`、`page`、`page_size`
+    `approach`、`search`、`source_type`、`source_year`、`error_reason`、`sort`、`page`、`page_size`
   - 不传 `page` 返回数组；传 `page` 返回 `{"items", "total", "page", "page_size"}`
 - `GET /api/mistakes/{id}`：详情（含 knowledge_extra / related_knowledge / related_mistakes / last_grade）
 - `GET /api/mistakes/approaches`：已有解题思路联想（limit 默认 200）
+- `GET /api/mistakes/batch-detail?ids=1,2,3`：批量取详情（打印背诵稿用，最多 100 条，跳过已删除 id，按请求顺序返回）
 - `GET /api/mistakes/{id}/reviews`：该题复习记录（倒序）
 - `POST /api/mistakes/{id}/judge`：`{"user_answer"}` 自动判分
   - choice：归一化比对（全半角/大小写）
-  - **multi（政治多选）**：提取 A-D 字母排序比对，全对才得分
+  - **multi（政治多选）**：提取 A-G 字母排序比对，全对才得分
   - fill：规范化 + 别名 + 数值容差
 - `POST /api/mistakes/{id}/grade`：AI 按过程批改解答题（分数/错因/标准解答/其他解法）
 - `POST /api/mistakes`：新建（question_type 支持 choice/multi/fill/translation/solution）
 - `POST /api/mistakes/batch`：`{"ids", "action": "pause|resume|delete|source_type", ...}`
   删除会连带删掉配图文件；响应 `{"count", "snapshot"}`，`snapshot` 为 null 表示快照失败（`message` 会明说本次无法一键回滚）
-- `PUT /api/mistakes/{id}`：全量更新。**例外**：`images` 与 `passage_text / passage_translation / english_*`
-  这组"附加内容"键**不带键**时按库里原值保留（显式传 `""` / `[]` 才是清空），见 `mistake_service.ATTACHMENT_KEYS`
+- `PUT /api/mistakes/{id}`：全量更新。**例外**：`images`、`passage_* / english_*`、`error_reason` 与
+  复习调度字段（review_count 等）这组 ATTACHMENT_KEYS **不带键**时按库里原值保留
+  （显式传 `""` / `[]` 才是清空），见 `mistake_service.ATTACHMENT_KEYS`
+- `PATCH /api/mistakes/{id}/error-reason`：`{"reason": "knowledge|read|calc|careless|''"}` 标记/清除错因（空串 = 清除）
 - `POST /api/mistakes/{id}/pause|resume|source-type`
 - `POST /api/mistakes/{id}/star`：收藏/取消收藏（只影响筛选展示，不参与复习调度）
   - 不传 body 或 `{"starred": null}` = 按当前状态取反；显式 `{"starred": true|false}` 设定
   - 返回 `{id, starred}`；`GET /api/mistakes` 加 `starred=true` 只看收藏
-- `DELETE /api/mistakes/{id}`
+- `DELETE /api/mistakes/{id}`：删除前自动打 `before-delete` 快照（与批量删除对称；404 时不烧快照名额）
 
 ## 复习
 
@@ -97,18 +101,20 @@
     换块不重置，`remaining` 的语义是"该块积压"）
 - `GET /api/reviews/blocks`：四个分块的徽标数据 `[{key, name, due, total}]`
 - `GET /api/reviews/practice`：练习队列
-  （`mode=curve|wrong_time|random|real_exam|mock` + `count` + `subject_id`/`sub_subject_id`/
+  （`mode=curve|wrong_time|random|real_exam|mock|weak` + `count` + `subject_id`/`sub_subject_id`/
   `question_type`/`difficulty`/`tag`/`search`/`source_type`/`source_year`）
   - `mistake_id=<id>`：**单题直练**（详情页「练这道题」），只返回这一题
+  - `mode=weak`：**弱项组卷**——从累计答错最多的前 5 个知识点里抽题，其余筛选照常叠加
   - 整卷模考**不走这个接口**：前端 `/review?mode=mock&paper_id=X&duration=分` 直接取
     `GET /api/papers/{id}` 的题目在客户端组卷（只把客观题放进卷面），交卷时逐题
-    `POST /api/mistakes/{id}/review` + `POST /api/mocks` 存档
-- `GET /api/reviews/stats`：复习统计、正确率、连续天数、掌握度分布、薄弱知识点、7 天趋势
+    `POST /api/mistakes/{id}/review` + `POST /api/mocks` 存档；连考传 `paper_ids=11,12`
+    （多卷按序拼接，仅前端组卷，后端无此概念）
+- `GET /api/reviews/stats`：复习统计、正确率、连续天数、掌握度分布、薄弱知识点、7 天趋势、错因杠杆榜（`error_reasons`）
 - `GET /api/reviews/calendar?days=140`：按天聚合 `[{day, total, correct}]`（热力图）
 - `GET /api/reviews/forecast?days=30`：未来 N 天复习负荷 `{overdue, items:[{day, count}]}`（含今日）。
   边界按**本地日**算，`next_review_at`（UTC ISO 文本）用定宽日期串的范围比较去撞
   `idx_mistakes_next_review_at`（`date(col)` 会退化成整表 SCAN）—— 改动理由与等价性用例见
-  `tests/test_index_coverage.py`
+  `tests/test_index_coverage.py`。`GET /api/dashboard` 的聚合响应也内联 `forecast` 与 `mocks`
 - `POST /api/mistakes/{id}/review`：`{"result": bool, "note", "user_answer"}`
   - choice / multi / fill 且 `user_answer` 非空时，**服务端按 `answer_service.judge_letters` / `judge_fill` 重新判分并覆盖 `result`**（前端自己判的那次只用于即时反馈）；
   - 没传 `user_answer`（翻译 / 解答的 Q/W 自评）时尊重前端给的 `result`。
@@ -145,6 +151,9 @@
   - `stats`：`avg_mastery / wrong_total / review_total / due_now / never_reviewed / shown`
 - `POST /api/knowledge` / `PATCH|DELETE /api/knowledge/{id}`
 - `POST /api/knowledge/{id}/auto-summarize`：AI 总结
+- `GET /api/knowledge/review/queue?limit=50`：知识点 SM-2 复习队列
+  `{items, dueTotal, returned}`——排序/到期口径与错题今日队列同源（`review_service.queue_due_cond / queue_order`）
+- `POST /api/knowledge/{id}/review`：`{"result": bool}` 记一次知识点复习（SM-2 与错题同源，`review_service._next_schedule`）
 
 ## 公式背诵库
 
@@ -160,12 +169,16 @@
 
 - `GET /api/stats`：总数/今日新增/题型/来源/科目分布
 - `GET /api/export` / `POST /api/import`（≤5000 条）
-  - 导入响应 `{"created", "duplicates", "failed", "snapshot"}`：**按题干指纹去重**
-    （`mistake_service.question_fingerprint` —— 剥掉 HTML 标签/实体、大小写、全部空白与 Markdown 强调符，
-    图片只取**张数**参与），`duplicates` 逐条给 `{index, existing_id}`，`message` 里带"重复跳过 N 条"。
-    **题干不足 8 字（纯图片题）一律照常入库** —— 判重的假阳性代价是"静默丢题"，比翻倍严重
+  - 导入响应 `{"created", "duplicates", "failed", "snapshot", "knowledge_created", "knowledge_skipped"}`：
+    **按题干指纹去重**（`mistake_service.question_fingerprint` —— 剥掉 HTML 标签/实体、大小写、全部空白与
+    Markdown 强调符，图片只取**张数**参与），`duplicates` 逐条给 `{index, existing_id}`，`message` 里带
+    "重复跳过 N 条"。**题干不足 8 字（纯图片题）一律照常入库** —— 判重的假阳性代价是"静默丢题"，比翻倍严重
+  - 导出携带错题的**复习调度字段**（ease_factor/review_count/next_review_at 等，导入原样回灌）
+    与 `knowledge` 段（知识点词条含 SM-2 调度字段）；导入时知识点**同名（COLLATE NOCASE）跳过不覆盖**
 - `GET /api/export/anki?type=mistakes|vocab`：Anki 可导入的 TSV（正面 TAB 背面 TAB 标签，字段为 HTML，
   带 UTF-8 BOM）；无数据时返回 400 而不是空文件
+- `GET|POST /api/snapshots` / `POST /api/snapshots/restore`：整库快照与回滚（见系统节）；
+  `POST /api/snapshots/images`：**图片目录打包备份**（zip 存 `data/backups/`，缩略图不打包，保留 5 份）
 
 ## 真题库与模考存档
 
@@ -177,31 +190,39 @@
   **两个路径都必须是 `PAPERS_DIR` 内的相对路径**（绝对路径 / `..` / 越界一律 400）；
   同 `(source_path, year)` 已登记则幂等返回已有记录，不重复导入
 - `GET /api/papers/{id}`：试卷信息 + 全部题目（含 `page_idx` / `diagram_image` 题图）
+- `POST /api/papers/{pid}/questions/{qid}/judge`：真题卷填空题判分 `{"user_answer"}`
+  （拼卷题来自 exam_questions，/mistakes/{id}/judge 查不到；口径与错题判分同源 judge_fill）
+- `PATCH /api/papers/{pid}/questions/{qid}`：人工修正客观题答案（choice 收 A-G）
 - `DELETE /api/papers/{id}`
 - `GET /api/mocks?limit=20`：模考成绩存档（`created_at` 倒序）；`POST /api/mocks`：
   `{"exam_year","total","correct","score","duration_min","used_seconds"}`，返回 `{"id"}`
+- `GET /api/essays/trend`：作文批改全量得分率时间序列（进步曲线用，时间正序）
 
 ## AI
 
 - `POST /api/ai/analyze`：`{"text", "instruction"}` 文本解析
 - `POST /api/ai/ocr`：`{"image_base64", "instruction", "reference_image_base64"}` 三视觉通道**按序**轮询，
   全败退回本地 OCR
-  - **降级会在 `message` 里留痕**：`（首选通道 X 失败，已降级）` 拼在"视觉模型识别完成"后
-    —— 首选通道挂掉时识别**照样成功**，只是更慢更抖，不留痕就只能靠手感察觉。
-    **前端 `CaptureView` 按 `message` 里是否含"已降级"决定要不要出黄色提示条**，后端改措辞要同步改那里；
+  - **降级在两处留痕**：响应 `data.degraded = true`（结构化字段，前端判据）+
+    `message` 后缀 `（首选通道 X 失败，已降级）`（人话摘要，措辞可改）。
+    首选通道挂掉时识别**照样成功**，只是更慢更抖，不留痕就只能靠手感察觉。
     `POST /api/ai/english` 同此约定。`POST /api/ai/analyze` 是纯文本通道，没有降级一说。
 - `POST /api/ai/knowledge-from-image`：图片生成知识点草稿。支持一次提交**多张图**（知识点截图常分多张）：
   - `{"images": [b64, b64, ...], "instruction"}` —— 按顺序分批（每批 3 张）提文字后合并，**只生成一条草稿**；
   - 兼容旧调用 `{"image_base64": b64}`；`image_base64` 与 `images` 至少给一个（否则 422）。
   - 逐批失败不整体中断，未识别的批次会在文本里标注「未能识别」。
 
-- `POST /api/ai/english`：英语整篇精读（`{"images":[...], "text", "instruction"}`，先提文字再文本分析）
-- `GET /api/ai/sense?word=`：点词查义（多词性释义，≤60 字符）。
+- `POST /api/ai/english`：英语整篇精读（`{"images":[...], "text", "instruction"}`，先提文字再文本分析）。
+  提字结果按图哈希缓存 24h（**instruction 参与哈希**；截断结果不缓存）；步骤级失败带伤返回：
+  响应带 `degraded: true` + `degraded_steps`（缺失步骤清单）
+- `POST /api/ai/variant`：`{"mistake_id"}` AI 举一反三——基于一道错题生成同考点变式题
+  （`{question, option_a..d, answer, analysis, focus}`；分析类保持推理开启）
+- `GET /api/ai/sense?word=`：点词查义（多词性释义，≤120 字符，支持短语）。
   **按词缓存在 `app_meta`**（key=`sense_<小写词>`，命中忽略大小写，响应带 `cached:true`）；
   TTL 90 天 + 最多 500 条（超出淘汰最旧），**查不到释义的不缓存**（下次重试）
-- `POST /api/ai/weekly-report?force=0|1`：近 7 天答错记录聚类成错因的 AI 周报。
-  **按天缓存在 `app_meta`**（key=`weekly_report_YYYY-MM-DD`，自动清旧），同一天重复调用直接命中缓存；
-  `force=1` 才重新生成
+- `POST /api/ai/weekly-report?force=0|1`：近 7 天答错记录聚类成错因的 AI 周报
+  （清单带用户标的 `error_reason`，置信度最高）。**按天缓存在 `app_meta`**
+  （key=`weekly_report_YYYY-MM-DD`，自动清旧），同一天重复调用直接命中缓存；`force=1` 才重新生成
 
 ## 英语作文批改
 
