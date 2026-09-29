@@ -15,6 +15,7 @@ from app.database import (
     restore_snapshot,
     snapshot_database,
     snapshot_images,
+    storage_summary,
 )
 from app.responses import error, ok, server_error
 from app.schemas import SnapshotRestore
@@ -47,6 +48,7 @@ def health():
         "version": settings.VERSION,
         "app": settings.APP_NAME,
         "reviewDailyLimit": settings.REVIEW_DAILY_LIMIT,
+        "storage": storage_summary(),
         "metrics": metrics.snapshot(),
         "time": datetime.now(timezone.utc).isoformat(),
     }

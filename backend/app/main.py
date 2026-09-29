@@ -15,7 +15,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import metrics
 from app.config import PROJECT_ROOT, settings
-from app.database import init_database, maybe_daily_backup, maybe_daily_images_backup
+from app.database import (
+    init_database,
+    maybe_daily_backup,
+    maybe_daily_images_backup,
+    sqlite_maintenance,
+)
 from app.routers import (
     ai,
     essay,
@@ -83,6 +88,7 @@ def _daily_backup_loop(check_interval_seconds: int = 1800) -> None:
     """
     while not _backup_stop.wait(check_interval_seconds):
         try:
+            sqlite_maintenance()  # WAL checkpoint + 每月 ANALYZE,维护失败内部已吞并落日志
             maybe_daily_backup()
             maybe_daily_images_backup()
         except Exception:

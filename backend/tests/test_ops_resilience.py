@@ -116,5 +116,49 @@ class LoggingSetupTest(unittest.TestCase):
         self.assertTrue(access.handlers)
 
 
+class MaintenanceRoutineTest(unittest.TestCase):
+    """SQLite 维护例程:checkpoint 不炸、ANALYZE 走 30 天门控(app_meta)。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    def test_checkpoint_and_analyze_gate(self):
+        from app.database import sqlite_maintenance
+
+        sqlite_maintenance()  # 首次:跑 ANALYZE 并记录日期
+        conn = get_connection()
+        try:
+            first = conn.execute(
+                "SELECT value FROM app_meta WHERE key = 'last_analyze_at'"
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertIsNotNone(first)
+
+        sqlite_maintenance()  # 30 天内第二次:不再重复 ANALYZE
+        conn = get_connection()
+        try:
+            again = conn.execute(
+                "SELECT value FROM app_meta WHERE key = 'last_analyze_at'"
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(again["value"], first["value"])
+
+    def test_storage_summary_keys_and_cache(self):
+        from app.database import storage_summary
+
+        summary = storage_summary()
+        self.assertIn("db_mb", summary)
+        self.assertIn("images_mb", summary)
+        self.assertIn("backups_mb", summary)
+        cached = storage_summary()
+        self.assertEqual(summary, cached)  # 10 分钟缓存内两次一致
+
+
 if __name__ == "__main__":
     unittest.main()

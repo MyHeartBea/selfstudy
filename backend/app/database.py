@@ -4,6 +4,7 @@ import logging
 import re
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -361,6 +362,70 @@ def init_database() -> None:
         conn.commit()
     finally:
         conn.close()
+
+
+# ── SQLite 维护例程(由每日备份线程顺带调用,不新起线程)──────────────────
+
+ANALYZE_META_KEY = "last_analyze_at"
+ANALYZE_INTERVAL_DAYS = 30
+
+
+def sqlite_maintenance() -> None:
+    """WAL checkpoint 回收 -wal 文件 + 每月一次 ANALYZE 刷新优化器统计。
+
+    WAL 长跑会持续积 -wal 文件;checkpoint(TRUNCATE) 把它清零回收。
+    ANALYZE 让查询优化器的统计跟得上数据分布变化(错题/标签/调度字段的数据
+    分布会随复习持续漂移)。自身吞异常并落日志——维护失败绝不能拖垮备份线程。
+    """
+    try:
+        conn = get_connection()
+        try:
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            last = _get_meta(conn, ANALYZE_META_KEY)
+            threshold = (datetime.now() - timedelta(days=ANALYZE_INTERVAL_DAYS)).strftime(
+                "%Y-%m-%d"
+            )
+            if not last or last < threshold:
+                conn.execute("ANALYZE")
+                _set_meta(conn, ANALYZE_META_KEY, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                logger.info("查询优化器统计已刷新(ANALYZE)")
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("SQLite 维护例程失败(checkpoint/ANALYZE)")
+
+
+def storage_summary() -> dict:
+    """data/ 各目录体积(MB),供 /api/health 监控增长。带 10 分钟缓存——
+    前端每 30s 轮询 health,没必要每次都扫文件元数据。"""
+    data_dir = settings.DB_PATH.parent
+    now = time.time()
+    cache = storage_summary._cache  # type: ignore[attr-defined]
+    if now - cache.get("ts", 0) < 600:
+        return cache["value"]
+
+    def dir_mb(path: Path) -> float:
+        total = 0
+        if path.is_dir():
+            for p in path.rglob("*"):
+                try:
+                    if p.is_file():
+                        total += p.stat().st_size
+                except OSError:
+                    continue
+        return round(total / 1048576, 1)
+
+    value = {
+        "db_mb": round(settings.DB_PATH.stat().st_size / 1048576, 1),
+        "images_mb": dir_mb(data_dir / "images"),
+        "backups_mb": dir_mb(settings.BACKUP_DIR),
+    }
+    storage_summary._cache = {"ts": now, "value": value}  # type: ignore[attr-defined]
+    return value
+
+
+storage_summary._cache = {"ts": 0, "value": {}}
 
 
 # 数据迁移版本：每次全表扫描式迁移执行后+1，避免每次启动重复扫描

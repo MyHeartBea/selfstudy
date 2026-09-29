@@ -44,9 +44,9 @@ jobs:
           AI_VISION_API_KEY: ci-dummy-key
         run: |
           coverage run -m unittest discover -s tests -v
-          # 2026-09-26 实测 CI 口径约 79%（盲区测试补齐后），门槛设 70% 留出
-          # CI 缺 Pillow/pypdf 时相关测试 skip 的余量（此前 55% 偏松）
-          coverage report --fail-under=70
+          # 2026-09-29 实测 CI 口径约 81%，门槛设 75% 留出 CI 缺 Pillow/pypdf
+          # 时相关测试 skip 的余量（70% 是上一次的门槛）
+          coverage report --fail-under=75
 
   frontend-test-build:
     runs-on: ubuntu-latest
