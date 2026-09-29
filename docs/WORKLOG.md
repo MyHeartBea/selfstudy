@@ -1253,3 +1253,37 @@ ai_service 再拆遥测/预算层评估后不动（904 行,先例已立,等下�
 **验证**：后端 374→**381**（+7 HTTP 冒烟+2 调度往返）、前端 Vitest **163**、
 build、ruff/eslint/prettier 全绿;导入往返测试当场抓到"NULL 字段卡死整批
 导入 422"的真 bug（MistakeCreate 可空列已放宽 Optional）。
+
+## 2026-09-29 · 测量驱动批（第五轮,先测再改）
+
+四轮体检后代码债过收益递减点,本轮改为**测量驱动**:先跑真实测量拿基线,
+再按数据决定要不要动代码。
+
+**依赖安全审计（发现 1 个真供应链风险）**：
+- **npm registry 被配成明文 `http://registry.npmjs.org`**（用户级 .npmrc）——
+  包下载可被中间人篡改。已改 `https://`;audit 端点此前 426 也是这个原因。
+- npm audit:5 项（1 critical 1 high 3 moderate）**全部在 dev 工具链**
+  （vitest mocker 路径穿越 / esbuild dev server 请求读取）,不影响 dist 生产产物;
+  修复需 vite 5→8、vitest 2→5 破坏性升级——**考后处理**,已记录。
+- pip 过时仅小版本（fastapi 0.141/pydantic 2.13/uvicorn 0.54/pypdf 6.19）,
+  无 CVE——**考后统一升级**,不提前担回归风险。
+
+**SQLite 维护例程**：`sqlite_maintenance()` 挂进每日备份线程——
+`wal_checkpoint(TRUNCATE)` 回收 -wal 文件 + 每月一次 ANALYZE
+（app_meta 门控）刷新优化器统计;`/api/health` 新增 `storage`
+（db/images/backups 体积 MB,10 分钟缓存）监控增长。
+
+**CI 覆盖率门槛 70→75**（实测 81%）;ai_latex docstring 加 r 前缀
+消 SyntaxWarning。
+
+**知识点复习 E2E**（knowledge-review.spec.js）:到期弹窗 → 先回忆门禁
+（未揭示判分按钮禁用）→ 揭示摘要 → 判分 → 队列缩短 → 完成页,
+桌面+移动双跑。**坑:页面按钮文案是全角逗号,e2e 用半角匹配不上。**
+
+**性能基线（生产 8000,系统 Chrome,热加载）**:stats LCP 48ms / review 44ms /
+mistakes 48ms,传输 12-155KB——**结论:前端性能不需要再优化**,
+后续保持"先测再改"。bundle 复测:katex 255 / vendor 158 / motion 132 /
+index 75.5,与拆分前一致,无劣化。
+
+**验证**：后端 381→**388**（+7 维护/存储/HTTP 冒烟）、前端 Vitest **163**、
+build、全绿;E2E 54 全绿;基线数据存 `D:\temp\km_perf.json`。
