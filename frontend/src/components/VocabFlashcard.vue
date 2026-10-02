@@ -441,7 +441,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
    判分提示章与换卡入场。 */
 .flash-dragzone {
   position: relative;
-  --flip-h: 280px;
+  /* 背面常有 释义+例句+多条真题语境:给足高度,超出部分由 FlipCard 背面滚动 */
+  --flip-h: 340px;
 }
 .flash-swap {
   will-change: transform;

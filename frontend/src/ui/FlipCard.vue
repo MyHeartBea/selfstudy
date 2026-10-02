@@ -74,9 +74,15 @@ const emit = defineEmits(['flip'])
   overflow: hidden;
   text-align: center;
 }
+/* 背面内容可能超高(生词语境回链、公式长推导):固定高 + overflow:hidden +
+   垂直居中会让超长内容**上下两端同时被裁掉**。改为允许纵向滚动;
+   `safe center` 保证内容不超时仍居中、超时时从顶部起排并可滚到底。 */
 .flip-face.flip-back {
   position: absolute;
   transform: rotateY(180deg);
+  justify-content: safe center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 @media (prefers-reduced-motion: reduce) {
   .flip-inner {
