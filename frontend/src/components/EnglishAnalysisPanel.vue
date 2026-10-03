@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import request from '../api/request'
 import MathText from './MathText.vue'
+import { speakEnglish, speechSupported } from '../utils/speech'
 import { toast } from '../ui/toast'
 import UiButton from '../ui/UiButton.vue'
 import UiModal from '../ui/UiModal.vue'
@@ -336,6 +337,12 @@ async function importVocabItems(items) {
 
 // 点词弹窗里的「加入生词本」：AI 没提取到的词也能加（查义失败时释义留空，进生词本后可补）
 const addingLookup = ref(false)
+// 英语链路 TTS:整句听读是语言学习刚需,复用闪卡正面单词朗读的同一套浏览器语音
+const canSpeak = speechSupported()
+function speakSentence(text) {
+  if (!text) return
+  if (!speakEnglish(text)) toast.warning('当前浏览器不支持语音朗读')
+}
 async function addLookupWord() {
   if (!lookupWord.value) return
   const d = lookupData.value
@@ -562,6 +569,16 @@ async function saveAll() {
                   {{ t.value }}
                 </button>
               </span>
+              <button
+                v-if="canSpeak"
+                type="button"
+                class="ep-speak"
+                :aria-label="`朗读第 ${si + 1} 句`"
+                title="朗读整句"
+                @click.stop="speakSentence(item.english)"
+              >
+                <Icon name="volume" :size="13" />
+              </button>
             </p>
             <p v-if="item.translation" class="ep-bi-cn"><MathText :text="item.translation" /></p>
             <p v-else class="ep-bi-cn muted">—</p>
@@ -656,6 +673,16 @@ async function saveAll() {
             class="ep-sentence"
             :style="{ background: chipColor(i).bg, borderColor: chipColor(i).border }"
           >
+            <button
+              v-if="canSpeak"
+              type="button"
+              class="ep-speak"
+              :aria-label="`朗读句 ${i + 1}`"
+              title="朗读整句"
+              @click.stop="speakSentence(s.text)"
+            >
+              <Icon name="volume" :size="13" />
+            </button>
             <span v-for="(t, j) in cachedTokenize(s.text)" :key="j">
               <span v-if="t.type === 'text'">{{ t.value }}</span>
               <button
@@ -725,7 +752,19 @@ async function saveAll() {
         <span class="spinner"></span><span>正在查询…</span>
       </div>
       <div v-else-if="lookupData" class="ep-lookup">
-        <p class="ep-lookup-phonetic">{{ lookupData.phonetic }}</p>
+        <p class="ep-lookup-phonetic">
+          {{ lookupData.phonetic }}
+          <button
+            v-if="canSpeak"
+            type="button"
+            class="ep-speak"
+            aria-label="朗读单词"
+            title="朗读单词"
+            @click="speakSentence(lookupData.word || lookupWord)"
+          >
+            <Icon name="volume" :size="14" />
+          </button>
+        </p>
         <div class="ep-lookup-meanings">
           <div v-for="(m, i) in lookupData.meanings" :key="i" class="ep-lookup-meaning">
             <span v-if="m.pos" class="ep-lookup-pos">{{ m.pos }}</span
@@ -887,12 +926,44 @@ async function saveAll() {
   gap: 6px;
 }
 .ep-sentence {
+  position: relative; /* 句 1 朗读按钮的定位锚 */
   border: 1px solid;
   border-radius: 10px;
   padding: 10px 12px;
   font-size: 14.5px;
   line-height: 1.8;
   color: var(--ink);
+}
+/* 英语链路 TTS 朗读按钮:默认淡入,悬停显形(原句/拆解/点词弹窗三处共用) */
+.ep-speak {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+.ep-speak:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.ep-sentence .ep-speak {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0.45;
+}
+.ep-sentence:hover .ep-speak {
+  opacity: 1;
 }
 .ep-sent-note {
   display: flex;

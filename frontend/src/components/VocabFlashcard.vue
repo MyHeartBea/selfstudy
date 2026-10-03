@@ -371,7 +371,19 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </template>
             <template #back>
               <p class="flash-meaning">{{ currentCard.meaning || '（未填写释义）' }}</p>
-              <p v-if="currentCard.example" class="flash-example">{{ currentCard.example }}</p>
+              <p v-if="currentCard.example" class="flash-example">
+                <span>{{ currentCard.example }}</span>
+                <button
+                  v-if="canSpeak"
+                  type="button"
+                  class="flash-ex-speak"
+                  aria-label="朗读例句"
+                  title="朗读例句"
+                  @click.stop="speakEnglish(currentCard.example)"
+                >
+                  <Icon name="volume" :size="14" />
+                </button>
+              </p>
               <p v-if="currentCard.note" class="flash-note">{{ currentCard.note }}</p>
               <div v-if="ctxHits.length" class="flash-ctx">
                 <span class="flash-ctx-label">真题里见过它</span>
@@ -537,6 +549,24 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
   text-align: center;
   font-style: italic;
   margin: 0;
+  /* 例句朗读按钮:与例句同行,不触发翻面 */
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.flash-ex-speak {
+  display: inline-flex;
+  border: 0;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+  align-self: center;
+  transition: color var(--dur-1) var(--ease);
+}
+.flash-ex-speak:hover {
+  color: var(--accent);
 }
 .flash-note {
   font-size: 12.5px;
