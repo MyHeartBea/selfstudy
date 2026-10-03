@@ -92,10 +92,12 @@ def _anki_escape(text) -> str:
 
 
 @router.get("/export/anki")
-def export_anki(type: str = Query("mistakes", pattern="^(mistakes|vocab)$")):
+def export_anki(type: str = Query("mistakes", pattern="^(mistakes|vocab|knowledge|formula)$")):
     """导出 Anki 可导入的 TSV（正面 TAB 背面 TAB 标签，字段为 HTML）。
 
     Anki 导入：文件 → 导入，字段映射默认即可，标签列自动归档。
+    knowledge：正面=词条名，背面=摘要（LaTeX $...$ 原样保留，Anki 侧用
+    MathJax 模板即可渲染）；formula：正面=标题+分类，背面=公式全文。
     """
     conn = get_connection()
     try:
@@ -111,6 +113,33 @@ def export_anki(type: str = Query("mistakes", pattern="^(mistakes|vocab)$")):
                 tag = "短语" if (r["kind"] or "word") == "phrase" else "词汇"
                 lines.append(f"{_anki_escape(r['word'])}\t{back}\t{tag}")
             filename = "anki_vocab.tsv"
+        elif type == "knowledge":
+            rows = conn.execute(
+                "SELECT k.tag_name, k.summary, k.related_tags, s.name AS subject_name "
+                "FROM knowledge_base k LEFT JOIN subjects s ON s.id = k.subject_id "
+                "ORDER BY k.id"
+            ).fetchall()
+            for r in rows:
+                front = _anki_escape(r["tag_name"] or "")
+                back = _anki_escape(r["summary"] or "（无摘要）")
+                tags = " ".join(
+                    t.strip().replace(" ", "_")
+                    for t in (r["related_tags"] or "").split(",")
+                    if t.strip()
+                )
+                subject_tag = (r["subject_name"] or "").replace(" ", "_")
+                tag_line = " ".join(x for x in ("知识点", subject_tag, tags) if x)
+                lines.append(f"{front}\t{back}\t{tag_line}".rstrip())
+            filename = "anki_knowledge.tsv"
+        elif type == "formula":
+            rows = conn.execute(
+                "SELECT title, category, content FROM formula_items ORDER BY category, id"
+            ).fetchall()
+            for r in rows:
+                front = _anki_escape(f"{r['title'] or ''}（{r['category'] or ''}）")
+                back = _anki_escape(r["content"] or "").replace("\n", "<br>")
+                lines.append(f"{front}\t{back}\t公式 {r['category'] or ''}".rstrip())
+            filename = "anki_formula.tsv"
         else:
             rows = conn.execute(
                 "SELECT question, correct_answer, analysis, knowledge_tags "

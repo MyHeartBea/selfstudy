@@ -72,6 +72,59 @@ const kb = formatBytes
     </template>
 
     <template v-else-if="report">
+      <!-- 数据健康(冲刺期数字仪表):积压/归因覆盖/考试日外排期。随体检同响应返回 -->
+      <GlassCard v-if="report.data_health" class="ity-block ity-health">
+        <h2 class="ity-h2">
+          数据健康
+          <span class="count-tip" v-if="report.data_health.exam_valid"
+            >考试日 {{ report.data_health.exam_date }}</span
+          >
+        </h2>
+        <div class="ity-health-grid">
+          <div class="ity-health-col">
+            <h3>生词</h3>
+            <p>
+              共 <b class="num">{{ report.data_health.vocab.total }}</b> · 到期
+              <b class="num warn">{{ report.data_health.vocab.due }}</b> · 已掌握
+              <b class="num ok">{{ report.data_health.vocab.mastered }}</b>
+            </p>
+            <p class="ity-health-warn" v-if="report.data_health.vocab.scheduled_after_exam">
+              <b class="num">{{ report.data_health.vocab.scheduled_after_exam }}</b> 个词的下一次
+              复习排在考试日之后——考前总复习时需要强制回流
+            </p>
+          </div>
+          <div class="ity-health-col">
+            <h3>错题</h3>
+            <p>
+              共 <b class="num">{{ report.data_health.mistakes.total }}</b> · 到期
+              <b class="num warn">{{ report.data_health.mistakes.due }}</b> · 已归因
+              <b class="num ok">{{ report.data_health.mistakes.attributed }}</b>
+            </p>
+            <p
+              class="ity-health-warn"
+              v-if="report.data_health.mistakes.total > report.data_health.mistakes.attributed"
+            >
+              还有
+              <b class="num">{{
+                report.data_health.mistakes.total - report.data_health.mistakes.attributed
+              }}</b>
+              题没标过错因——复习时顺手标,杠杆榜和周报才有数据
+            </p>
+          </div>
+          <div class="ity-health-col">
+            <h3>知识点</h3>
+            <p>
+              共 <b class="num">{{ report.data_health.knowledge.total }}</b> · 到期
+              <b class="num warn">{{ report.data_health.knowledge.due }}</b>
+            </p>
+            <p class="ity-health-warn" v-if="report.data_health.knowledge.scheduled_after_exam">
+              <b class="num">{{ report.data_health.knowledge.scheduled_after_exam }}</b> 条排在
+              考试日之后——考前总复习时需要强制回流
+            </p>
+          </div>
+        </div>
+      </GlassCard>
+
       <section class="ity-tiles">
         <MetricTile
           v-for="t in tiles()"
@@ -178,6 +231,36 @@ const kb = formatBytes
   margin: 4px 0 0;
   font-size: 13px;
   color: var(--ink-3);
+}
+.ity-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.ity-health-col h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+}
+.ity-health-col p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--ink-2);
+}
+.ity-health-col .num.warn {
+  color: var(--gold);
+}
+.ity-health-col .num.ok {
+  color: var(--green);
+}
+.ity-health-warn {
+  color: var(--ink-3);
+}
+.ity-health-warn .num {
+  color: var(--red);
 }
 .ity-tiles {
   display: grid;

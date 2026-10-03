@@ -97,6 +97,28 @@ function printCurrent() {
   })
 }
 
+const exportingAnki = ref(false)
+async function exportAnki() {
+  exportingAnki.value = true
+  try {
+    const res = await request.get('/export/anki', {
+      params: { type: 'formula' },
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'anki_formula.tsv'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('已导出公式 Anki TSV(Anki 侧用支持 MathJax 的模板可渲染 LaTeX)')
+  } catch (err) {
+    toast.error('Anki 导出失败')
+  } finally {
+    exportingAnki.value = false
+  }
+}
+
 function plainPreview(item) {
   const line =
     String(item.content || '')
@@ -271,6 +293,15 @@ onActivated(() => {
         <UiButton variant="outline" :disabled="!filteredItems.length" @click="printCurrent">
           <Icon name="notebook" :size="13" />
           打印
+        </UiButton>
+        <UiButton
+          variant="outline"
+          :disabled="!filteredItems.length"
+          :loading="exportingAnki"
+          @click="exportAnki"
+        >
+          <Icon name="download" :size="13" />
+          Anki
         </UiButton>
         <UiButton variant="primary" @click="openCreate">新增公式</UiButton>
       </div>

@@ -122,7 +122,10 @@ def system_integrity(
     """
     conn = get_connection()
     try:
-        return ok(integrity_service.scan(conn, _images_dir(), keep_days=keep_days, limit=limit))
+        result = integrity_service.scan(conn, _images_dir(), keep_days=keep_days, limit=limit)
+        # 冲刺期数字仪表:积压/归因覆盖/排期在考试日之后的条目(只读,与图片体检同响应)
+        result["data_health"] = integrity_service.data_health(conn, settings.EXAM_DATE)
+        return ok(result)
     except Exception as exc:
         return server_error(exc)
     finally:

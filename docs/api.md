@@ -129,7 +129,9 @@
 
 - `GET /api/vocab`：列表（`search` / `mastery` / `kind=word|phrase` / `sort` / `page` + `page_size`）
 - `GET /api/vocab/stats`：总数/今日到期/已掌握/掌握度分布
-- `GET /api/vocab/due?limit=30`：到期闪卡队列（低掌握度优先，随机排序）
+- `GET /api/vocab/due?limit=30`：到期闪卡队列（低掌握度优先，随机排序，**返回纯数组**）
+  - 闪卡会话（前端 VocabFlashcard 组件）拉这里起步；判分后"模糊"随机回队 1 次、
+    "不认识"随机回队 2 份（纯前端行为，后端排期不变：known→阶梯、fuzzy→明天、unknown→留在队列）
 - `GET /api/vocab/{id}/context`：真题语境回链——在错题 `passage_text` 里按词边界找该词出现位置，
   返回 `[{mistake_id, source_name, source_year, snippet}]`（最多 3 条；零 AI，纯检索）
 - `POST /api/vocab`：新增（单词重复则幂等返回已有）
@@ -175,8 +177,9 @@
     "重复跳过 N 条"。**题干不足 8 字（纯图片题）一律照常入库** —— 判重的假阳性代价是"静默丢题"，比翻倍严重
   - 导出携带错题的**复习调度字段**（ease_factor/review_count/next_review_at 等，导入原样回灌）
     与 `knowledge` 段（知识点词条含 SM-2 调度字段）；导入时知识点**同名（COLLATE NOCASE）跳过不覆盖**
-- `GET /api/export/anki?type=mistakes|vocab`：Anki 可导入的 TSV（正面 TAB 背面 TAB 标签，字段为 HTML，
-  带 UTF-8 BOM）；无数据时返回 400 而不是空文件
+- `GET /api/export/anki?type=mistakes|vocab|knowledge|formula`：Anki 可导入的 TSV（正面 TAB 背面
+  TAB 标签，字段为 HTML，带 UTF-8 BOM）；knowledge 背面含 LaTeX $...$（Anki 侧用 MathJax 模板）；
+  无数据时返回 400 而不是空文件
 - `GET|POST /api/snapshots` / `POST /api/snapshots/restore`：整库快照与回滚（见系统节）；
   `POST /api/snapshots/images`：**图片目录打包备份**（zip 存 `data/backups/`，缩略图不打包，保留 5 份）
 

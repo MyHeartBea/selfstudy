@@ -173,3 +173,80 @@ def orphan_paths(conn: sqlite3.Connection, images_dir: Path, keep_days: float = 
     """脚本专用：待删的绝对路径（顺序与页面清单一致，大的在前）。"""
     report = scan(conn, images_dir, keep_days=keep_days, limit=10**9)
     return [images_dir / item["rel"] for item in report["orphans"]]
+
+
+def data_health(conn: sqlite3.Connection, exam_date: str | None) -> Dict[str, Any]:
+    """数据健康摘要（只读，冲刺期的数字仪表）：积压、归因覆盖、排期异常。
+
+    **排期在考试日之后**是冲刺期最该盯的数字：错题 SM-2 间隔封顶 180 天、
+    生词阶梯 60 天——现在标"记住"的条目，下次出现可能已在考试日之后，
+    考前再也不复习。这个数字大 = 考前需要一轮强制总复习波。
+    """
+    exam = None
+    if exam_date:
+        try:
+            from datetime import date as _date
+
+            exam = _date.fromisoformat(exam_date)
+        except ValueError:
+            exam = None
+    exam_gate = conn.execute(
+        "SELECT ? AS gate", (exam.strftime("%Y-%m-%d 23:59:59") if exam else "9999-12-31",)
+    ).fetchone()["gate"]
+
+    vocab_total = conn.execute("SELECT COUNT(*) FROM vocab_items").fetchone()[0]
+    vocab_due = conn.execute(
+        "SELECT COUNT(*) FROM vocab_items "
+        "WHERE next_review_at IS NULL OR next_review_at <= datetime('now')"
+    ).fetchone()[0]
+    vocab_mastered = conn.execute(
+        "SELECT COUNT(*) FROM vocab_items WHERE mastery_level >= 5"
+    ).fetchone()[0]
+    vocab_after_exam = conn.execute(
+        "SELECT COUNT(*) FROM vocab_items WHERE next_review_at > ?", (exam_gate,)
+    ).fetchone()[0]
+
+    mistakes_total = conn.execute("SELECT COUNT(*) FROM mistakes").fetchone()[0]
+    mistakes_due = conn.execute(
+        "SELECT COUNT(*) FROM mistakes "
+        "WHERE COALESCE(review_paused, 0) = 0 "
+        "AND (next_review_at IS NULL OR next_review_at <= datetime('now') OR review_count = 0)"
+    ).fetchone()[0]
+    mistakes_attributed = conn.execute(
+        "SELECT COUNT(*) FROM mistakes WHERE error_reason != ''"
+    ).fetchone()[0]
+    mistakes_after_exam = conn.execute(
+        "SELECT COUNT(*) FROM mistakes WHERE COALESCE(review_paused, 0) = 0 AND next_review_at > ?",
+        (exam_gate,),
+    ).fetchone()[0]
+
+    knowledge_total = conn.execute("SELECT COUNT(*) FROM knowledge_base").fetchone()[0]
+    knowledge_due = conn.execute(
+        "SELECT COUNT(*) FROM knowledge_base "
+        "WHERE next_review_at IS NULL OR next_review_at <= datetime('now')"
+    ).fetchone()[0]
+    knowledge_after_exam = conn.execute(
+        "SELECT COUNT(*) FROM knowledge_base WHERE next_review_at > ?", (exam_gate,)
+    ).fetchone()[0]
+
+    return {
+        "exam_date": exam_date,
+        "exam_valid": exam is not None,
+        "vocab": {
+            "total": vocab_total,
+            "due": vocab_due,
+            "mastered": vocab_mastered,
+            "scheduled_after_exam": vocab_after_exam,
+        },
+        "mistakes": {
+            "total": mistakes_total,
+            "due": mistakes_due,
+            "attributed": mistakes_attributed,
+            "scheduled_after_exam": mistakes_after_exam,
+        },
+        "knowledge": {
+            "total": knowledge_total,
+            "due": knowledge_due,
+            "scheduled_after_exam": knowledge_after_exam,
+        },
+    }

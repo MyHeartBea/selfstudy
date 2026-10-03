@@ -118,6 +118,29 @@ async function printCurrent() {
   router.push({ path: '/print', query })
 }
 
+const exportingAnki = ref(false)
+async function exportAnki() {
+  exportingAnki.value = true
+  try {
+    // 与错题/生词 Anki 导出同一落点:浏览器直接下载 TSV
+    const res = await request.get('/export/anki', {
+      params: { type: 'knowledge' },
+      responseType: 'blob',
+    })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'anki_knowledge.tsv'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('已导出知识点 Anki TSV(Anki 侧用支持 MathJax 的模板可渲染 LaTeX)')
+  } catch (err) {
+    toast.error('Anki 导出失败')
+  } finally {
+    exportingAnki.value = false
+  }
+}
+
 function practiceTag(tag) {
   router.push({
     path: '/review',
@@ -388,6 +411,15 @@ watch(
       <UiButton variant="outline" :disabled="!items.length" @click="printCurrent">
         <Icon name="notebook" :size="13" />
         打印
+      </UiButton>
+      <UiButton
+        variant="outline"
+        :disabled="!items.length"
+        :loading="exportingAnki"
+        @click="exportAnki"
+      >
+        <Icon name="download" :size="13" />
+        Anki
       </UiButton>
     </div>
 
