@@ -30,8 +30,10 @@ import YearRing from '../ui/YearRing.vue'
 const router = useRouter()
 const route = useRoute()
 const queue = ref([])
-// 今日队列的配额信息（dueTotal/remaining/dailyLimit/reviewedToday），旧接口无此字段
+// 今日队列的配额信息（dueTotal/remaining/dailyLimit/reviewedToday/wave），旧接口无此字段
 const queueInfo = ref(null)
+// 考前总复习波(后端考试日感知调度):today 响应带 wave={days_left,gate,start} 时显示横幅
+const waveInfo = computed(() => queueInfo.value?.wave || null)
 
 /* 每日配额页内调节：写到 app_meta 覆盖值，立即生效（冲刺页同口径跟着变） */
 const quotaVisible = ref(false)
@@ -1037,6 +1039,11 @@ onBeforeRouteLeave(async () => {
       <!-- 巨型汉字数字戏台背景（随题号翻动） -->
       <div class="stage-wrap">
         <div :key="index" class="stage-numeral serif" aria-hidden="true">{{ stageNumeral }}</div>
+        <!-- 考前总复习波:今天优先清掉排期在考试日之外的题(后端按 wave 门控回拉并排最前) -->
+        <div v-if="waveInfo && !isMock" class="wave-banner" role="status">
+          <Icon name="clock" :size="14" />
+          考前总复习波：距考试 {{ waveInfo.days_left }} 天 —— 今天优先清「排期在考试日之后」的题
+        </div>
         <!-- 顶部流光进度线 -->
         <div
           class="top-progress"
@@ -1577,6 +1584,21 @@ onBeforeRouteLeave(async () => {
   }
 }
 
+/* 考前总复习波横幅:洒金底,提示今天优先清考试日外的排期 */
+.wave-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 860px;
+  margin: 0 auto 14px;
+  padding: 8px 16px;
+  border-radius: var(--r-md);
+  background: var(--gold-soft);
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
 .top-progress {
   position: relative;
   z-index: 1;

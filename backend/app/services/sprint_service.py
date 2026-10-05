@@ -132,4 +132,24 @@ def get_sprint_plan(conn) -> dict:
         )
         remaining -= span
         week_no += 1
+
+    # 计划 vs 实际:过去 14 天每天"实际完成多少"对照"每日目标"。
+    # review_records 按本地日聚合——冲刺期最有用的对比就是"昨天达标了吗"。
+    actual_rows = conn.execute(
+        """
+        SELECT date(reviewed_at, 'localtime') AS day, COUNT(*) AS count
+        FROM review_records
+        WHERE date(reviewed_at, 'localtime') >= ?
+        GROUP BY date(reviewed_at, 'localtime')
+        ORDER BY day ASC
+        """,
+        ((today - datetime.timedelta(days=13)).isoformat(),),
+    ).fetchall()
+    by_day = {r["day"]: r["count"] for r in actual_rows}
+    actual = []
+    for i in range(13, -1, -1):
+        day = (today - datetime.timedelta(days=i)).isoformat()
+        actual.append({"day": day, "count": by_day.get(day, 0)})
+    plan["actual"] = actual
+    plan["daily_target_effective"] = daily
     return plan

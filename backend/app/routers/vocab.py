@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query
 
 from app.database import get_connection
 from app.responses import error, ok, server_error
-from app.schemas import VocabCreate, VocabReview, VocabUpdate
+from app.schemas import VocabCreate, VocabQuotaUpdate, VocabReview, VocabUpdate
 from app.services import vocab_service
 
 router = APIRouter(prefix="/api/vocab", tags=["生词本"])
@@ -55,11 +55,40 @@ def vocab_stats():
 
 
 @router.get("/due")
-def due_vocab(limit: int = Query(30, ge=1, le=100)):
-    """今日到期生词（闪卡队列）。"""
+def due_vocab(limit: Optional[int] = Query(None, ge=1, le=200)):
+    """今日到期生词（闪卡队列）。limit 不传时用**生词每日配额**（app_meta 覆盖，默认 30）。"""
     conn = get_connection()
     try:
+        if limit is None:
+            limit = vocab_service.get_vocab_daily_limit(conn)
         return ok(vocab_service.get_due_vocab(conn, limit))
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.get("/quota")
+def get_vocab_quota():
+    """每日闪卡配额（app_meta 覆盖值优先，未设置回退默认 30）。"""
+    conn = get_connection()
+    try:
+        return ok({"daily_limit": vocab_service.get_vocab_daily_limit(conn)})
+    except Exception as exc:
+        return server_error(exc)
+    finally:
+        conn.close()
+
+
+@router.put("/quota")
+def update_vocab_quota(body: VocabQuotaUpdate):
+    """保存每日闪卡配额覆盖值（0 = 不限）。"""
+    conn = get_connection()
+    try:
+        value = vocab_service.set_vocab_daily_limit(conn, body.daily_limit)
+        return ok({"daily_limit": value}, "生词每日配额已更新")
+    except ValueError as exc:
+        return error(400, str(exc))
     except Exception as exc:
         return server_error(exc)
     finally:

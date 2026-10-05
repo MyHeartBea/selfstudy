@@ -1,5 +1,6 @@
 """复习排期与复习记录业务逻辑。"""
 
+import random
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -74,6 +75,71 @@ SM2_EASE_INIT = 2.5
 SM2_EASE_MIN = 1.3
 SM2_EASE_MAX = 2.8
 SM2_MAX_INTERVAL = 180
+
+# ── 考试日感知调度(总复习波)────────────────────────────────────────────
+# 错题 SM-2 间隔封顶 180 天、生词阶梯 60 天——现在标"记住"的条目,下次出现
+# 可能已在考试日之后,考前再也不复习。两条对策:
+# ① clamp_next_review:复习算出的排期晚于考试日 → 随机摊进总复习波窗口
+#   (考前 EXAM_WAVE_DAYS 天内),负载按天公平分摊;
+# ② 队列回拉:进入波期后,已排期在考试日之后的存量条目视为到期且排最前
+#   (get_today_queue / get_due_vocab / get_knowledge_review_queue 各自追加 OR 分支)。
+EXAM_WAVE_DAYS = 14
+
+
+def exam_wave() -> dict | None:
+    """考试日有效且已进入考前总复习波期时返回 {gate, start, days_left};否则 None。
+
+    gate 是考试日 23:59:59(与 next_review_at 的 UTC 文本直接比较,同 _forecast_bounds
+    的定宽字符串口径);start 是波期第一天(本地日)。
+    """
+    exam_text = (settings.EXAM_DATE or "").strip()
+    try:
+        exam = datetime.strptime(exam_text, "%Y-%m-%d")
+    except ValueError:
+        return None
+    today = datetime.now()
+    if today.date() >= exam.date():
+        return None  # 已考完,波期无意义
+    wave_start = exam - timedelta(days=EXAM_WAVE_DAYS)
+    if today < wave_start:
+        return None  # 还没进波期
+    return {
+        "gate": exam.strftime("%Y-%m-%d") + " 23:59:59",
+        "start": wave_start.strftime("%Y-%m-%d"),
+        "days_left": max(1, (exam.date() - today.date()).days),
+    }
+
+
+def clamp_next_review(next_review_at) -> str:
+    """考试日感知钳制:算出的排期晚于考试日 → 随机摊进波期窗口(不含考试日当天)。
+
+    无论当前是否已在波期内都生效——提前把"排期出考期"的条目预摊到波期各天,
+    避免它们在波期第一天扎堆。无有效考试日/解析失败/未超期时原样返回。
+    """
+    exam_text = (settings.EXAM_DATE or "").strip()
+    text = str(next_review_at or "")[:19]
+    try:
+        nxt = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+        exam = datetime.strptime(exam_text, "%Y-%m-%d")
+    except ValueError:
+        return next_review_at
+    gate = exam - timedelta(days=1)  # 考试日当天不再安排,最后机会是前一天
+    if nxt <= gate:
+        return next_review_at
+    wave_start = exam - timedelta(days=EXAM_WAVE_DAYS)
+    today = datetime.now()
+    lo = max(wave_start, today)
+    if lo.date() > gate.date():
+        lo = gate  # 极端:考前最后一天
+    offset = random.randint(0, max(0, (gate.date() - lo.date()).days))
+    day = (lo + timedelta(days=offset)).strftime("%Y-%m-%d")
+    return day + " " + text[11:19]
+
+
+def wave_gate_param() -> str | None:
+    """波期内返回考试日门(gate 字符串,作 SQL 参数);否则 None。"""
+    wave = exam_wave()
+    return wave["gate"] if wave else None
 
 
 def _next_schedule(ease: float, last_interval: int, result: bool):
@@ -286,12 +352,23 @@ def get_today_queue(
         block_sql = f"AND subject_id IN ({marks}) "
         block_params = tuple(subject_ids)
 
+    # 考前总复习波:波期内,排期在考试日之后的存量条目视为到期且排最前。
+    # 不加这个 OR,这些条目在考前再也不出现(它们的排期被 clamp 前的历史数据留在考试日外)。
+    wave = exam_wave()
+    wave_gate = wave["gate"] if wave else None
+    wave_params: list = [wave_gate] if wave_gate else []
+    due_cond = queue_due_cond()
+    order = queue_order()
+    if wave_gate:
+        due_cond = f"({due_cond} OR next_review_at > ?)"
+        order = "CASE WHEN next_review_at > ? THEN 0 ELSE 1 END ASC, " + order
+
     due_total = int(
         conn.execute(
             "SELECT COUNT(*) AS c FROM mistakes "
             "WHERE COALESCE(review_paused, 0) = 0 "
-            "AND " + queue_due_cond() + " " + block_sql,
-            block_params,
+            "AND " + due_cond + " " + block_sql,
+            (*wave_params, *block_params),
         ).fetchone()["c"]
     )
 
@@ -312,8 +389,8 @@ def get_today_queue(
         rows = conn.execute(
             "SELECT * FROM mistakes "
             "WHERE COALESCE(review_paused, 0) = 0 "
-            "AND " + queue_due_cond() + " " + block_sql + "ORDER BY " + queue_order() + " LIMIT ?",
-            block_params + (fetch,),
+            "AND " + due_cond + " " + block_sql + "ORDER BY " + order + " LIMIT ?",
+            (*wave_params, *block_params, fetch),
         ).fetchall()
 
     items = (
@@ -326,6 +403,7 @@ def get_today_queue(
         "dailyLimit": int(daily_limit or 0),
         "reviewedToday": reviewed_today,
         "remaining": max(0, due_total - len(items)),
+        "wave": wave,
     }
 
 
@@ -484,6 +562,9 @@ def review_mistake(
     now = datetime.now(timezone.utc)
     now_text = now.strftime("%Y-%m-%d %H:%M:%S")
     next_at = (now + timedelta(days=interval)).strftime("%Y-%m-%d %H:%M:%S")
+    # 考试日感知钳制:排期晚于考试日的条目随机摊进考前总复习波窗口,
+    # 否则"记住"的题在考前再也不出现(间隔封顶 180 天)
+    next_at = clamp_next_review(next_at)
 
     conn.execute(
         "UPDATE mistakes SET mastery_level = ?, review_count = ?, wrong_count = ?, "

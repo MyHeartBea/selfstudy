@@ -22,6 +22,7 @@ test.describe('生词闪卡会话', () => {
       // /vocab/due 返回**纯数组**(get_due_vocab 直接 return items[:limit]),
       // 写成 {items:[]} 会让 start() 把对象当队列 → length undefined → 静默退出
       '/api/vocab/due': dueCards,
+      '/api/vocab/quota': { daily_limit: 30 },
       '/api/vocab/1/review': { id: 1 },
       '/api/vocab/2/review': { id: 2 },
     })

@@ -442,6 +442,7 @@ function resolver(path, method, overrides) {
   if (path === '/api/vocab') return { items: [], total: 0 }
   if (path === '/api/vocab/due') return { items: [] }
   if (path === '/api/vocab/stats') return { total: 0, mastered: 0, due: 0, distribution: [] }
+  if (path === '/api/vocab/quota') return { daily_limit: 30 }
   // 闪卡真题语境回链（按 vocab id 命中，闪卡背面才请求）
   if (/^\/api\/vocab\/\d+\/context$/.test(path)) return []
   if (path === '/api/papers') return []

@@ -147,21 +147,69 @@ def delete_vocab(conn: sqlite3.Connection, vocab_id: int) -> bool:
 
 
 def get_due_vocab(conn: sqlite3.Connection, limit: int = 30) -> List[dict]:
-    """今日到期（或从未安排）的生词，优先掌握度低的，随机顺序防位置记忆。"""
+    """今日到期（或从未安排）的生词，优先掌握度低的，随机顺序防位置记忆。
+
+    考前总复习波（波期内）：排期在考试日之后的词也拉进来一起过——
+    它们的下次出现本来在考试日之后，考前再不出现就永远没机会了。
+    """
     _, end = local_day_bounds_utc()
+    wave_gate = None
+    try:
+        # 局部导入规避循环（vocab_service 顶层不依赖 review_service）
+        from app.services.review_service import exam_wave
+
+        wave = exam_wave()
+        wave_gate = wave["gate"] if wave else None
+    except Exception:
+        wave_gate = None
     rows = conn.execute(
         """
         SELECT * FROM vocab_items
         WHERE next_review_at IS NULL
            OR next_review_at < ?
+           OR (? IS NOT NULL AND next_review_at > ?)
         ORDER BY mastery_level ASC, next_review_at ASC
         LIMIT ?
         """,
-        (end, limit * 3),
+        (end, wave_gate, wave_gate, limit * 3),
     ).fetchall()
     items = [vocab_to_dict(row) for row in rows]
     random.shuffle(items)
     return items[:limit]
+
+
+# ── 生词每日配额(与错题配额同机制,存 app_meta)────────────────────────
+VOCAB_DAILY_LIMIT_META_KEY = "vocab_daily_limit"
+VOCAB_DAILY_LIMIT_DEFAULT = 30
+
+
+def get_vocab_daily_limit(conn: sqlite3.Connection) -> int:
+    """每日闪卡配额:app_meta 覆盖值优先,未设置回退默认 30(0 = 不限)。"""
+    row = conn.execute(
+        "SELECT value FROM app_meta WHERE key = ?", (VOCAB_DAILY_LIMIT_META_KEY,)
+    ).fetchone()
+    if row and row["value"] not in (None, ""):
+        try:
+            return max(0, int(row["value"]))
+        except (TypeError, ValueError):
+            pass
+    return VOCAB_DAILY_LIMIT_DEFAULT
+
+
+def set_vocab_daily_limit(conn: sqlite3.Connection, value: int) -> int:
+    """保存每日闪卡配额覆盖值(0 = 不限);非法值抛 ValueError。"""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("生词每日配额必须是非负整数") from None
+    if value < 0:
+        raise ValueError("生词每日配额必须是非负整数")
+    conn.execute(
+        "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)",
+        (VOCAB_DAILY_LIMIT_META_KEY, str(value)),
+    )
+    conn.commit()
+    return value
 
 
 def vocab_stats(conn: sqlite3.Connection) -> dict:
@@ -216,6 +264,14 @@ def review_vocab(conn: sqlite3.Connection, vocab_id: int, result: str) -> Option
         next_review = (datetime.now(timezone.utc) + timedelta(days=interval)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
+        # 考试日感知钳制:排期晚于考试日 → 摊进考前总复习波(生词阶梯 60 天,
+        # 标"认识"的词考前再也不出现就白背了)
+        try:
+            from app.services.review_service import clamp_next_review
+
+            next_review = clamp_next_review(next_review)
+        except Exception:
+            pass
 
     conn.execute(
         """

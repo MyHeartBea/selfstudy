@@ -85,13 +85,20 @@ def get_knowledge_review_queue(
     到期/排序片段取自 review_service 的共享常量——两个队列必须同口径，
     手抄必漂移（知识点此前就少了第三排序键）。
     """
-    from app.services.review_service import queue_due_cond, queue_order
+    from app.services.review_service import queue_due_cond, queue_order, wave_gate_param
 
     conditions = [queue_due_cond("kb")]
     params: list = []
     if subject_id is not None:
         conditions.append("kb.subject_id = ?")
         params.append(subject_id)
+    wave_gate = wave_gate_param()
+    order = queue_order("kb")
+    if wave_gate:
+        # 考前总复习波:排期在考试日之后的词条视为到期且排最前
+        conditions.append("kb.next_review_at > ?")
+        params.append(wave_gate)
+        order = "CASE WHEN kb.next_review_at > ? THEN 0 ELSE 1 END ASC, " + order
     where = " AND ".join(conditions)
     due_total = int(
         conn.execute(f"SELECT COUNT(*) FROM knowledge_base kb WHERE {where}", params).fetchone()[0]
@@ -100,12 +107,17 @@ def get_knowledge_review_queue(
         "SELECT kb.*, s.name AS subject_name FROM knowledge_base kb "
         "LEFT JOIN subjects s ON s.id = kb.subject_id "
         f"WHERE {where} "
-        f"ORDER BY {queue_order('kb')} "
+        f"ORDER BY {order} "
         "LIMIT ?",
         (*params, max(1, limit)),
     ).fetchall()
     items = [knowledge_to_dict(row) for row in rows]
-    return {"items": items, "dueTotal": due_total, "returned": len(items)}
+    return {
+        "items": items,
+        "dueTotal": due_total,
+        "returned": len(items),
+        "wave": wave_gate is not None,
+    }
 
 
 def review_knowledge(
@@ -118,7 +130,7 @@ def review_knowledge(
     调度函数局部导入：review_service 顶层 import database，而 database 反过来
     import 本模块的 canonical_tags，顶层连进来就是循环导入（同 _mistake_to_dict）。
     """
-    from app.services.review_service import SM2_EASE_INIT, _next_schedule
+    from app.services.review_service import SM2_EASE_INIT, _next_schedule, clamp_next_review
 
     row = conn.execute("SELECT * FROM knowledge_base WHERE id = ?", (knowledge_id,)).fetchone()
     if row is None:
@@ -129,6 +141,8 @@ def review_knowledge(
     now = datetime.now(timezone.utc)
     now_text = now.strftime("%Y-%m-%d %H:%M:%S")
     next_at = (now + timedelta(days=interval)).strftime("%Y-%m-%d %H:%M:%S")
+    # 考试日感知钳制:排期晚于考试日 → 摊进考前总复习波
+    next_at = clamp_next_review(next_at)
     conn.execute(
         "UPDATE knowledge_base SET ease_factor = ?, last_interval = ?, review_count = "
         "COALESCE(review_count, 0) + 1, last_reviewed_at = ?, next_review_at = ? WHERE id = ?",

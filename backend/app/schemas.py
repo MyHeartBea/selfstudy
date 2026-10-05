@@ -264,6 +264,12 @@ class BatchMistakeRequest(BaseModel):
     source_name: str = ""
 
 
+class VocabQuotaUpdate(BaseModel):
+    """每日闪卡配额覆盖（0 = 不限）；存 app_meta。"""
+
+    daily_limit: int = Field(ge=0, le=500)
+
+
 class VocabCreate(BaseModel):
     """新增生词。"""
 

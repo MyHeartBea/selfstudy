@@ -27,6 +27,37 @@ const stats = ref({ total: 0, due: 0, mastered: 0, distribution: [] })
 const nTotal = useCountUp(computed(() => stats.value.total))
 const nDue = useCountUp(computed(() => stats.value.due))
 const nMastered = useCountUp(computed(() => stats.value.mastered))
+// 每日闪卡配额:app_meta 覆盖值(后端 /vocab/due 不传 limit 时按它取队列)
+const quotaLimit = ref(30)
+async function loadQuota() {
+  try {
+    const res = await request.get('/vocab/quota', { silent: true })
+    quotaLimit.value = res.data.data?.daily_limit ?? 30
+  } catch (err) {
+    /* 配额展示失败不影响主流程 */
+  }
+}
+async function editQuota() {
+  const value = await confirmDialog({
+    title: '每日闪卡配额',
+    message: `当前每天刷 ${quotaLimit.value} 张（0 = 不限）。积压 ${stats.value.due} 张，按剩余天数定个量。`,
+    input: { value: String(quotaLimit.value), placeholder: '30' },
+    confirmText: '保存',
+  })
+  if (value === null) return
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 0) {
+    toast.warning('配额要是非负整数，0 表示不限')
+    return
+  }
+  try {
+    const res = await request.put('/vocab/quota', { daily_limit: n })
+    quotaLimit.value = res.data.data?.daily_limit ?? n
+    toast.success(`每日闪卡配额已调到 ${quotaLimit.value} 张`)
+  } catch (err) {
+    toast.error('配额保存失败')
+  }
+}
 
 // —— 词表 ——
 const filters = reactive({
@@ -230,6 +261,7 @@ async function doImport() {
 onMounted(() => {
   loadList()
   loadStats()
+  loadQuota()
 })
 
 // keep-alive 返回本页：列表静默刷新 + 统计数字原地更新（loadStats 无 loading 态）
@@ -288,6 +320,10 @@ async function exportAnki() {
         <UiButton variant="primary" @click="mode = 'flashcard'">
           <Icon name="layers" :size="15" />
           开始快刷（{{ stats.due }} 张到期）
+        </UiButton>
+        <UiButton variant="outline" @click="editQuota">
+          <Icon name="target" :size="15" />
+          每日 {{ quotaLimit }} 张
         </UiButton>
         <UiButton variant="outline" @click="openImport">
           <Icon name="upload" :size="15" />

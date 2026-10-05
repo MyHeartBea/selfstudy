@@ -25,6 +25,15 @@ const loading = ref(false)
 const loadError = ref(false)
 const router = useRouter()
 
+/** 实际完成柱高:以 max(每日目标, 14 天内最大完成数) 为满格,最低 3px 可见 */
+function actualBarHeight(count) {
+  const planData = plan.value
+  if (!planData) return 3
+  const target = planData.daily_target_effective || 1
+  const maxCount = Math.max(target, ...(planData.actual || []).map((a) => a.count), 1)
+  return Math.max(3, Math.round((count / maxCount) * 80))
+}
+
 async function load() {
   loading.value = true
   loadError.value = false
@@ -166,6 +175,30 @@ function goReview() {
             </p>
           </GlassCard>
         </div>
+
+        <!-- 计划 vs 实际:近 14 天每天实际完成对照每日目标 -->
+        <GlassCard class="spr-card">
+          <template #badge>
+            <StageBadge tone="teal">计划 vs 实际</StageBadge>
+          </template>
+          <h2 class="spr-h2 serif">近 14 天实际完成</h2>
+          <div v-if="plan.actual" class="spr-actual">
+            <div v-for="a in plan.actual" :key="a.day" class="spr-actual-col">
+              <span
+                class="spr-actual-bar"
+                :class="{ hit: a.count >= plan.daily_target_effective }"
+                :style="{ height: actualBarHeight(a.count) + 'px' }"
+                :title="`${a.day}:完成 ${a.count} 题(目标 ${plan.daily_target_effective})`"
+              ></span>
+              <span class="spr-actual-day num">{{ a.day.slice(8) }}</span>
+            </div>
+          </div>
+          <p class="spr-legend">
+            柱高 = 当天完成数；虚线 = 每日目标（{{ plan.daily_target_effective }} 题/天）。
+            连续低于虚线的日子就是冲刺进度的窟窿。
+          </p>
+          <div class="spr-target-line" aria-hidden="true"></div>
+        </GlassCard>
       </template>
     </template>
   </div>
@@ -326,5 +359,41 @@ function goReview() {
     align-items: flex-start;
     gap: 14px;
   }
+}
+
+/* 计划 vs 实际:近 14 天柱状图,达标柱用绿色,虚线为每日目标参考 */
+.spr-actual {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 96px;
+  padding: 4px 2px 0;
+  border-bottom: 1px dashed var(--line-strong);
+}
+.spr-actual-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+.spr-actual-bar {
+  display: block;
+  width: 100%;
+  max-width: 26px;
+  min-height: 3px;
+  border-radius: 4px 4px 2px 2px;
+  background: color-mix(in srgb, var(--ink) 28%, var(--surface-2));
+}
+.spr-actual-bar.hit {
+  background: var(--green);
+  opacity: 0.85;
+}
+.spr-actual-day {
+  font-size: 9.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
 }
 </style>
