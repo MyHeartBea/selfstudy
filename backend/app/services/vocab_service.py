@@ -12,6 +12,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
+from app.config import settings
 from app.database import local_day_bounds_utc
 from app.pagination import resolve_pagination
 from app.services.search_service import like_pattern
@@ -147,7 +148,7 @@ def delete_vocab(conn: sqlite3.Connection, vocab_id: int) -> bool:
 
 
 def get_due_vocab(conn: sqlite3.Connection, limit: int = 30) -> List[dict]:
-    """今日到期（或从未安排）的生词，优先掌握度低的，随机顺序防位置记忆。
+    """今日到期（或从未安排）的生词，按真题年份优先（B7 积压消化策略）。
 
     考前总复习波（波期内）：排期在考试日之后的词也拉进来一起过——
     它们的下次出现本来在考试日之后，考前再不出现就永远没机会了。
@@ -168,13 +169,58 @@ def get_due_vocab(conn: sqlite3.Connection, limit: int = 30) -> List[dict]:
         WHERE next_review_at IS NULL
            OR next_review_at < ?
            OR (? IS NOT NULL AND next_review_at > ?)
-        ORDER BY mastery_level ASC, next_review_at ASC
-        LIMIT ?
         """,
-        (end, wave_gate, wave_gate, limit * 3),
+        (end, wave_gate, wave_gate),
     ).fetchall()
     items = [vocab_to_dict(row) for row in rows]
+    return prioritize_due_vocab(items, limit)
+
+
+# ── B7 生词积压消化策略:按真题年份优先(每日定量=配额,复用 /due limit)──
+RECENT_EXAM_YEAR_SPAN = 5
+
+
+def recent_exam_years() -> set:
+    """近年真题年份窗口：考试日年份的前 5 年（考 2026 → 2021-2025 优先）。
+
+    考试日无效/缺失时退回当前年份。年份从 `vocab_items.source` 文本提取
+    （如「2023 英语二 Text1」→ 2023），所以导入词表时 source 带年份的
+    都能吃到优先级。
+    """
+    exam_text = (settings.EXAM_DATE or "").strip()
+    try:
+        exam_year = datetime.strptime(exam_text, "%Y-%m-%d").year
+    except ValueError:
+        exam_year = datetime.now().year
+    return set(range(exam_year - RECENT_EXAM_YEAR_SPAN, exam_year))
+
+
+def _source_year(source) -> int:
+    match = re.search(r"(20\d{2})", str(source or ""))
+    return int(match.group(1)) if match else 0
+
+
+def prioritize_due_vocab(items: List[dict], limit: int) -> List[dict]:
+    """积压消化排序：近年真题词 → 其它年份词 → 无年份词。
+
+    组内先掌握度低（新词/反复错的先过关）再最久未刷（积压老的先走）；
+    整表先洗牌再按 (年份档, 掌握度, next_review_at) 稳定排序——键完全
+    相同的条目保留洗牌顺序，防位置记忆。年份档压过掌握度：冲刺期每天
+    配额有限，真题词先出场。
+    """
+    years = recent_exam_years()
     random.shuffle(items)
+
+    def sort_key(item: dict):
+        year = _source_year(item.get("source"))
+        bucket = 0 if year in years else (1 if year else 2)
+        return (
+            bucket,
+            item.get("mastery_level") or 0,
+            str(item.get("next_review_at") or ""),
+        )
+
+    items.sort(key=sort_key)
     return items[:limit]
 
 

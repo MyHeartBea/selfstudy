@@ -1334,3 +1334,30 @@ api.md 同步;e2e fixtures 补 quota 桩。
 **验证**：后端 388、前端 Vitest 167、build、pre-commit 全过;E2E 56 全绿。
 **待办（下批）**：B7 生词积压策略、C8 依赖大版本升级（vite8/vitest5,考后）、
 ReviewView 拆分、EnglishAnalysisPanel 复核。
+
+## 2026-10-05 B7:生词积压消化策略——到期队列按真题年份优先
+
+**背景**:1563 生词、1246 到期、0 已掌握,每天 30 张清不完;阶梯 60 天封顶
+意味着大部分词考前只过一遍半。每日定量（配额页内可调）已随 855b323 落地,
+本批补齐另一半:**有限的配额先给真题词**。
+
+**实现**（`vocab_service.get_due_vocab` 重写）:
+- 原实现 SQL 里 `LIMIT ?` 取 3 倍候选再整表洗牌——积压 1246 条时随机区外
+  的真题词根本进不了候选池。现在**取全部到期候选**,洗牌后按
+  （年份档 → mastery 升序 → next_review_at 升序）**稳定排序**再截断:
+  年份从 `source` 文本正则提取（如「2023 英语二 Text1」）,近年窗口 =
+  考试年−5..考试年−1（`recent_exam_years()`,EXAM_DATE 非法回退当前年）,
+  第 1 档近年真题词 → 第 2 档其它年份 → 第 3 档无年份;
+  组内低掌握度先、最久未刷先;键相同保留洗牌序（防位置记忆）。
+- 年份档压过掌握度:配额有限时真题词先出场,哪怕它已刷到高掌握度。
+- 波期回拉分支（855b323）保留不变,新排序对拉回的条目同样生效。
+
+**测试**：新增 `tests/test_vocab_due_priority.py` 7 条——bucket 顺序
+（洗牌下 5 次重复仍成立）、年份档压过掌握度、组内 mastery tiebreak、
+limit 截断、`recent_exam_years` 从 EXAM_DATE 推 2021-2025 / 非法日期
+钉 now 回退。后端 388→**395**。
+
+**api.md** `/vocab/due` 条目重写排序口径。
+
+**验证**：后端 395 全绿、ruff check+format 过。
+**待办**：C8 依赖大版本升级（考后）、ReviewView 拆分、EnglishAnalysisPanel 复核。

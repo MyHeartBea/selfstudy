@@ -129,7 +129,7 @@
 
 - `GET /api/vocab`：列表（`search` / `mastery` / `kind=word|phrase` / `sort` / `page` + `page_size`）
 - `GET /api/vocab/stats`：总数/今日到期/已掌握/掌握度分布
-- `GET /api/vocab/due?limit=30`：到期闪卡队列（低掌握度优先，随机排序，**返回纯数组**）
+- `GET /api/vocab/due?limit=30`：到期闪卡队列，**返回纯数组**。排序为积压消化策略：整表随机洗牌后按（真题年份档 → 掌握度升序 → 最久未刷）稳定排序——年份档取 `source` 里的年份，考试年份前 5 年（2021-2025）为第 1 档、其它年份第 2 档、无年份第 3 档；键相同的条目保留随机序（防位置记忆）。波期内考试日之后的词也拉回队列。
   - 闪卡会话（前端 VocabFlashcard 组件）拉这里起步；判分后"模糊"随机回队 1 次、
     "不认识"随机回队 2 份（纯前端行为，后端排期不变：known→阶梯、fuzzy→明天、unknown→留在队列）
 - `GET /api/vocab/{id}/context`：真题语境回链——在错题 `passage_text` 里按词边界找该词出现位置，
