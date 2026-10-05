@@ -1287,3 +1287,50 @@ index 75.5,与拆分前一致,无劣化。
 
 **验证**：后端 381→**388**（+7 维护/存储/HTTP 冒烟）、前端 Vitest **163**、
 build、全绿;E2E 54 全绿;基线数据存 `D:\temp\km_perf.json`。
+
+## 2026-10-03 A类四件（3aa14af）
+
+**A1 闪卡会话 E2E**（vocab-flashcard.spec.js）:开始快刷 → 翻面 → 判分 →
+模糊/不认识随机回队（2/4）→ 完成页,把生词闪卡整条会话流钉进浏览器层。
+**坑:fixtures 的 `/vocab/due` 打桩形状原本是错的**——真实接口在新格式下
+返回 `{items,...}` 对象,桩却给成纯数组,前端靠兼容旧格式才没炸;
+顺手改成与真实形状一致。
+
+**A2 知识点/公式 Anki 导出**:`/api/export/anki` 新增 `type=knowledge|formula`
+两类型（错题/生词之外）,KnowledgeView / FormulaView 工具条各加导出按钮;
+LaTeX 内容走 MathJax 渲染约定,不在导出层转纯文本。
+
+**A3 数据健康页签**:`integrity` 响应新增 `data_health` 区块——三队列积压
+（错题/知识点/生词的到期与从未复习数）、归因覆盖（错因/标签覆盖比例）、
+考试日外排期（排期晚于考试日的条目数,预告了 B 类的波机制）;
+IntegrityView 新页签渲染,体检页保持只读。
+
+**A4 api.md** 同步生词本与 anki 导出的类型变更。
+
+**验证**：E2E 54→**56** 全绿;后端/前端全量绿后提交。
+
+## 2026-10-05 B类:考试日感知总复习波 + 生词每日配额（855b323）
+
+**考试日感知调度（总复习波,冲刺核心）**——问题:错题 SM-2 间隔封顶 180 天、
+生词阶梯 60 天,现在标"记住"的条目下次出现可能已在考试日之后,考前再也不
+复习。两条对策（`review_service`,EXAM_WAVE_DAYS=14）:
+① **clamp 排期**:复习算出的排期晚于考试日 → 随机摊进考前 14 天波窗口
+（不含考试日当天,负载按天公平分摊;无论当前是否在波期都生效,提前预摊
+避免波期第一天扎堆）;错题/知识点/生词三队列共用。
+② **队列回拉**:进入波期后,已排期在考试日之后的**存量**条目视为到期且
+排最前——`get_today_queue` / `get_due_vocab` / `get_knowledge_review_queue`
+各自追加 OR 分支（同一口径,不许漂移）。
+`/reviews/today` 响应带 `wave={days_left,gate,start}`,ReviewView 波期内
+显示横幅。EXAM_DATE 无效/已考完时整套机制静默不启用。
+
+**生词每日配额**:`app_meta` 存覆盖值（优先于默认）,`GET|PUT /api/vocab/quota`
+端点,`get_due_vocab` 按配额截断,VocabView 页内可调——与错题
+`REVIEW_DAILY_LIMIT` 同一套"页内可调"模式。
+
+**冲刺页计划 vs 实际**（SprintView）:计划口径与今日复习队列同源
+（sprint_service 复用 wave/积压口径）,页面数字能和复习页对上;
+api.md 同步;e2e fixtures 补 quota 桩。
+
+**验证**：后端 388、前端 Vitest 167、build、pre-commit 全过;E2E 56 全绿。
+**待办（下批）**：B7 生词积压策略、C8 依赖大版本升级（vite8/vitest5,考后）、
+ReviewView 拆分、EnglishAnalysisPanel 复核。
