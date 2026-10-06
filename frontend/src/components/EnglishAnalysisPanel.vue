@@ -167,19 +167,47 @@ function lookupSelection() {
   if (phrase) openWord(phrase)
 }
 
+function pushTextToken(out, chunk) {
+  // 文本块里的完形空位标记 __N__ 拆成可点击的 blank token：点击跳到对应小题。
+  // （分词正则只认字母词，__N__ 天然落在 text 块里，在这里二次拆分）
+  let pos = 0
+  for (const bm of chunk.matchAll(BLANK_RE)) {
+    const no = Number(bm[1] || bm[2] || bm[3])
+    if (bm.index > pos) out.push({ type: 'text', value: chunk.slice(pos, bm.index) })
+    out.push({ type: 'blank', value: bm[0], no })
+    pos = bm.index + bm[0].length
+  }
+  if (pos < chunk.length) out.push({ type: 'text', value: chunk.slice(pos) })
+}
+
 function tokenize(text) {
   const out = []
   let last = 0
   const s = String(text || '')
   for (const m of s.matchAll(tokenRe.value)) {
     const idx = m.index
-    if (idx > last) out.push({ type: 'text', value: s.slice(last, idx) })
+    if (idx > last) pushTextToken(out, s.slice(last, idx))
     const norm = m[0].toLowerCase().replace(/\s+/g, ' ')
     out.push({ type: phraseMap.value.has(norm) ? 'phrase' : 'word', value: m[0] })
     last = idx + m[0].length
   }
-  if (last < s.length) out.push({ type: 'text', value: s.slice(last) })
+  if (last < s.length) pushTextToken(out, s.slice(last))
   return out
+}
+
+// 完形空位标记：__1__ / (1)____ / ____(1)（与后端 english_cloze 的空位模式同源）
+const BLANK_RE =
+  /_{2,}\s*(\d{1,2})\s*_{2,}|\(\s*(\d{1,2})\s*\)\s*_{2,}|_{2,}\s*\(\s*(\d{1,2})\s*\)/g
+
+// 点击空位标记跳到对应小题（完形按空拆题时空位顺序 = 题目顺序）
+function jumpToBlank(no) {
+  const el = document.getElementById('ep-q-' + no)
+  if (!el) return
+  const reduced =
+    typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' })
 }
 
 // 分词缓存：原文对照与句子拆解渲染同一批句子，此前每次渲染对每句重跑正则
@@ -560,6 +588,15 @@ async function saveAll() {
               <span v-for="(t, j) in cachedTokenize(item.english)" :key="j">
                 <span v-if="t.type === 'text'">{{ t.value }}</span>
                 <button
+                  v-else-if="t.type === 'blank'"
+                  type="button"
+                  class="ep-blank"
+                  :title="`跳到第 ${t.no} 题`"
+                  @click="jumpToBlank(t.no)"
+                >
+                  {{ t.value }}
+                </button>
+                <button
                   v-else
                   type="button"
                   class="ep-word"
@@ -605,6 +642,7 @@ async function saveAll() {
       <div class="ep-questions">
         <div
           v-for="(q, qi) in questions"
+          :id="'ep-q-' + (qi + 1)"
           :key="qi"
           class="ep-question"
           :class="{ first: qi === 0, wrong: getMark(q) === 'wrong' }"
@@ -685,6 +723,15 @@ async function saveAll() {
             </button>
             <span v-for="(t, j) in cachedTokenize(s.text)" :key="j">
               <span v-if="t.type === 'text'">{{ t.value }}</span>
+              <button
+                v-else-if="t.type === 'blank'"
+                type="button"
+                class="ep-blank"
+                :title="`跳到第 ${t.no} 题`"
+                @click="jumpToBlank(t.no)"
+              >
+                {{ t.value }}
+              </button>
               <button
                 v-else
                 type="button"
@@ -883,6 +930,23 @@ async function saveAll() {
 .ep-word.known {
   border-bottom-color: var(--accent);
   color: var(--accent-ink);
+}
+/* 完形空位标记：高亮 + 点击跳到对应小题 */
+.ep-blank {
+  border: none;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.86em;
+  padding: 0 6px;
+  margin: 0 2px;
+  cursor: pointer;
+  border-radius: 8px;
+  border-bottom: 2px dashed var(--accent);
+}
+.ep-blank:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 /* 划词查短语浮钮：Teleport 到 body，fixed 跟随圈选位置（z-index 要压过详情弹窗的 1000） */

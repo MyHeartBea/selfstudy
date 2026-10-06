@@ -30,8 +30,9 @@ const imageBase64 = ref('')
 const referenceImage = ref('')
 const referenceBase64 = ref('')
 const moreImages = ref([]) // 英语整篇多张原文/选项图（附加主图）
+const answerImages = ref([]) // 答案表/答案卡角色图（完形答案键，单独提字+本地解析）
 const essayPanel = ref(null)
-const pasteTarget = ref('main') // 下张粘贴目标：main=继续加主图 / reference=参考图
+const pasteTarget = ref('main') // 下张粘贴目标：main=继续加主图 / reference=参考图 / answers=答案表
 const ocrRawText = ref('')
 const aiWarning = ref('')
 let analysisRequestId = 0
@@ -126,11 +127,16 @@ function useManualImage() {
   stopStepNarrative()
   // 手动整理也要把已暂存的截图带进草稿——用户贴图就是要贴这道题。
   // 此前只清 moreImages、留着主图预览，提交后题上却没图（预览是摆设）
-  const staged = [previewImage.value, ...moreImages.value.map((m) => m.preview)].filter(Boolean)
+  const staged = [
+    previewImage.value,
+    ...moreImages.value.map((m) => m.preview),
+    ...answerImages.value.map((m) => m.preview),
+  ].filter(Boolean)
   parsed.value = createMistakeDraft('')
   if (staged.length) parsed.value.images = staged
   ocrRawText.value = ''
   moreImages.value = []
+  answerImages.value = []
   formKey.value += 1
 }
 
@@ -198,6 +204,37 @@ function removeMoreImage(index) {
   moreImages.value.splice(index, 1)
 }
 
+function onAnswerFileChange(event) {
+  const file = event.target.files[0]
+  event.target.value = ''
+  addAnswerImage(file)
+}
+
+async function addAnswerImage(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    toast.warning('答案图片格式不正确，请重新选择')
+    return
+  }
+  if (answerImages.value.length >= 4) {
+    toast.warning('答案表图最多 4 张，已达上限')
+    return
+  }
+  const compressed = await compressImageFile(file)
+  if (!compressed) {
+    toast.error('答案图片读取失败')
+    return
+  }
+  answerImages.value.push({
+    preview: compressed.dataUrl,
+    base64: compressed.dataUrl.split(',')[1] || compressed.dataUrl,
+  })
+  toast.success('已添加为答案表图（完形/客观题答案将按题号自动对齐）')
+}
+
+function removeAnswerImage(index) {
+  answerImages.value.splice(index, 1)
+}
+
 function removeMainImage() {
   analysisRequestId += 1
   analyzing.value = false
@@ -206,6 +243,7 @@ function removeMainImage() {
   previewImage.value = ''
   imageBase64.value = ''
   moreImages.value = []
+  answerImages.value = []
   parsed.value = null
   ocrRawText.value = ''
   aiWarning.value = ''
@@ -249,9 +287,11 @@ function onPaste(event) {
     return
   }
   activeTab.value = 'image'
-  // 主图未就绪时作为主图；已就绪时按当前「粘贴目标」分流：主图(继续追加)或参考图
+  // 主图未就绪时作为主图；已就绪时按当前「粘贴目标」分流：主图(继续追加)/答案表/参考图
   if (!previewImage.value) {
     handleImageFile(file)
+  } else if (pasteTarget.value === 'answers') {
+    addAnswerImage(file)
   } else if (pasteTarget.value === 'reference' && !referenceBase64.value) {
     stageReferenceFile(file)
     toast.success('已添加为参考图片（按图中思路解题）')
@@ -263,7 +303,13 @@ function onPaste(event) {
 
 function setPasteTarget(target) {
   pasteTarget.value = target
-  toast.info(target === 'reference' ? '下一张粘贴将作为参考图' : '下一张粘贴将作为主图')
+  toast.info(
+    target === 'reference'
+      ? '下一张粘贴将作为参考图'
+      : target === 'answers'
+        ? '下一张粘贴将作为答案表图'
+        : '下一张粘贴将作为主图',
+  )
 }
 
 async function analyzeImage() {
@@ -277,7 +323,19 @@ async function analyzeImage() {
   analyzingText.value = '正在识别图片并解析，约需 30-90 秒，请稍候…'
   try {
     let res
-    if (referenceBase64.value) {
+    if (answerImages.value.length) {
+      // 有答案表图：走英语整篇（答案表单独提字 + 本地解析答案键；完形按空拆题、
+      // 普通阅读按题号回填答案）。数学等非英语内容由后端自动回落标准分析。
+      res = await request.post(
+        '/ai/english',
+        {
+          images: [imageBase64.value, ...moreImages.value.map((m) => m.base64)],
+          answer_images: answerImages.value.map((m) => m.base64),
+          instruction: imageInstruction.value,
+        },
+        { silent: true },
+      )
+    } else if (referenceBase64.value) {
       // 有参考图：走通用 OCR（按图中思路解题）
       res = await request.post(
         '/ai/ocr',
@@ -337,6 +395,15 @@ async function analyzeImage() {
       analyzingText.value = ''
       stopStepNarrative()
     }
+  }
+}
+
+// 解析结果不理想时按当前已暂存的材料重跑（提字缓存让最贵的视觉调用不重烧）
+function reanalyze() {
+  if (activeTab.value === 'text') {
+    analyze()
+  } else {
+    analyzeImage()
   }
 }
 
@@ -419,9 +486,9 @@ onUnmounted(() => {
     <div class="notice card">
       <Icon name="sparkles" :size="17" class="notice-icon" />
       <p>
-        支持粘贴题干或上传题目图片；粘贴主图后可补充文字解题要求（如「按配方法求解、某步写详细」），
-        再 Ctrl+V
-        粘贴第二张图作为参考（按图中思路解题），最后点击「开始识别并解析」，保存前可再核对修改。
+        支持粘贴题干或上传题目图片；粘贴主图后可补充文字解题要求（如「按配方法求解、某步写详细」），再
+        Ctrl+V
+        粘贴第二张图作为参考（按图中思路解题）或答案表（完形/客观题答案自动对齐），最后点击「开始识别并解析」，保存前可再核对修改。
       </p>
     </div>
 
@@ -477,7 +544,7 @@ onUnmounted(() => {
         </div>
         <p class="paste-hint">
           先 Ctrl+V
-          粘贴/选择第一张图；主图就绪后，用下面「粘贴目标」决定下一张是继续加主图，还是作为参考图
+          粘贴/选择第一张图；主图就绪后，用下面「粘贴目标」决定下一张是继续加主图、作为答案表，还是作为参考图
         </p>
 
         <div v-if="previewImage" class="paste-target-row">
@@ -489,6 +556,14 @@ onUnmounted(() => {
             @click="setPasteTarget('main')"
           >
             主图（英语整篇多图）
+          </button>
+          <button
+            type="button"
+            class="pt-btn"
+            :class="{ active: pasteTarget === 'answers' }"
+            @click="setPasteTarget('answers')"
+          >
+            答案表（客观题答案）
           </button>
           <button
             type="button"
@@ -506,6 +581,7 @@ onUnmounted(() => {
 
         <div v-if="moreImages.length" class="more-images">
           <div v-for="(m, i) in moreImages" :key="i" class="more-image-item">
+            <span class="img-role-badge">原文/题目</span>
             <img :src="m.preview" alt="附加图片" />
             <button
               type="button"
@@ -521,6 +597,26 @@ onUnmounted(() => {
             继续添加图片
             <input type="file" accept="image/*" class="visually-hidden" @change="onFileChange" />
           </label>
+        </div>
+
+        <div v-if="previewImage" class="reference-section">
+          <label class="pick-label btn btn-outline btn-md">
+            <Icon name="list" :size="14" />
+            添加答案表图片（完形/客观题答案按题号自动对齐）
+            <input
+              type="file"
+              accept="image/*"
+              class="visually-hidden"
+              @change="onAnswerFileChange"
+            />
+          </label>
+          <span v-for="(m, i) in answerImages" :key="'ans' + i" class="reference-preview">
+            <span class="answer-thumb">
+              <span class="img-role-badge role-answer">答案表</span>
+              <img :src="m.preview" alt="答案表图片" />
+            </span>
+            <UiButton size="sm" variant="danger" @click="removeAnswerImage(i)">移除</UiButton>
+          </span>
         </div>
 
         <textarea
@@ -617,6 +713,13 @@ onUnmounted(() => {
     </div>
 
     <div v-if="parsed" class="card card-pad form-card">
+      <div class="form-head-row">
+        <h3 class="panel-title">确认并完善题目信息</h3>
+        <UiButton size="sm" variant="outline" :disabled="analyzing" @click="reanalyze">
+          <Icon name="refresh" :size="13" />
+          重新解析
+        </UiButton>
+      </div>
       <div v-if="parsed.is_english" class="card card-pad english-learn">
         <h3 class="panel-title">英语整篇精读</h3>
         <EnglishAnalysisPanel
@@ -858,6 +961,45 @@ onUnmounted(() => {
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
+}
+/* 角色角标：缩略图上标明这张图是"原文/题目"还是"答案表" */
+.img-role-badge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  z-index: 1;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 85%, transparent);
+  color: #fff;
+  pointer-events: none;
+}
+.img-role-badge.role-answer {
+  background: color-mix(in srgb, var(--teal) 88%, transparent);
+}
+.answer-thumb {
+  position: relative;
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.form-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.form-head-row .panel-title {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
 }
 .more-image-item img {
   display: block;

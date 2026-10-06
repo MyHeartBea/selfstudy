@@ -142,6 +142,60 @@ test.describe('智能录入 · 图片暂存与一次分析', () => {
   })
 })
 
+test.describe('智能录入 · 答案表角色（完形录入重构）', () => {
+  // 完形录入重构（2026-10）：答案表/答案卡成为独立角色图（answer_images），
+  // 后端单独提字后本地解析答案键、按空拆题 —— 不再让 AI 把答案序列编成一道"题"。
+  const fakeClozeResult = {
+    is_english: true,
+    question: 'Happy people work ____.',
+    correct_answer: 'B',
+    question_type: 'choice',
+    passage_text: 'Happy people work __1__. They smile __2__ more.',
+    passage_translation: '快乐的人工作方式不同。他们笑得更多。',
+    english_sentences: [
+      { text: 'Happy people work __1__.', translation: '快乐的人工作方式不同。' },
+    ],
+    english_phrases: [],
+    english_words: [],
+    english_questions: [
+      { question: 'They smile ____ more.', correct_answer: 'C', question_type: 'choice' },
+    ],
+    method: 'vision',
+  }
+
+  test('答案表粘贴为独立角色：请求带 answer_images，完形空位高亮渲染', async ({ page }) => {
+    const errors = guardPageErrors(page)
+    const calls = await mockApi(page, { '/api/ai/english': fakeClozeResult })
+    await page.goto('/capture')
+    await page.getByRole('tab', { name: '上传图片' }).click()
+
+    // 第 1 张：完形原文（主图）
+    await pasteImage(page, { name: 'passage.png', rgb: [255, 0, 0] })
+    await expect(page.locator('.image-preview img')).toBeVisible()
+
+    // 第 2 张：切换粘贴目标为「答案表」再粘贴 → 出现答案表角标（而不是混进主图区）
+    await page.getByRole('button', { name: '答案表（客观题答案）' }).click()
+    await pasteImage(page, { name: 'answers.png', rgb: [0, 255, 0] })
+    await expect(page.locator('.img-role-badge.role-answer')).toHaveCount(1)
+    await expect(page.locator('.more-image-item')).toHaveCount(0)
+
+    await page.getByRole('button', { name: '开始识别并解析' }).click()
+
+    // 同步点放在「结果已渲染」：完形结果里空位标记要高亮成可点击 token
+    const panel = page.locator('.english-learn')
+    await expect(panel).toBeVisible()
+    await expect(panel.locator('button.ep-blank').first()).toBeVisible()
+
+    const englishCalls = callsTo(calls, '/api/ai/english')
+    expect(englishCalls, '整场只应发一次英语解析请求').toHaveLength(1)
+    expect(englishCalls[0].body.images).toHaveLength(1)
+    expect(englishCalls[0].body.answer_images, '答案表必须作为独立角色传给后端').toHaveLength(1)
+
+    expectAllApiStubbed(calls)
+    expect(errors, `页面报错：${errors.join(' | ')}`).toHaveLength(0)
+  })
+})
+
 test.describe('智能录入 · 视觉通道降级提醒', () => {
   // 视觉通道按序回退：首选通道报错会被兜底通道的成功掩盖，识别"照样出结果、只是又慢又抖"。
   // 后端把原因写在响应的 message 里，前端 CaptureView 只在含"已降级"时挂提醒条。

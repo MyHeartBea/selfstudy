@@ -1361,3 +1361,51 @@ limit 截断、`recent_exam_years` 从 EXAM_DATE 推 2021-2025 / 非法日期
 
 **验证**：后端 395 全绿、ruff check+format 过。
 **待办**：C8 依赖大版本升级（考后）、ReviewView 拆分、EnglishAnalysisPanel 复核。
+
+
+## 2026-10-06 完形录入模块重构：答案序列本地拆题+四道防呆闸
+
+**背景（用户实测翻车）**：录 2016 完形时主图=答案卡、参考图=原文，AI 产出
+1 道垃圾题——题干就是「1. B 2. B 3. A…」答案序列，解析自述「未提供任何英语
+原文」，二级科目还错标阅读理解。根因链：/ai/ocr 的参考图提字与主图合并后，
+【题目】区=答案序列被「逐题照抄」当成了题干；完形特征无人识别；英语二级科目
+写死阅读理解；全链路没有「材料里根本没有题目」的防呆。
+
+**后端**（新模块 `app/services/english_cloze.py`，纯函数零 AI）：
+- `parse_answer_key`：题号.字母 对正则（≥3 对才算答案键；字母后跟字母不吃、
+  年份不吃出两位题号）；`looks_like_answer_key`/`is_answer_sequence_text`
+  防呆判据（≥5 对且剔除后剩余正文极短 / 单条题干维度）。
+- `detect_cloze`：Use of English 标题 或 ≥8 个编号空位（七选五 5 空**必须**
+  留在原 AI 拆题管线，阈值就是这么定的）；`find_numbered_blanks` 认
+  `__1__`/`(1)____`/`1____` 等五种写法、按位置去重；`build_cloze_questions`
+  每空一题（题干=空位所在句，同句其它空保留编号）、无编号时顺序编号兜底；
+  `parse_cloze_options` 解析 `[A] 词 [B] 词` 等三种选项行。
+- `ai_english.analyze_english` 四道闸（顺序不许动）：①答案键解析（新参数
+  `answer_images` 独立提字+缓存，或题目区文本兜底）→ ②答案表排原文前自动
+  换位 → ③材料只有答案序列**直接报错**（不生成垃圾题）→ ④题干疑似答案序列
+  丢弃；quiz 区只有答案键时跳过清单与**兜底出题**（兜底=凭空编造）。
+  完形分支 `_analyze_cloze`：空位/题干/答案/选项全部本地解析，AI 只做翻译/
+  词汇/逐空解析且**题干选项答案以本地为准**（只采信其解析与来源）；结果带
+  `sub_subject_hint=完形填空`。普通阅读带答案表时答案按题号回填给题目清单。
+- `routers/ai.py`：`_auto_subject_ids(conn, hint, sub_hint)` 优先按
+  sub_subject_hint 映射二级科目（英语不再一律阅读理解）；`schemas.py`
+  `AiEnglishRequest.answer_images`。提字 prompt 补「空位编号不能丢/答案表
+  逐行照录」两条。
+
+**前端**：
+- CaptureView：粘贴目标新增**「答案表（客观题答案）」**chip；答案图独立
+  区域+角标（`answer_images` 随 /ai/english 提交）；缩略图角色角标
+  （原文/题目、答案表）；表单头新增**「重新解析」**按钮；手动整理把答案图
+  也带进草稿。
+- EnglishAnalysisPanel：`__N__` 空位标记渲染成高亮 token（`.ep-blank`），
+  点击 `scrollIntoView` 跳到 `#ep-q-N` 对应小题（原文对照与句子拆解两处都
+  生效，空位标记不再在展示层丢失）。
+
+**测试**：后端新增 `tests/test_ai_cloze.py` 23 条（解析器格式矩阵/检测阈值/
+按空拆题/管线集成含换位与报错/sub_subject_hint 路由）→ 395→**418**；
+前端新增 `tests/englishPanelBlanks.test.js` 2 条、e2e/capture.spec.js 新增
+答案表角色用例（请求必须带 answer_images+空位高亮渲染）→ 167→**169**、
+56→**57**。后端 ruff+format、前端 eslint+prettier、build 全过。
+
+**待办**：C8 依赖大版本升级（考后）、ReviewView 拆分、EnglishAnalysisPanel
+复核。

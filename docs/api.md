@@ -215,9 +215,16 @@
   - 兼容旧调用 `{"image_base64": b64}`；`image_base64` 与 `images` 至少给一个（否则 422）。
   - 逐批失败不整体中断，未识别的批次会在文本里标注「未能识别」。
 
-- `POST /api/ai/english`：英语整篇精读（`{"images":[...], "text", "instruction"}`，先提文字再文本分析）。
-  提字结果按图哈希缓存 24h（**instruction 参与哈希**；截断结果不缓存）；步骤级失败带伤返回：
-  响应带 `degraded: true` + `degraded_steps`（缺失步骤清单）
+- `POST /api/ai/english`：英语整篇精读（`{"images":[...], "text", "instruction"[, "answer_images":[...]]}`，
+  先提文字再文本分析）。提字结果按图哈希缓存 24h（**instruction 参与哈希**；截断结果不缓存）；
+  步骤级失败带伤返回：响应带 `degraded: true` + `degraded_steps`（缺失步骤清单）。
+  **完形填空本地拆题**（2026-10 重构）：`answer_images` 是「答案表/答案卡」角色图（前端录入页
+  「答案表」粘贴目标），单独提字后**本地正则**解析成 `{题号: 字母}`（`english_cloze.parse_answer_key`）；
+  原文识别为完形（`Use of English` 标题 / ≥8 个编号空位）时走专用管线——空位与题干本地拆出
+  （每空一题、题干=空位所在句）、答案按题号对齐、选项尽力本地解析，AI 只做翻译/词汇/逐空解析；
+  解析结果带 `sub_subject_hint: "完形填空"`，二级科目自动映射完形填空（不再错标阅读理解）。
+  答案表混在题目区文本里也能兜底解析；**材料里只有答案序列时直接 502 报错**（不生成垃圾题）；
+  提字把答案表排在原文前面时自动换位纠正。普通阅读带答案表时，答案按题号回填给题目清单
 - `POST /api/ai/variant`：`{"mistake_id"}` AI 举一反三——基于一道错题生成同考点变式题
   （`{question, option_a..d, answer, analysis, focus}`；分析类保持推理开启）
 - `GET /api/ai/sense?word=`：点词查义（多词性释义，≤120 字符，支持短语）。

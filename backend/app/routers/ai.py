@@ -30,8 +30,12 @@ _SUBJECT_MAP = [
 ]
 
 
-def _auto_subject_ids(conn, hint: str):
-    """根据 subject_hint（如'数学'/'408'/'英语'）映射到 subject_id + 缺省二级科目 id。"""
+def _auto_subject_ids(conn, hint: str, sub_hint: str | None = None):
+    """根据 subject_hint（如'数学'/'408'/'英语'）映射到 subject_id + 缺省二级科目 id。
+
+    sub_hint（如'完形填空'）是解析结果自带的内容级提示（ai_english 完形管线产出），
+    优先于按科目的缺省二级科目——英语不再一律落"阅读理解"。
+    """
     hint = str(hint or "").strip().lower()
     for kw, subj_kw, default_sub in _SUBJECT_MAP:
         if kw.lower() in hint:
@@ -41,10 +45,18 @@ def _auto_subject_ids(conn, hint: str):
             if row is None:
                 return None, None
             subject_id = row["id"]
-            sub = conn.execute(
-                "SELECT id FROM sub_subjects WHERE subject_id=? AND name=? LIMIT 1",
-                (subject_id, default_sub),
-            ).fetchone()
+            sub = None
+            sub_hint = str(sub_hint or "").strip()
+            if sub_hint:
+                sub = conn.execute(
+                    "SELECT id FROM sub_subjects WHERE subject_id=? AND name LIKE ? LIMIT 1",
+                    (subject_id, f"%{sub_hint}%"),
+                ).fetchone()
+            if sub is None:
+                sub = conn.execute(
+                    "SELECT id FROM sub_subjects WHERE subject_id=? AND name=? LIMIT 1",
+                    (subject_id, default_sub),
+                ).fetchone()
             sub_id = sub["id"] if sub else None
             if sub_id is None:
                 s = conn.execute(
@@ -87,7 +99,9 @@ def _apply_auto_subject(result: dict) -> None:
     """根据解析结果里的 subject_hint，自动填入 subject_id / sub_subject_id。"""
     conn = get_connection()
     try:
-        sid, sub_id = _auto_subject_ids(conn, result.get("subject_hint"))
+        sid, sub_id = _auto_subject_ids(
+            conn, result.get("subject_hint"), result.get("sub_subject_hint")
+        )
         if sid:
             result["subject_id"] = sid
             if sub_id:
@@ -135,7 +149,9 @@ def analyze_text(body: AiAnalyzeRequest):
         )
         conn = get_connection()
         try:
-            sid, sub_id = _auto_subject_ids(conn, result.get("subject_hint"))
+            sid, sub_id = _auto_subject_ids(
+                conn, result.get("subject_hint"), result.get("sub_subject_hint")
+            )
             if sid:
                 result["subject_id"] = sid
                 if sub_id:
@@ -297,6 +313,7 @@ def english_analysis(body: AiEnglishRequest):
                 model=vision_model,
                 base_url=vision_base_url,
                 api_key=vision_api_key,
+                answer_images=body.answer_images,
             )
             break
         except AiNotConfigured:
@@ -325,12 +342,15 @@ def english_analysis(body: AiEnglishRequest):
     note = _degrade_note(failed_channels)
     if step_issues:
         note += f"（部分内容缺失：{'、'.join(step_issues)}，可直接重试补齐）"
-    # 自动识别并填入 科目/二级科目（英语→阅读、数学→高数、408→计网等）
+    # 自动识别并填入 科目/二级科目（英语→阅读、数学→高数、408→计网等；
+    # 完形管线自带 sub_subject_hint=完形填空，优先于缺省映射）
     if parsed.get("is_english") and not parsed.get("subject_hint"):
         parsed["subject_hint"] = "英语"
     conn = get_connection()
     try:
-        sid, sub_id = _auto_subject_ids(conn, parsed.get("subject_hint"))
+        sid, sub_id = _auto_subject_ids(
+            conn, parsed.get("subject_hint"), parsed.get("sub_subject_hint")
+        )
         if sid:
             parsed["subject_id"] = sid
             if sub_id:

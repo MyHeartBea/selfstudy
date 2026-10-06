@@ -175,9 +175,12 @@ class AiEnglishRequest(BaseModel):
     """英语整篇精读：支持多张图片（原文段落 + 选项）与可选粘贴文本。"""
 
     images: List[str] = Field(default_factory=list, max_length=10)
-    text: str = Field(default="", max_length=50000)
     # 可选：补充指令（如「逐句翻译」「重点讲解长难句」）
     instruction: str = Field(default="", max_length=5000)
+    # 可选：答案表/答案卡角色图（完形答案键）。单独提字后本地正则解析成
+    # {题号: 字母}，零 AI 拆题用；不传则从题目区文本兜底解析
+    answer_images: List[str] = Field(default_factory=list, max_length=6)
+    text: str = Field(default="", max_length=50000)
 
 
 class AiEssayRequest(BaseModel):

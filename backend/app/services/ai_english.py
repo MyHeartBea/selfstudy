@@ -17,6 +17,8 @@ import re
 import time
 from typing import List
 
+from app.services import english_cloze
+
 # 本模块自己持有 logger，但与 ai_service 归到同一个 logger 名下（"kaoyan.ai"），
 # 日志格式与级别统一。
 logger = logging.getLogger("kaoyan.ai")
@@ -135,6 +137,8 @@ def normalize_english_parsed(parsed: dict, fallback_text: str = "") -> dict:
     base["is_english"] = is_english
     base["passage_text"] = _strip_section_markers(parsed.get("passage") or "")
     base["passage_translation"] = str(parsed.get("passage_translation") or "").strip()
+    # 完形填空等二级科目提示（normalize_parsed 会丢未知键，这里单独保留）
+    base["sub_subject_hint"] = str(parsed.get("sub_subject_hint") or "").strip()
     base["english_sentences"] = _clean_items(parsed.get("sentences"))
     base["english_phrases"] = _clean_items(parsed.get("phrases"))
     base["english_words"] = _clean_items(parsed.get("words"))
@@ -192,8 +196,10 @@ def _vision_extract_text(
         "1. 标题、正文、题目、选项都要提取，**一个字都不能漏**；\n"
         "2. 不要改写、不要润色、不要补全你没看清的内容；看不清就按原样输出你能看到的字符；\n"
         "3. 如果是试卷/文章，请用 `【原文】` 和 `【题目】` 两个小标题把「文章正文」与「题目+选项」分开；\n"
-        "4. 数学公式用 LaTeX（$...$）表示；\n"
-        "5. **不要输出水印、页码、机构名、公众号/小红书号、二维码说明等无关文字**"
+        "4. 完形填空原文里的空位标记必须原样保留（如 __1__ 或 (1)____，编号不能丢）；\n"
+        "5. 答案表/答案卡（如 1. B 2. B …）请按题号逐行照录，不要并入正文段落；\n"
+        "6. 数学公式用 LaTeX（$...$）表示；\n"
+        "7. **不要输出水印、页码、机构名、公众号/小红书号、二维码说明等无关文字**"
         "（例如“小红书号：xxx”“扫码关注”“第 3 页 共 10 页”这类都不要）。"
     )
     if instruction and instruction.strip():
@@ -415,6 +421,7 @@ def analyze_english(
     model: str | None = None,
     base_url: str | None = None,
     api_key: str | None = None,
+    answer_images: List[str] | None = None,
 ) -> dict:
     """英语整篇精读（分段式+并行波次，内容不减）：看图提字 → 阅读/翻译/拆解 → （词汇‖题目清单）→ 逐题解析并发。
 
@@ -423,6 +430,8 @@ def analyze_english(
     并发只用于缩短互不依赖调用（词汇‖清单、逐题）的墙钟时间；
     仅当预算真的耗尽时，失败步骤才退化为兜底结果（词汇空/该题仅题干清单）。
     model/base_url/api_key 指定视觉通道（未指定时用 DeepSeek 首选通道）。
+    answer_images 是「答案表/答案卡」角色图：单独提字后本地解析成答案键（零 AI 成本），
+    完形按空对答案；普通阅读题则喂给题目清单步骤回填 correct_answer。
 
     两个"不报废"机制（2026-09-27，实测一次读超时让整批已花的调用全浪费）：
     ① 提字缓存：提字成功即存 app_meta（key 按图片内容哈希，TTL 24h）——同批图片
@@ -430,6 +439,10 @@ def analyze_english(
       重试只补失败的文本步骤）；
     ② 步骤级降级：词汇/清单/逐题/兜底出题失败不再抛异常报废整批，而是带伤返回
       （degraded=True + degraded_steps 列出缺了什么），前端提醒条照常亮。
+
+    完形防呆（2026-10，实测答案卡被当成一道"题"）：答案序列本地正则解析、
+    空位本地拆题（见 english_cloze）；材料里只有答案序列时直接报错，
+    绝不让模型把答案序列编成题干。
     """
     deadline = time.monotonic() + (timeout or _svc().settings.AI_TIMEOUT)
 
@@ -475,9 +488,54 @@ def analyze_english(
     if not source_text.strip():
         raise _err()("未能从图片或文本中获取到内容")
 
+    issues: List[str] = []
+
+    # —— 答案表图（角色：answers）——单独提字（逐行照录题号+字母），本地解析。
+    # 提字/解析任何一步失败都只降级（答案留空），不报废整批；
+    # 若题目区文本里恰好也有答案序列（见下），照样兜底解析，不算缺料。
+    answer_key: dict = {}
+    answer_imgs = [img for img in (answer_images or []) if img and img.strip()]
+    if answer_imgs:
+        answer_key = _extract_answer_key_cached(
+            answer_imgs, instruction, model, base_url, api_key, deadline
+        )
+
     # 把「文章正文」与「题目+选项」拆开：混在一起会让阅读模型去翻译题目、
     # 题目环节再靠 AI 重写题干（实测就是"题目与给的不一致、原文里混着选项"）。
     passage_text, quiz_text = _split_ocr_sections(source_text)
+
+    # 错位纠正：提字把答案表排在最前且漏打小标题时，答案序列会被当成"原文"。
+    if english_cloze.looks_like_answer_key(
+        passage_text, min_pairs=4
+    ) and not english_cloze.looks_like_answer_key(quiz_text, min_pairs=4):
+        passage_text, quiz_text = quiz_text, passage_text
+
+    if not answer_key:
+        # 答案表没走独立答案图时，从题目区/原文区兜底解析（答案卡通常就在【题目】区）
+        answer_key = english_cloze.parse_answer_key(quiz_text) or english_cloze.parse_answer_key(
+            passage_text
+        )
+
+    # 防呆第一道闸：两侧都只是答案序列 → 材料里根本没有题目原文，
+    # 照旧分析必然让模型把答案序列编成一道"题"（2026-10 实测），直接报错。
+    if english_cloze.looks_like_answer_key(passage_text) and english_cloze.looks_like_answer_key(
+        quiz_text
+    ):
+        raise _err()(
+            "只识别到答案序列（如 1.B 2.B…），未识别到题目原文；请补拍题目/原文图片后重新解析"
+        )
+
+    # 完形分支：本地拆题（每空一题+答案对齐），AI 只做翻译/词汇/逐题解析
+    if english_cloze.detect_cloze(passage_text):
+        return _analyze_cloze(
+            passage_text=passage_text,
+            quiz_text=quiz_text,
+            answer_key=answer_key,
+            standard_tags=standard_tags,
+            instruction=instruction,
+            remaining=_remaining,
+            issues=issues,
+        )
 
     # ① 阅读/翻译/句子拆解 + 是否英语（只看文章正文，不带题目与选项）
     reading = _svc()._chat_json(
@@ -521,7 +579,19 @@ def analyze_english(
     if instruction and instruction.strip():
         user_req += f"\n\n【要求】{instruction.strip()}"
 
+    # 防呆第二道闸：题目区只有答案序列 → 没有题干可拆，跳过清单与兜底出题
+    # （答案键已解析，交给完形分支用；普通阅读缺题目页时明说缺什么）。
+    quiz_is_key = english_cloze.looks_like_answer_key(quiz_text)
+    if quiz_is_key:
+        issues.append("题目与选项区只识别到答案序列，未识别到题干；请补拍题目页后重新解析")
+    elif answer_key:
+        # 有答案表（独立答案图解析出来的）：喂给清单步骤，按题号回填 correct_answer
+        key_lines = "\n".join(f"{no}. {letter}" for no, letter in sorted(answer_key.items()))
+        user_req += f"\n\n【答案表】\n{key_lines}"
+
     def _titles_task() -> list:
+        if quiz_is_key:
+            return []
         # 先列题目清单（小、稳），逐题解析放下一波并发
         try:
             titles = _svc()._chat_json(
@@ -537,7 +607,7 @@ def analyze_english(
                             "1. question 与 option_* 要**原样照抄**用户给的文字，禁止改写、翻译、润色或自行编题；\n"
                             "2. 用户给了几道题就输出几道，不要多也不要少；选项缺失就留空串；\n"
                             "3. 只列题目与答案，不要写解析；选择题 correct_answer 只能填单个字母；\n"
-                            "4. 用户没给答案时，correct_answer 留空串，**不要猜**。"
+                            "4. 用户给了【答案表】时，把对应题号的答案填进该题 correct_answer；没给答案时留空串，**不要猜**。"
                         ),
                     },
                     {"role": "user", "content": user_req},
@@ -557,7 +627,6 @@ def analyze_english(
     #    第二个任务要等第一个跑完才提交，实际完全串行（原实现即如此，与注释不符）。
     # submit_analysis = 有界排队版提交（排队超限直接报错，不让无界队列拖垮内存）
     # 步骤级降级：失败不再上抛报废整批，记进 issues 由结尾统一打 degraded 标。
-    issues: List[str] = []
     _submit = _svc().submit_analysis
     future_vocab = _submit(_vocab_task)
     future_titles = _submit(_titles_task)
@@ -565,13 +634,25 @@ def analyze_english(
     questions_items = future_titles.result()
     if not vocab:
         issues.append("生词短语提取失败")
-    if not questions_items:
+    if not questions_items and not quiz_is_key:
         issues.append("题目清单识别失败")
 
     # ③ 逐题完整分析：并发执行（单题输出小，不易漏逗号；结果按清单顺序归位）
-    todo = [q for q in questions_items if isinstance(q, dict) and q.get("question")]
+    # 题干疑似答案序列的"题"直接丢弃（末端防呆：宁可少一题，不收编造题干）
+    todo = [
+        q
+        for q in questions_items
+        if isinstance(q, dict)
+        and q.get("question")
+        and not english_cloze.is_answer_sequence_text(q.get("question"))
+    ]
+    dropped_stems = sum(
+        1 for q in questions_items if isinstance(q, dict) and q.get("question")
+    ) - len(todo)
+    if dropped_stems:
+        issues.append(f"{dropped_stems} 道题的题干疑似答案序列，已丢弃")
 
-    def _qa_task(q: dict) -> dict:
+    def _qa_task(q: dict, extra_note: str = "") -> dict:
         opts = " ".join(
             str(q.get(k) or "")
             for k in (
@@ -598,6 +679,7 @@ def analyze_english(
                             + "\n答案："
                             + str(q.get("correct_answer") or "")
                             + "\n\n请按 JSON 输出（仅这一题，含题干/选项/答案/解析/难度/标签）。"
+                            + extra_note
                         ),
                     },
                 ],
@@ -630,20 +712,26 @@ def analyze_english(
         # questions（第 2 题起），若无条件并入就会让第 2..N 题重复出两次。
         # 兜底也失败时不再抛异常报废整批：原文/翻译/句子/词汇已花掉调用拿到手，
         # 带伤返回（题目为空）比重试整条链省得多。
-        try:
-            qa = _svc()._chat_json(
-                [
-                    {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
-                    {"role": "user", "content": user_req},
-                ],
-                max_tokens=12000,
-                timeout=_remaining(),
-            )
-            nested = [q for q in (qa.get("questions") or []) if isinstance(q, dict)]
-            full_questions = [qa] + nested
-        except Exception:
-            full_questions = []
-            issues.append("整篇出题失败（仅返回原文与精读内容）")
+        # 题目区只有答案序列时**不跑兜底**——没有题干可抄，出题就是凭空编造。
+        if not quiz_is_key:
+            try:
+                qa = _svc()._chat_json(
+                    [
+                        {
+                            "role": "system",
+                            "content": _parse_english_questions_prompt(standard_tags),
+                        },
+                        {"role": "user", "content": user_req},
+                    ],
+                    max_tokens=12000,
+                    timeout=_remaining(),
+                )
+                nested = [q for q in (qa.get("questions") or []) if isinstance(q, dict)]
+                head = qa if not english_cloze.is_answer_sequence_text(qa.get("question")) else None
+                full_questions = ([head] if head else []) + nested
+            except Exception:
+                full_questions = []
+                issues.append("整篇出题失败（仅返回原文与精读内容）")
 
     qa = full_questions[0] if full_questions else {}
     # 顶层保留第一题，其余题目进 english_questions。
@@ -658,9 +746,226 @@ def analyze_english(
     qa["sentences"] = reading.get("sentences", [])
     qa["phrases"] = vocab.get("phrases", [])
     qa["words"] = vocab.get("words", [])
-    result = normalize_english_parsed(qa, fallback_text=source_text)
+    # 题目环节失败时不再拿整页提字文本当题干（宁可留空，也不能让表单里
+    # 躺着"1. B 2. B…"这种伪题干）
+    fallback = "" if quiz_is_key else source_text
+    result = normalize_english_parsed(qa, fallback_text=fallback)
     if issues:
         # normalize_parsed 会丢未知键，降级标记必须在规整之后补上
+        result["degraded"] = True
+        result["degraded_steps"] = issues
+    return result
+
+
+_ANSWER_KEY_INSTRUCTION = (
+    "这是答案表/答案卡图片：请按题号逐行原样列出全部答案（如 1. B 2. B …），"
+    "不要遗漏、不要合并、不要翻译、不要输出其它内容。"
+)
+
+
+def _extract_answer_key_cached(
+    answer_imgs: List[str],
+    instruction: str,
+    model: str | None,
+    base_url: str | None,
+    api_key: str | None,
+    deadline: float,
+) -> dict:
+    """答案图提字（角色 prompt）→ 本地解析答案键。带提字缓存，失败返回空 dict。"""
+    # 指令加固定前缀与原文提字缓存区分开（换图集重试必须重烧）
+    stage_key = _stage_cache_key(answer_imgs, "ANSWERKEY:" + str(instruction or ""))
+    text = _read_stage_cache(stage_key)
+    if not text.strip():
+        left = int(deadline - time.monotonic())
+        if left <= 10:
+            return {}
+        try:
+            text = (
+                _vision_extract_text(
+                    answer_imgs,
+                    _ANSWER_KEY_INSTRUCTION,
+                    max(10, min(left - 10, 120)),
+                    model=model,
+                    base_url=base_url,
+                    api_key=api_key,
+                )
+                or ""
+            )
+        except Exception as exc:
+            logger.warning("答案图提字失败，正确答案将留空：%s", exc)
+            text = ""
+        if text.strip():
+            _write_stage_cache(stage_key, text)
+    return english_cloze.parse_answer_key(text)
+
+
+_CLOZE_READING_NOTE = (
+    "\n\n（注：文中 __N__ 是完形填空的空位编号标记，翻译与逐句拆分时必须原样保留这些标记，"
+    "不要把空位替换成单词或删掉。）"
+)
+
+_CLOZE_QA_NOTE = (
+    "\n\n这是完形填空的某一空。解析仍按【定位/来源/思路/总结】四段：【定位】指明空位所在句"
+    "（题干即原句）并引用前后文关键词；【思路】结合空格前后的语义与语法线索说明该答案为何成立"
+    "（选项为空时，侧重讲该空的语境逻辑与词性要求）。**严禁编造原文里没有的句子或图中未提供的选项**。"
+)
+
+
+def _analyze_cloze(
+    passage_text: str,
+    quiz_text: str,
+    answer_key: dict,
+    standard_tags: List[str] | None,
+    instruction: str,
+    remaining,
+    issues: List[str],
+) -> dict:
+    """完形填空专用管线：空位/答案/选项本地解析（零 AI，不编造），AI 只做精读与解析。
+
+    本地保证：每空一题、题干=空位所在句、答案=答案表对应字母。
+    AI 负责：全文翻译、逐句拆解、生词短语、逐题解析（内容不减约定照常满足）。
+    """
+    questions = english_cloze.build_cloze_questions(passage_text, answer_key)
+    if not questions:
+        # 标题判了完形但空位没拆出来（提字丢了标记）：按缺料降级，不出假题
+        issues.append("完形原文未拆出空位（提字可能丢失空位标记），请重新解析或补拍更清晰的原文图")
+        return _cloze_result(
+            [], passage_text, None, {}, instruction, standard_tags, remaining, issues
+        )
+
+    matched = sum(1 for q in questions if q.get("correct_answer"))
+    if not answer_key:
+        issues.append("答案表未识别到：正确答案已留空，可补拍答案表图后重新解析")
+    elif matched < len(questions):
+        issues.append(f"答案表只对上 {matched}/{len(questions)} 空的答案，其余留空")
+
+    # 逐空选项：本地解析（题目区优先，其次原文区——提字没打小标题时选项混在原文里）
+    options = english_cloze.parse_cloze_options(quiz_text) or english_cloze.parse_cloze_options(
+        passage_text
+    )
+    english_cloze.attach_options(questions, options)
+
+    # ① 阅读/翻译/句子拆解（带保留空位标记的注记）
+    reading = _svc()._chat_json(
+        [
+            {"role": "system", "content": _parse_english_reading_prompt(standard_tags)},
+            {"role": "user", "content": passage_text + _CLOZE_READING_NOTE},
+        ],
+        max_tokens=8000,
+        timeout=remaining(),
+    )
+    if not reading.get("is_english"):
+        # 完形检测误报（极少数）：退回标准分析，不让用户拿到空结果
+        return _svc()._analyze_standard_content(
+            [], passage_text, standard_tags, instruction, timeout=remaining()
+        )
+
+    # ② 词汇 ‖ ③ 逐题解析：并发（词汇与逐题互不依赖）
+    def _vocab_task() -> dict:
+        try:
+            return _svc()._chat_json(
+                [
+                    {"role": "system", "content": _parse_english_vocab_prompt()},
+                    {"role": "user", "content": passage_text},
+                ],
+                max_tokens=20000,
+                timeout=remaining(),
+            )
+        except Exception:
+            return {}
+
+    _submit = _svc().submit_analysis
+    future_vocab = _submit(_vocab_task)
+    qa_futures = [_submit(_cloze_qa, q, standard_tags, remaining) for q in questions]
+    vocab = future_vocab.result()
+    if not vocab:
+        issues.append("生词短语提取失败")
+
+    # 收集逐空解析：**题干/选项/答案以本地解析为准**（这是"不编造"的根），
+    # AI 结果只贡献解析、来源、难度、标签；失败的那一空退回本地题干+答案兜底。
+    full_questions: List[dict] = []
+    failed_qa = 0
+    for q, f in zip(questions, qa_futures, strict=True):
+        res = f.result()
+        if not isinstance(res, dict):
+            res = {}
+        if res.get("_qa_failed"):
+            failed_qa += 1
+            full_questions.append(dict(q))
+            continue
+        merged = {k: v for k, v in res.items() if k != "_qa_failed"}
+        merged["question"] = q["question"]
+        for letter in "ABCDEFG":
+            merged["option_" + letter.lower()] = q["option_" + letter.lower()]
+        merged["correct_answer"] = q["correct_answer"]
+        merged["question_type"] = "choice"
+        full_questions.append(merged)
+    if failed_qa:
+        issues.append(f"{failed_qa} 空解析缺失（已退回题干与答案）")
+
+    return _cloze_result(
+        full_questions,
+        passage_text,
+        reading,
+        vocab,
+        instruction,
+        standard_tags,
+        remaining,
+        issues,
+    )
+
+
+def _cloze_qa(q: dict, standard_tags: List[str] | None, remaining) -> dict:
+    """单空解析：题干/选项/答案是本地解析的既定事实，AI 只写解析。失败保留题干兜底。"""
+    opts = " ".join(str(q.get(k) or "") for k in ("option_a", "option_b", "option_c", "option_d"))
+    try:
+        return _svc()._chat_json(
+            [
+                {"role": "system", "content": _parse_english_questions_prompt(standard_tags)},
+                {
+                    "role": "user",
+                    "content": (
+                        "题目："
+                        + str(q.get("question"))
+                        + "\n选项："
+                        + opts
+                        + "\n答案："
+                        + str(q.get("correct_answer") or "(答案表中未提供，留空)")
+                        + "\n\n请按 JSON 输出（仅这一题，含题干/选项/答案/解析/难度/标签）。"
+                        + _CLOZE_QA_NOTE
+                    ),
+                },
+            ],
+            max_tokens=6000,
+            timeout=remaining(),
+        )
+    except Exception:
+        return {**q, "_qa_failed": True}
+
+
+def _cloze_result(
+    questions,
+    passage_text,
+    reading,
+    vocab,
+    instruction,
+    standard_tags,
+    remaining,
+    issues,
+) -> dict:
+    """组装完形结果：顶层=第 1 空，其余进 english_questions，二级科目提示=完形填空。"""
+    qa = questions[0] if questions else {}
+    qa["questions"] = questions[1:] if questions else []
+    qa["is_english"] = True
+    qa["subject_hint"] = "英语"
+    qa["sub_subject_hint"] = "完形填空"
+    qa["passage"] = passage_text
+    qa["passage_translation"] = (reading or {}).get("passage_translation", "")
+    qa["sentences"] = (reading or {}).get("sentences", [])
+    qa["phrases"] = (vocab or {}).get("phrases", [])
+    qa["words"] = (vocab or {}).get("words", [])
+    result = normalize_english_parsed(qa, fallback_text="")
+    if issues:
         result["degraded"] = True
         result["degraded_steps"] = issues
     return result
