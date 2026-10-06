@@ -525,7 +525,7 @@ def analyze_english(
             "只识别到答案序列（如 1.B 2.B…），未识别到题目原文；请补拍题目/原文图片后重新解析"
         )
 
-    # 完形分支：本地拆题（每空一题+答案对齐），AI 只做翻译/词汇/逐题解析
+    # 完形/七选五分支：本地拆题（每空一题+答案对齐+选项原样），AI 只做翻译/词汇/逐题解析
     if english_cloze.detect_cloze(passage_text):
         return _analyze_cloze(
             passage_text=passage_text,
@@ -535,6 +535,19 @@ def analyze_english(
             instruction=instruction,
             remaining=_remaining,
             issues=issues,
+            mode="cloze",
+        )
+    if english_cloze.detect_gapped(passage_text):
+        # 七选五同样本地拆题——实测 AI 会把一整道七选五压成 1 道题、选项截断
+        return _analyze_cloze(
+            passage_text=passage_text,
+            quiz_text=quiz_text,
+            answer_key=answer_key,
+            standard_tags=standard_tags,
+            instruction=instruction,
+            remaining=_remaining,
+            issues=issues,
+            mode="gapped",
         )
 
     # ① 阅读/翻译/句子拆解 + 是否英语（只看文章正文，不带题目与选项）
@@ -810,6 +823,13 @@ _CLOZE_QA_NOTE = (
     "（选项为空时，侧重讲该空的语境逻辑与词性要求）。**严禁编造原文里没有的句子或图中未提供的选项**。"
 )
 
+_GAPPED_QA_NOTE = (
+    "\n\n这是七选五（新题型）的某一空：题干是该空的上下文句，正确选项是 A-G 七个完整句子之一。"
+    "解析按【定位/来源/思路/总结】四段：【定位】指明该空所在段落并概括该段主旨；"
+    "【思路】说明空格处需要什么语义/衔接功能的句子、正确选项为何适配、主题相近的干扰项如何排除"
+    "（引用选项可用字母简称）。**选项必须原样照抄用户给的句子，严禁改写、翻译或截断**。"
+)
+
 
 def _analyze_cloze(
     passage_text: str,
@@ -819,19 +839,45 @@ def _analyze_cloze(
     instruction: str,
     remaining,
     issues: List[str],
+    mode: str = "cloze",
 ) -> dict:
-    """完形填空专用管线：空位/答案/选项本地解析（零 AI，不编造），AI 只做精读与解析。
+    """完形/七选五专用管线：空位/答案/选项本地解析（零 AI，不编造），AI 只做精读与解析。
 
-    本地保证：每空一题、题干=空位所在句、答案=答案表对应字母。
+    mode="cloze"：完形（每空一题，逐空四选一）；mode="gapped"：七选五（A-G 七个
+    完整句子选项共享，题干含前后句上下文，二级科目=新题型）。
+    本地保证：每空一题、题干/选项/答案与原文和答案表逐字一致（AI 曾把七选五
+    整道压成 1 题并截断选项，所以这三样绝不进 AI）。
     AI 负责：全文翻译、逐句拆解、生词短语、逐题解析（内容不减约定照常满足）。
     """
-    questions = english_cloze.build_cloze_questions(passage_text, answer_key)
-    if not questions:
-        # 标题判了完形但空位没拆出来（提字丢了标记）：按缺料降级，不出假题
-        issues.append("完形原文未拆出空位（提字可能丢失空位标记），请重新解析或补拍更清晰的原文图")
-        return _cloze_result(
-            [], passage_text, None, {}, instruction, standard_tags, remaining, issues
+    if mode == "gapped":
+        # 共享选项区先解析（失败按缺料降级，选项留空不许编）
+        options = english_cloze.parse_sentence_options(quiz_text) or (
+            english_cloze.parse_sentence_options(passage_text)
         )
+        questions = english_cloze.build_gapped_questions(passage_text, answer_key, options)
+        sub_hint = "新题型"
+        qa_note = _GAPPED_QA_NOTE
+        if not questions:
+            issues.append(
+                "七选五原文未拆出空位（提字可能丢失空位编号），请重新解析或补拍更清晰的原文图"
+            )
+            return _cloze_result(
+                [], passage_text, None, {}, instruction, standard_tags, remaining, issues, sub_hint
+            )
+        if not options:
+            issues.append("选项区未解析到 A-G 完整句子（请确认选项页已拍摄），选项已留空")
+    else:
+        questions = english_cloze.build_cloze_questions(passage_text, answer_key)
+        sub_hint = "完形填空"
+        qa_note = _CLOZE_QA_NOTE
+        if not questions:
+            # 标题判了完形但空位没拆出来（提字丢了标记）：按缺料降级，不出假题
+            issues.append(
+                "完形原文未拆出空位（提字可能丢失空位标记），请重新解析或补拍更清晰的原文图"
+            )
+            return _cloze_result(
+                [], passage_text, None, {}, instruction, standard_tags, remaining, issues, sub_hint
+            )
 
     matched = sum(1 for q in questions if q.get("correct_answer"))
     if not answer_key:
@@ -839,11 +885,12 @@ def _analyze_cloze(
     elif matched < len(questions):
         issues.append(f"答案表只对上 {matched}/{len(questions)} 空的答案，其余留空")
 
-    # 逐空选项：本地解析（题目区优先，其次原文区——提字没打小标题时选项混在原文里）
-    options = english_cloze.parse_cloze_options(quiz_text) or english_cloze.parse_cloze_options(
-        passage_text
-    )
-    english_cloze.attach_options(questions, options)
+    if mode == "cloze":
+        # 逐空选项：本地解析（题目区优先，其次原文区——提字没打小标题时选项混在原文里）
+        options = english_cloze.parse_cloze_options(quiz_text) or (
+            english_cloze.parse_cloze_options(passage_text)
+        )
+        english_cloze.attach_options(questions, options)
 
     # ① 阅读/翻译/句子拆解（带保留空位标记的注记）
     reading = _svc()._chat_json(
@@ -876,7 +923,7 @@ def _analyze_cloze(
 
     _submit = _svc().submit_analysis
     future_vocab = _submit(_vocab_task)
-    qa_futures = [_submit(_cloze_qa, q, standard_tags, remaining) for q in questions]
+    qa_futures = [_submit(_cloze_qa, q, standard_tags, remaining, qa_note) for q in questions]
     vocab = future_vocab.result()
     if not vocab:
         issues.append("生词短语提取失败")
@@ -912,12 +959,24 @@ def _analyze_cloze(
         standard_tags,
         remaining,
         issues,
+        sub_hint,
     )
 
 
-def _cloze_qa(q: dict, standard_tags: List[str] | None, remaining) -> dict:
+def _cloze_qa(q: dict, standard_tags: List[str] | None, remaining, qa_note: str = "") -> dict:
     """单空解析：题干/选项/答案是本地解析的既定事实，AI 只写解析。失败保留题干兜底。"""
-    opts = " ".join(str(q.get(k) or "") for k in ("option_a", "option_b", "option_c", "option_d"))
+    opts = " ".join(
+        str(q.get(k) or "")
+        for k in (
+            "option_a",
+            "option_b",
+            "option_c",
+            "option_d",
+            "option_e",
+            "option_f",
+            "option_g",
+        )
+    )
     try:
         return _svc()._chat_json(
             [
@@ -932,7 +991,7 @@ def _cloze_qa(q: dict, standard_tags: List[str] | None, remaining) -> dict:
                         + "\n答案："
                         + str(q.get("correct_answer") or "(答案表中未提供，留空)")
                         + "\n\n请按 JSON 输出（仅这一题，含题干/选项/答案/解析/难度/标签）。"
-                        + _CLOZE_QA_NOTE
+                        + (qa_note or _CLOZE_QA_NOTE)
                     ),
                 },
             ],
@@ -952,13 +1011,14 @@ def _cloze_result(
     standard_tags,
     remaining,
     issues,
+    sub_hint: str = "完形填空",
 ) -> dict:
-    """组装完形结果：顶层=第 1 空，其余进 english_questions，二级科目提示=完形填空。"""
+    """组装完形/七选五结果：顶层=第 1 空，其余进 english_questions，二级科目按题型提示。"""
     qa = questions[0] if questions else {}
     qa["questions"] = questions[1:] if questions else []
     qa["is_english"] = True
     qa["subject_hint"] = "英语"
-    qa["sub_subject_hint"] = "完形填空"
+    qa["sub_subject_hint"] = sub_hint
     qa["passage"] = passage_text
     qa["passage_translation"] = (reading or {}).get("passage_translation", "")
     qa["sentences"] = (reading or {}).get("sentences", [])

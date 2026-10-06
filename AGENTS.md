@@ -226,21 +226,26 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
 7. **表格 / 图**：`RichText` 支持 Markdown 表格 + 十六进制等宽 `hex-dump`；AI 只会识别图不会重绘，正确表格 / 拓扑图看**原图**。
 8. **生词本**：`vocab_items` 有 `kind`（word / phrase）+「全部 / 单词 / 短语」筛选 +「词语」标签；点词查义 `/api/ai/sense`（**结果按词缓存进 `app_meta`**，key=`sense_<小写词>`，TTL 90 天 + 500 条上限双清理，命中响应带 `cached:true`，查不到释义的不缓存）；导入 `/vocab/import-english`（去重）。**点词弹窗有「加入生词本」**（AI 没提取到的词也能加，查义失败时释义留空），readonly 详情里同样可用；**加入成功后原文里该词要立刻变红**（`EnglishAnalysisPanel` 的 `addedWords` 本地集合，别只入库不动视图——用户实测反馈过"加了还是浅色"）。**AI 提取的重点短语在原文里整体成一个可点 token**（`tokenRe` 正则长短语优先、词间 `\s+`，短语直接用已提取释义**不调 AI**，入生词本 kind=phrase）；**划词查短语**（2026-09-26，用户反馈 turns out 只能逐词点）：在原文里圈选 2~8 个英文词 → 选区上方浮出「查短语」按钮 → 整段走 `/ai/sense` 查整体释义（`normalizePhraseSelection` 剔除 `__6__` 空位与非字母；单词划选不出按钮，点词已有入口），入生词本 kind=phrase。`/api/ai/sense` 的 `word` 参数 max_length=120、`_WORD_PROMPT` 明确"多词短语要解释整体含义"；缓存 key 对短语同样生效。**浮钮必须 `Teleport to="body"` + z-index 1010**：详情弹窗 `.modal-panel` 的 backdrop-filter 会给 `position:fixed` 后代当包含块，不传出去就困在弹窗里被滚动区裁掉（实测"浮钮看不见"的真因）。`tests/englishPanelWords.test.js` 钉住以上全部。
    **完形填空 / 七选五录入**：AI 提示词（`ai_english` 捕获 + `_parse_english_questions_prompt`）已写明拆题规则——完形**每空一题**（题干=所在句、空位 `____`）、七选五 A-G 七个整句选项填 `option_a~g`；`mistakes` 表已有 `option_e/f/g` 列（迁移同 `starred` 模式），前端 ChoiceAnswer/DetailMeta/PrintView/复习页/模考卷面都只在 E-G **非空时渲染**。**真题库 2026-09-26 起同样支持 A-G**（`exam_questions` 有 option_e/f/g；拆题提示词对英语七选五输出七选项；答案匹配/人工改答/AI 兜底均 A-G）——七选五现在能进整卷模考与转错题。
-   **完形录入本地拆题（2026-10 重构，实测答案卡被编成"一道题"后的防呆体系）**：`app/services/english_cloze.py`
-   是纯函数层（答案键 `parse_answer_key`、完形检测 `detect_cloze`、按空拆题 `build_cloze_questions`、
-   逐空选项 `parse_cloze_options`）——**答案序列/空位/题干与答案的对齐一律本地解析，绝不进 AI**；
-   AI 只做翻译/词汇/逐空解析，且 AI 返回的题干/选项/答案**以本地解析为准**（只采信其解析/来源/标签）。
+   **完形/七选五录入本地拆题（2026-10 重构，实测把答案卡编成"一道题"后的防呆体系）**：`app/services/english_cloze.py`
+   是纯函数层（答案键 `parse_answer_key`、检测 `detect_cloze`/`detect_gapped`、按空拆题
+   `build_cloze_questions`/`build_gapped_questions`、选项解析 `parse_cloze_options`/`parse_sentence_options`）——
+   **答案序列/空位/题干/选项/答案的对齐一律本地解析，绝不进 AI**；AI 只做翻译/词汇/逐空解析，
+   且 AI 返回的题干/选项/答案**以本地解析为准**（只采信其解析/来源/标签）。
    `analyze_english` 主编排四道闸，顺序不许动：① 答案键解析（独立答案图 `answer_images` 参数=前端
    「答案表」粘贴目标，或题目区文本兜底）；② 提字把答案表排在原文前且漏打小标题 → 自动换位；
    ③ 材料里**只有答案序列** → 直接 `AiRequestError("只识别到答案序列…")`，绝不让模型把答案编成题干；
    ④ 逐题题干疑似答案序列（`is_answer_sequence_text`）→ 丢弃并记 degraded_steps；题目区只有答案键时
-   **跳过兜底出题**（没有题干可抄，兜底=凭空编造）。完形结果带 `sub_subject_hint: "完形填空"`
-   （`normalize_english_parsed` 单独保留该键），`_auto_subject_ids(conn, hint, sub_hint)` 优先按它映射
-   二级科目——英语不再一律"阅读理解"。阈值约定：完形检测=标题特征或 ≥8 个编号空位（七选五只有 5 空，
-   必须留在原 AI 拆题管线）；答案键 ≥3 对才算数。前端 `EnglishAnalysisPanel` 把 `__N__` 空位渲染成
-   可点击 token（点击跳 `#ep-q-N` 对应小题），`passage_text` 里的空位标记**不许在展示层丢失**；
-   CaptureView 缩略图带角色角标 + 「重新解析」按钮。`tests/test_ai_cloze.py`（后端 23 条）与
-   `tests/englishPanelBlanks.test.js` + `e2e/capture.spec.js` 答案表用例（前端）钉住全部约定。
+   **跳过兜底出题**（没有题干可抄，兜底=凭空编造）。
+   **分流阈值**：完形=标题特征或 ≥8 个编号空位（`mode="cloze"`，`sub_subject_hint=完形填空`）；
+   七选五=3-7 个编号空位（`mode="gapped"`，`sub_subject_hint=新题型`）——**七选五也曾留在 AI 拆题
+   管线，实测被压成 1 道题、选项截断（"Don't fear responsibility for your l"），2026-10-06 起同样
+   本地拆题**：每空一题、题干=所在句+前后句、A-G 选项由 `parse_sentence_options` 原样照抄（字母+
+   分隔符才认，"A new study…"正文句不吃），题号上限 `MAX_BLANK_NO=60`（英语一 41-45）。答案键 ≥3 对
+   才算数。`_auto_subject_ids(conn, hint, sub_hint)` 优先按 sub_subject_hint 映射二级科目——英语
+   不再一律"阅读理解"。前端 `EnglishAnalysisPanel` 把 `__N__` 空位渲染成可点击 token（点击跳
+   `#ep-q-N` 对应小题），`passage_text` 里的空位标记**不许在展示层丢失**；CaptureView 缩略图带
+   角色角标 + 「重新解析」按钮。`tests/test_ai_cloze.py`（后端 34 条）与 `tests/englishPanelBlanks.test.js`
+   + `e2e/capture.spec.js` 答案表用例（前端）钉住全部约定。
 9. **多图 = 一次分析**：`/ai/knowledge-from-image` 接受 `{images:[...]}`（≥2 张按 3 张一批、按序提文字后合并），**只产出一条知识点草稿**——不要把「粘一张分析一张」改回来。`AiOcrRequest` 的 `image_base64` 与 `images` 至少给一个。
 10. **卡片点击**：知识点/公式卡片必须**整卡可点**打开详情。做法是给卡片本体加 `role="button" tabindex="0"` + `@click`（键盘 Enter/Space 同效），卡片内的显式控件（操作按钮、关联标签）各自加 `@click.stop`，装饰元素（色脊/水印）加 `pointer-events:none`。
    **不要用「铺满卡片的透明点击层（.k-hit/.f-hit）」**：一旦卡内子元素为了定位而带上 `position:relative; z-index`，它们就会盖住点击层，导致「只有某条窄缝可点、点标题/摘要都没反应」（已翻车过一次，用户实测点不动）。

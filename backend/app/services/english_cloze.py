@@ -1,9 +1,10 @@
-"""完形填空本地结构化：答案键解析、完形检测、按空拆题、选项解析。
+"""完形/七选五本地结构化：答案键解析、题型检测、按空拆题、选项解析。
 
 为什么本地做（2026-10 完形录入翻车的直接教训）：答案表（`1. B 2. B 3. A …`）
 与空位编号是纯格式化文本，正则即可 100% 稳定解析；交给 AI 反而会把答案序列
-编成一道"题"的题干（实测生成"1. B 2. B 3. A…"题干的垃圾错题）。所以：
-- 答案键、空位、每空的题干与答案 —— 本地解析（保证不编造）；
+编成一道"题"的题干（实测生成"1. B 2. B 3. A…"题干的垃圾错题）。七选五同理
+（实测 AI 把一整道七选五出成 1 道题、选项还被截断）。所以：
+- 答案键、空位、每空的题干/选项与答案 —— 本地解析（保证不编造、不截断）；
 - 逐句翻译、词汇短语、逐题解析 —— 仍走 AI（内容不减）。
 
 本模块全部为纯函数，不发任何网络请求、不依赖 DB，可独立单测。
@@ -33,9 +34,11 @@ _BLANK_PATTERNS = tuple(
 )
 _PLAIN_BLANK_RE = re.compile(r"_{3,}")  # 无编号空位 ____
 
-MIN_NUMBERED_BLANKS = 8  # ≥8 个编号空位直接判完形（七选五只有 5 空，不会误入）
+MIN_NUMBERED_BLANKS = 8  # ≥8 个编号空位直接判完形（七选五只有 5 空，走 detect_gapped）
 MIN_PLAIN_BLANKS = 12  # 提字丢了编号时，靠无编号空位密度兜底
-MAX_BLANK_NO = 40  # 完形题号上限（英语一/二均为 1-20）
+MAX_BLANK_NO = 60  # 题号上限（完形 1-20；七选五英语二 36-40、英语一 41-45）
+GAPPED_MIN_BLANKS = 3  # 七选五编号空位下限（标准 5 空，容错 3-7）
+GAPPED_MAX_BLANKS = 7  # 七选五编号空位上限（≥8 是完形）
 
 
 def _find_pairs(text: str) -> List[Tuple[int, int, int, str]]:
@@ -92,7 +95,7 @@ def is_answer_sequence_text(text: str) -> bool:
 def detect_cloze(text: str) -> bool:
     """完形篇章检测：标题特征、或编号空位足够多、或无编号空位密度高。
 
-    阈值刻意高：七选五只有 5 个编号空位（走原有 AI 拆题管线），阅读原文
+    阈值刻意高：3-7 个编号空位是七选五（detect_gapped），阅读原文
     没有空位 —— 只有真正的完形（1-20 空）才进本地拆题。
     """
     raw = str(text or "")
@@ -105,6 +108,18 @@ def detect_cloze(text: str) -> bool:
     if len(numbered) >= 5 and plain >= len(numbered):
         return True
     return plain >= MIN_PLAIN_BLANKS
+
+
+def detect_gapped(text: str) -> bool:
+    """七选五检测：正文含 3-7 个编号空位（≥8 归完形，阅读原文没有空位）。
+
+    只认**编号**空位：七选五的空位编号（36-40 / 41-45）是与答案键对齐的唯一锚点。
+    """
+    raw = str(text or "")
+    if _CLOZE_TITLE_RE.search(raw[:600]):
+        return False  # 标题判完形，别按七选五拆
+    numbered = find_numbered_blanks(raw)
+    return GAPPED_MIN_BLANKS <= len(numbered) <= GAPPED_MAX_BLANKS
 
 
 def find_numbered_blanks(text: str) -> List[dict]:
@@ -246,4 +261,83 @@ def attach_options(questions: List[dict], options: Dict[int, Dict[str, str]]) ->
             continue
         for letter in "ABCDEFG":
             q["option_" + letter.lower()] = opts.get(letter, "")
+    return questions
+
+
+# ---- 七选五（新题型）：共享 A-G 七个完整句子选项 ----
+
+# 选项行：`A. You are not alone` / `[A] You are not alone` / `(A) You are not alone`。
+# 字母后必须有分隔符（闭括号或句读），防止把以 "A "/"B " 开头的普通正文句子吃进来。
+_SENT_OPTION_LINE_RE = re.compile(
+    r"^\s*(?:[\[（(]\s*)?([A-Ga-g])\s*(?:[\]）)]|[.、．:：)）])\s*(.+)$"
+)
+
+
+def parse_sentence_options(quiz_text: str) -> Dict[str, str]:
+    """解析七选五的共享选项区 {字母: 完整句子}（选项区通常 5-7 行，每行一个字母）。
+
+    句子必须**原样照抄**（完整不截断）——AI 逐题转写实测会把长选项截断
+    （"Don't fear responsibility for your l"），所以选项走本地解析。
+    文本至少要含两个连续字母（排除 "A. 2023" 这类页码噪声）；解析不足
+    3 个选项返回空 dict（调用方按缺料降级，不硬凑）。
+    """
+    opts: Dict[str, str] = {}
+    for line in str(quiz_text or "").split("\n"):
+        m = _SENT_OPTION_LINE_RE.match(line.strip())
+        if not m:
+            continue
+        text = re.sub(r"\s+", " ", m.group(2)).strip()
+        if not re.search(r"[A-Za-z]{2}", text):
+            continue
+        letter = m.group(1).upper()
+        if letter not in opts:
+            opts[letter] = text
+    return opts if len(opts) >= 3 else {}
+
+
+def build_gapped_questions(
+    passage_text: str,
+    answer_key: Dict[int, str],
+    options: Dict[str, str],
+) -> List[dict]:
+    """按空拆七选五：每空一道题，A-G 七个完整句子选项原样共享。
+
+    题干 = 该空所在句 + 前后各一句（上下文定位，与 AGENTS 拆题规则一致），
+    目标空写成 ____，其余空保留原编号标记。答案按空位编号对答案键
+    （英语二 36-40 / 英语一 41-45 都直接命中）。
+    """
+    raw = str(passage_text or "")
+    blanks = find_numbered_blanks(raw)
+    if not (GAPPED_MIN_BLANKS <= len(blanks) <= GAPPED_MAX_BLANKS):
+        return []
+    spans = _sentence_spans(raw)
+    questions: List[dict] = []
+    for idx, b in enumerate(blanks):
+        cur_i = next(
+            (i for i, s in enumerate(spans) if s[0] <= b["start"] and b["end"] <= s[1]),
+            None,
+        )
+        if cur_i is None:
+            # 空位落在切句盲区（整段无句末标点）：只取空位前后各 60 字符
+            window = (max(0, b["start"] - 60), min(len(raw), b["end"] + 60))
+        else:
+            # 题干 = 该空所在句 + 前后各一句（AGENTS 七选五拆题规则）
+            lo = cur_i - 1 if cur_i > 0 else cur_i
+            hi = cur_i + 2 if cur_i + 1 < len(spans) else cur_i + 1
+            window = (spans[lo][0], spans[hi - 1][1])
+        stem = raw[window[0] : window[1]]
+        rel = b["start"] - window[0]
+        stem = stem[:rel] + "____" + stem[rel + (b["end"] - b["start"]) :]
+        stem = re.sub(r"\s*\n\s*", " ", stem).strip()
+        # 空位编号直接对答案键；键写成 1-5 紧凑序号时按出现顺序兜底
+        answer = answer_key.get(b["no"]) or answer_key.get(idx + 1, "")
+        q = {
+            "question": stem,
+            "question_type": "choice",
+            "correct_answer": answer or "",
+            "difficulty": 3,
+        }
+        for letter in "ABCDEFG":
+            q["option_" + letter.lower()] = options.get(letter, "")
+        questions.append(q)
     return questions

@@ -1,11 +1,15 @@
-"""完形填空录入重构的回归（2026-10）。
+"""完形/七选五录入重构的回归（2026-10）。
 
-实测翻车：录 2016 完形时主图=答案卡、参考图=原文，AI 把答案序列编成了一道
+实测翻车一：录 2016 完形时主图=答案卡、参考图=原文，AI 把答案序列编成了一道
 "题"（题干就是 "1. B 2. B 3. A…"），二级科目还错标阅读理解。重构后的约定：
 - 答案表/空位/每空题干与答案 —— 本地正则解析（english_cloze），不进 AI；
 - 材料里只有答案序列时直接报错，绝不让模型凭空编题；
 - 完形检测结果带 sub_subject_hint=完形填空，二级科目不再错标阅读理解；
 - 答案图（answer_images 角色）单独提字后本地解析成答案键。
+
+实测翻车二：七选五被 AI 压成 1 道题（整道大题只有 1 个答案可选，且选项被
+截断成 "Don't fear responsibility for your l"）。约定：七选五同样本地按空
+拆成 5 道独立小题，A-G 选项原样照抄（本地解析），二级科目=新题型。
 """
 
 import tempfile
@@ -39,6 +43,25 @@ OCR_CLOZE = (
     + "\n\n【题目】\n"
     + "\n".join(f"{i}. {l}" for i, l in enumerate("BBADCBADCA", 1))
 )
+
+GAPPED_PASSAGE = (
+    "Fear is a natural emotion, but __41__. People often fear things that never happen. "
+    "__42__ Every setback teaches you something new. "
+    "__43__ Others have faced the same struggles and made it through. "
+    "__44__ Dwelling on the past changes nothing. "
+    "__45__ A thankful mindset makes hard days lighter."
+)
+GAPPED_QUIZ = (
+    "A. You are not alone\n"
+    "B. Experience helps you grow\n"
+    "C. Pave your own unique path\n"
+    "D. Most of your fears are unreal\n"
+    "E. Think about the present moment\n"
+    "F. Don't fear responsibility for your life\n"
+    "G. There are many things to be grateful for"
+)
+GAPPED_KEY = "41. D 42. F 43. A 44. C 45. B"
+OCR_GAPPED = "【原文】\n" + GAPPED_PASSAGE + "\n\n【题目】\n" + GAPPED_QUIZ + "\n" + GAPPED_KEY
 
 READING = {
     "is_english": True,
@@ -313,6 +336,123 @@ class TestEnglishPipelineCloze(unittest.TestCase):
         self.assertEqual(result["english_questions"], [])
 
 
+class TestSentenceOptions(unittest.TestCase):
+    """七选五共享选项区的本地解析（AI 转写实测会截断长选项，选项必须本地照抄）。"""
+
+    def test_all_line_formats(self):
+        quiz = "A. You are not alone\n[B] Experience helps you grow\n(C) Pave your own path"
+        opts = english_cloze.parse_sentence_options(quiz)
+        self.assertEqual(opts["A"], "You are not alone")
+        self.assertEqual(opts["B"], "Experience helps you grow")
+        self.assertEqual(opts["C"], "Pave your own path")
+
+    def test_plain_sentence_starting_with_letter_not_eaten(self):
+        # 正文句以 "A "/"B " 开头没有分隔符，不能被当成选项
+        quiz = "A new study suggests that birds fly.\nB results came in late."
+        self.assertEqual(english_cloze.parse_sentence_options(quiz), {})
+
+    def test_noise_and_few_options_rejected(self):
+        # 页码噪声不吃；不足 3 个选项返回空
+        quiz = "A. 2023\nB. 41\nC. 42"
+        self.assertEqual(english_cloze.parse_sentence_options(quiz), {})
+        self.assertEqual(english_cloze.parse_sentence_options("A. Only one line here"), {})
+
+
+class TestGappedDetection(unittest.TestCase):
+    def test_five_numbered_blanks_detected(self):
+        self.assertTrue(english_cloze.detect_gapped(GAPPED_PASSAGE))
+
+    def test_reading_passage_rejected(self):
+        self.assertFalse(
+            english_cloze.detect_gapped("Text 2\nBiologists estimate birds fly south.")
+        )
+
+    def test_cloze_not_hijacked_by_gapped(self):
+        cloze_body = " ".join(f"__{i}__" for i in range(1, 11))
+        self.assertFalse(english_cloze.detect_gapped(cloze_body))
+        self.assertTrue(english_cloze.detect_cloze(cloze_body))
+
+    def test_answer_key_supports_41_45(self):
+        self.assertEqual(
+            english_cloze.parse_answer_key(GAPPED_KEY),
+            {41: "D", 42: "F", 43: "A", 44: "C", 45: "B"},
+        )
+
+
+class TestBuildGappedQuestions(unittest.TestCase):
+    def setUp(self):
+        self.opts = english_cloze.parse_sentence_options(GAPPED_QUIZ)
+        self.key = english_cloze.parse_answer_key(GAPPED_KEY)
+
+    def test_five_questions_with_full_options(self):
+        qs = english_cloze.build_gapped_questions(GAPPED_PASSAGE, self.key, self.opts)
+        self.assertEqual(len(qs), 5)
+        # 每空一题：题干含 ____、目标编号已替换；A-G 选项**原样完整**（不截断）
+        for q in qs:
+            self.assertIn("____", q["question"])
+            self.assertEqual(q["question_type"], "choice")
+            self.assertEqual(q["option_f"], "Don't fear responsibility for your life")
+            self.assertEqual(q["option_g"], "There are many things to be grateful for")
+        self.assertEqual(qs[0]["correct_answer"], "D")
+        self.assertNotIn("__41__", qs[0]["question"])
+        self.assertEqual(qs[4]["correct_answer"], "B")
+
+    def test_context_sentences_in_stem(self):
+        # 题干 = 该空所在句 + 前后各一句（AGENTS 七选五拆题规则）
+        qs = english_cloze.build_gapped_questions(GAPPED_PASSAGE, self.key, self.opts)
+        self.assertIn("People often fear things", qs[0]["question"])
+        self.assertIn("Every setback teaches you something new", qs[1]["question"])
+
+    def test_no_options_means_empty_not_fabricated(self):
+        qs = english_cloze.build_gapped_questions(GAPPED_PASSAGE, self.key, {})
+        self.assertEqual(len(qs), 5)
+        self.assertEqual(qs[0]["option_a"], "")
+        self.assertEqual(qs[0]["correct_answer"], "D")
+
+
+class TestEnglishPipelineGapped(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._tmpdir = tempfile.TemporaryDirectory()
+        settings.DB_PATH = Path(cls._tmpdir.name) / "test.db"
+        settings.BACKUP_DIR = Path(cls._tmpdir.name) / "backups"
+        init_database()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmpdir.cleanup()
+
+    def setUp(self):
+        conn = get_connection()
+        try:
+            conn.execute("DELETE FROM app_meta WHERE key LIKE 'english_ocr_stage_%'")
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_gapped_built_locally_five_questions(self):
+        """七选五 → 本地拆 5 题、选项原样（AI 截断版不采信）、二级科目=新题型。"""
+        with (
+            patch.object(ai_english, "_vision_extract_text", return_value=OCR_GAPPED),
+            patch.object(ai_service, "_chat_json", side_effect=_fake_chat()),
+        ):
+            result = ai_english.analyze_english([IMG], "")
+        self.assertTrue(result["is_english"])
+        self.assertEqual(result["sub_subject_hint"], "新题型")
+        # 顶层=第 41 空（answer D），其余 4 空进 english_questions
+        self.assertEqual(result["correct_answer"], "D")
+        self.assertEqual(len(result["english_questions"]), 4)
+        self.assertEqual(result["english_questions"][3]["correct_answer"], "B")
+        # 选项以本地解析为准：完整句子，不是 AI 转写的截断/编造版
+        self.assertEqual(result["option_a"], "You are not alone")
+        self.assertNotEqual(result["option_a"], "AI 编的选项")
+        self.assertEqual(
+            result["english_questions"][0]["option_f"],
+            "Don't fear responsibility for your life",
+        )
+        self.assertIn("____", result["question"])
+
+
 class TestSubSubjectHint(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -343,6 +483,8 @@ class TestSubSubjectHint(unittest.TestCase):
             self.assertEqual((sid, sub), (2, 8))  # 阅读理解（缺省不变）
             sid, sub = _auto_subject_ids(conn, "英语", "完形填空")
             self.assertEqual((sid, sub), (2, 7))  # 完形填空
+            sid, sub = _auto_subject_ids(conn, "英语", "新题型")
+            self.assertEqual((sid, sub), (2, 9))  # 七选五 → 新题型
             # 未知的 sub_hint 回退缺省，不许返回空
             sid, sub = _auto_subject_ids(conn, "英语", "不存在的子科目")
             self.assertEqual((sid, sub), (2, 8))
