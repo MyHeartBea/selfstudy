@@ -1,7 +1,7 @@
 <script setup>
 /** 英语整篇精读面板：原文(分段)、全文翻译、句子拆解、猜词&重点短语(全选入生词本)、题目列表(多题)。
  * 点词查义；多题可「存为另一题」切到表单保存。 */
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import request from '../api/request'
 import MathText from './MathText.vue'
@@ -199,15 +199,58 @@ function tokenize(text) {
 const BLANK_RE =
   /_{2,}\s*(\d{1,2})\s*_{2,}|\(\s*(\d{1,2})\s*\)\s*_{2,}|_{2,}\s*\(\s*(\d{1,2})\s*\)/g
 
-// 点击空位标记跳到对应小题（完形按空拆题时空位顺序 = 题目顺序）
+// —— 题目折叠：完形 20 题 / 七选五 5 题逐题全铺开没法看（用户实测反馈），
+// 长列表默认收起成「答案 + 题干一行」摘要，点击展开单题 ——
+const COLLAPSE_THRESHOLD = 4
+const expandedSet = reactive(new Set())
+const collapsible = computed(() => questions.value.length >= COLLAPSE_THRESHOLD)
+const isExpanded = (qi) => !collapsible.value || expandedSet.has(qi)
+const expandedCount = computed(() => {
+  if (!collapsible.value) return questions.value.length
+  let n = 0
+  for (let i = 0; i < questions.value.length; i++) if (expandedSet.has(i)) n++
+  return n
+})
+const allExpanded = computed(
+  () => collapsible.value && expandedCount.value === questions.value.length,
+)
+function toggleExpand(qi) {
+  if (!collapsible.value) return
+  if (expandedSet.has(qi)) expandedSet.delete(qi)
+  else expandedSet.add(qi)
+}
+function toggleAllExpand() {
+  if (!collapsible.value) return
+  if (allExpanded.value) {
+    expandedSet.clear()
+  } else {
+    for (let i = 0; i < questions.value.length; i++) expandedSet.add(i)
+  }
+}
+// 换解析结果（重新解析/切换题目）时折叠态清零
+watch(
+  () => props.parsed,
+  () => expandedSet.clear(),
+)
+// 摘要行的题干预览：空位标记统一显示为 ____，压成一行
+function plainStem(text) {
+  return String(text || '')
+    .replace(/_{2,}\s*\d{1,2}\s*_{2,}/g, '____')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// 点击空位标记跳到对应小题（完形按空拆题时空位顺序 = 题目顺序）；
+// 折叠状态下先展开目标题再滚动
 function jumpToBlank(no) {
   const el = document.getElementById('ep-q-' + no)
   if (!el) return
+  expandedSet.add(no - 1)
   const reduced =
     typeof window !== 'undefined' &&
     window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' })
+  nextTick(() => el.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' }))
 }
 
 // 分词缓存：原文对照与句子拆解渲染同一批句子，此前每次渲染对每句重跑正则
@@ -625,11 +668,16 @@ async function saveAll() {
       <p v-else class="muted">（未识别到原文内容）</p>
     </div>
 
-    <!-- ② 题目列表（多题） -->
+    <!-- ② 题目列表（多题；长列表默认折叠成摘要行，点击展开单题） -->
     <div v-if="questions.length" class="ep-section">
       <div class="ep-section-head">
         <Icon name="target" :size="15" />
         <span>题目与解析（共 {{ questions.length }} 题）</span>
+        <button v-if="collapsible" type="button" class="ep-q-fold-all" @click="toggleAllExpand">
+          {{
+            allExpanded ? '全部收起' : `全部展开（已收起 ${questions.length - expandedCount} 题）`
+          }}
+        </button>
         <span v-if="!readonly" class="ep-hint">标出答错的题，错的会重点标注并录入</span>
       </div>
       <div v-if="!readonly" class="ep-q-actions">
@@ -682,20 +730,37 @@ async function saveAll() {
               </button>
             </span>
           </div>
-          <p class="ep-question-text"><MathText :text="q.question" /></p>
-          <div v-if="q.question_type === 'choice'" class="ep-options">
-            <div v-for="L in optionLetters(q)" :key="L" class="ep-option">
-              <span class="ep-option-letter">{{ L }}</span>
-              <span class="ep-option-text"
-                ><MathText :text="q['option_' + L.toLowerCase()]"
-              /></span>
-              <span v-if="q.correct_answer === L" class="ep-correct">
-                <Icon name="check" :size="13" />
-              </span>
+          <!-- 摘要行：答案印章 + 题干一行截断（长列表折叠时的可扫读形态） -->
+          <button
+            v-if="collapsible"
+            type="button"
+            class="ep-q-brief"
+            :aria-expanded="isExpanded(qi)"
+            :title="isExpanded(qi) ? '收起本题' : '展开本题解析'"
+            @click="toggleExpand(qi)"
+          >
+            <span class="ep-q-ans" :class="{ none: !q.correct_answer }">
+              {{ q.correct_answer || '无' }}
+            </span>
+            <span class="ep-q-brief-stem">{{ plainStem(q.question) }}</span>
+            <Icon :name="isExpanded(qi) ? 'minus' : 'plus'" :size="13" class="ep-q-fold-icon" />
+          </button>
+          <div v-show="isExpanded(qi)" class="ep-q-body">
+            <p class="ep-question-text"><MathText :text="q.question" /></p>
+            <div v-if="q.question_type === 'choice'" class="ep-options">
+              <div v-for="L in optionLetters(q)" :key="L" class="ep-option">
+                <span class="ep-option-letter">{{ L }}</span>
+                <span class="ep-option-text"
+                  ><MathText :text="q['option_' + L.toLowerCase()]"
+                /></span>
+                <span v-if="q.correct_answer === L" class="ep-correct">
+                  <Icon name="check" :size="13" />
+                </span>
+              </div>
             </div>
+            <p v-else class="ep-answer">答案：<MathText :text="q.correct_answer" /></p>
+            <div v-if="q.analysis" class="ep-analysis"><MathText :text="q.analysis" /></div>
           </div>
-          <p v-else class="ep-answer">答案：<MathText :text="q.correct_answer" /></p>
-          <div v-if="q.analysis" class="ep-analysis"><MathText :text="q.analysis" /></div>
         </div>
       </div>
     </div>
@@ -1226,6 +1291,72 @@ async function saveAll() {
   font-weight: 600;
   font-family: var(--font-display);
   line-height: 1.85;
+}
+/* 折叠摘要行：答案印章 + 题干一行截断（完形 20 题的可扫读形态） */
+.ep-q-fold-all {
+  margin-left: auto;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all var(--dur-1) var(--ease);
+}
+.ep-q-fold-all:hover {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.ep-q-brief {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 2px 0 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.ep-q-brief:hover {
+  background: var(--surface-2);
+  border-color: var(--accent);
+}
+.ep-q-ans {
+  flex: none;
+  min-width: 30px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--green-soft);
+  color: var(--green);
+}
+.ep-q-ans.none {
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+.ep-q-brief-stem {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.ep-q-fold-icon {
+  flex: none;
+  color: var(--ink-3);
 }
 .ep-options {
   display: flex;

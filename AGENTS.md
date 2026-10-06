@@ -243,9 +243,14 @@ pre-commit run --all-files    # ruff / eslint+prettier / 大文件与空白 / �
    分隔符才认，"A new study…"正文句不吃），题号上限 `MAX_BLANK_NO=60`（英语一 41-45）。答案键 ≥3 对
    才算数。`_auto_subject_ids(conn, hint, sub_hint)` 优先按 sub_subject_hint 映射二级科目——英语
    不再一律"阅读理解"。前端 `EnglishAnalysisPanel` 把 `__N__` 空位渲染成可点击 token（点击跳
-   `#ep-q-N` 对应小题），`passage_text` 里的空位标记**不许在展示层丢失**；CaptureView 缩略图带
-   角色角标 + 「重新解析」按钮。`tests/test_ai_cloze.py`（后端 34 条）与 `tests/englishPanelBlanks.test.js`
-   + `e2e/capture.spec.js` 答案表用例（前端）钉住全部约定。
+   `#ep-q-N` 对应小题），`passage_text` 里的空位标记**不许在展示层丢失**；
+   **题目长列表必须折叠**（2026-10-06，用户反馈 20 题全铺开非常冗长）：≥4 题（`COLLAPSE_THRESHOLD`）
+   默认收起成「答案印章+题干一行」摘要（`.ep-q-brief`），点行展开单题、区头「全部展开/收起」、
+   点空位跳题自动展开目标题；<4 题不折叠。错/对标记与「存为另一题」必须在摘要态可见可点。
+   ⚠️ 测试注意：本机 happy-dom 的 `getComputedStyle` 不回读内联 style，VTU `isVisible` 对 v-show
+   **恒真**——折叠断言直接查 `element.style.display`（englishPanelBlanks.test.js 有注释）。
+   CaptureView 缩略图带角色角标 + 「重新解析」按钮。`tests/test_ai_cloze.py`（后端 34 条）与
+   `tests/englishPanelBlanks.test.js` + `e2e/capture.spec.js` 答案表用例（前端）钉住全部约定。
 9. **多图 = 一次分析**：`/ai/knowledge-from-image` 接受 `{images:[...]}`（≥2 张按 3 张一批、按序提文字后合并），**只产出一条知识点草稿**——不要把「粘一张分析一张」改回来。`AiOcrRequest` 的 `image_base64` 与 `images` 至少给一个。
 10. **卡片点击**：知识点/公式卡片必须**整卡可点**打开详情。做法是给卡片本体加 `role="button" tabindex="0"` + `@click`（键盘 Enter/Space 同效），卡片内的显式控件（操作按钮、关联标签）各自加 `@click.stop`，装饰元素（色脊/水印）加 `pointer-events:none`。
    **不要用「铺满卡片的透明点击层（.k-hit/.f-hit）」**：一旦卡内子元素为了定位而带上 `position:relative; z-index`，它们就会盖住点击层，导致「只有某条窄缝可点、点标题/摘要都没反应」（已翻车过一次，用户实测点不动）。
